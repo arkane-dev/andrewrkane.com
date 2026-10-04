@@ -16,7 +16,11 @@ export const about = {
 			tag: 'OODA · PDCA',
 			body: 'Observe, orient, decide, act. Then go again. Day to day, that means ship small, measure, then decide. When the work needs rigor, the loop becomes plan, do, check, act. Agile where we can. Systematic where we must.'
 		},
-		{ title: '‹Principle›', tag: '‹source idea›', body: '‹The higher-level idea, then how it shows up in practice.›' },
+		{
+			title: 'Question the premise',
+			tag: 'FIRST PRINCIPLES · FEYNMAN',
+			body: "Every plan rests on assumptions. Most go unspoken. Find the ones everyone missed. Test them first and get the real answer early. Then we know we're heading the right way. The easiest person to fool is yourself."
+		},
 		{ title: '‹Principle›', tag: '‹source idea›', body: '‹…›' }
 	],
 	// Lifepath: the story, told as Cyberpunk 2077 lifepaths. The CV lives on LinkedIn.

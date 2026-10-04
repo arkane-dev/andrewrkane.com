@@ -16,7 +16,7 @@ export const site = {
 		kicker: '> AI RESEARCHER // PHYSICAL AI', // small mono line above the title
 		line1: '‹BUILD›', // two-line title: line 1 white…
 		line2: '‹EXPLORE›', // …line 2 neon
-		positioning: '‹One-line positioning: what you build, for whom. E.g. "Solutions architect building AI tools and writing about how they work."›',
+		positioning: "I design world models for Physical AI. By day, I'm a Solutions Architect. I help startups build robots.",
 		personal: '‹One line in your own voice: why this site exists. E.g. "This is my lab notebook, in public."›',
 		zh: '霓虹都市', // MoonScroll inscription (2–4 hanzi). Pick your own; check the meaning.
 		pinyin: 'NI HONG DU SHI',

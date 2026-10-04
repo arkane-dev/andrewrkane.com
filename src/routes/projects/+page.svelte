@@ -32,7 +32,7 @@
 </div>
 
 <style>
-	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; gap: var(--nd-space-12); }
+	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nd-space-12); }
 	.intro { color: var(--nd-text-dim); margin-top: calc(var(--nd-space-8) * -1); }
 	.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--nd-space-5); }
 	@media (max-width: 1000px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

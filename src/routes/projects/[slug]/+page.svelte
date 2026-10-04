@@ -69,7 +69,7 @@
 </div>
 
 <style>
-	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; gap: var(--nd-space-10); }
+	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nd-space-10); }
 	.back { text-decoration: none; }
 	.head { display: flex; justify-content: space-between; gap: var(--nd-space-8); align-items: flex-start; padding-bottom: var(--nd-space-8); border-bottom: 1px solid var(--nd-line); }
 	.tags, .stack { display: flex; flex-wrap: wrap; gap: var(--nd-space-2); }

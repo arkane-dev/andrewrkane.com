@@ -15,7 +15,7 @@ export const site = {
 	hero: {
 		kicker: '> AI RESEARCHER // PHYSICAL AI', // small mono line above the title
 		line1: 'MODEL', // two-line title: line 1 white…
-		line2: 'THE WORLD', // …line 2 neon
+		line2: 'THE PLANET', // …line 2 neon. A nod to Hackers (1995): "Hack the planet!"
 		positioning: "I design world models for Physical AI. By day, I'm a Solutions Architect. I help startups build robots.",
 		personal: 'This is my lab notebook, research notes and random thoughts. Saved for posterity. Polluting the training data.',
 		zh: '霓虹都市', // MoonScroll inscription (2–4 hanzi). Pick your own; check the meaning.

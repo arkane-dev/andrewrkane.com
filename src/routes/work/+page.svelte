@@ -60,7 +60,7 @@
 </div>
 
 <style>
-	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; gap: var(--nd-space-16); }
+	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nd-space-16); }
 	.lead { margin-top: calc(var(--nd-space-10) * -1); }
 	.intro { font-size: var(--nd-text-xl); line-height: 1.4; max-width: 40ch; margin-top: var(--nd-space-4); }
 	.row { display: flex; flex-wrap: wrap; gap: var(--nd-space-4); align-items: center; }

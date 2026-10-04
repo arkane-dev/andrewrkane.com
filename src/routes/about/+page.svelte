@@ -55,7 +55,7 @@
 </div>
 
 <style>
-	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; gap: var(--nd-space-16); }
+	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nd-space-16); }
 	.poster { display: grid; grid-template-columns: auto 1fr; margin-top: calc(var(--nd-space-10) * -1); }
 	.band { display: grid; place-items: center; padding: var(--nd-space-6); background: var(--nd-ink); }
 	.body { position: relative; padding: var(--nd-space-12) var(--nd-space-10); }

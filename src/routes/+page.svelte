@@ -111,8 +111,11 @@
 
 <style>
 	.hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); min-height: 72vh; border-bottom: 1px solid var(--nd-line); }
-	.hero-text { padding: var(--nd-space-16) var(--nd-gutter); border-right: 1px solid var(--nd-line); background: linear-gradient(90deg, var(--nd-bg) 60%, transparent); }
-	.hero-title { font-size: var(--nd-text-hero); line-height: 0.92; margin-bottom: var(--nd-space-6); }
+	.hero-text { container-type: inline-size; padding: var(--nd-space-16) var(--nd-gutter); border-right: 1px solid var(--nd-line); background: linear-gradient(90deg, var(--nd-bg) 60%, transparent); }
+	/* Sized to its own column, not the window: each line stays on one line at any width.
+	   15.5cqi fits a ~10-character line ("THE PLANET" ≈ 6em). Longer titles need a smaller number. */
+	.hero-title { font-size: min(var(--nd-text-hero), 15.5cqi); line-height: 0.92; margin-bottom: var(--nd-space-6); }
+	.hero-title > :global(*) { white-space: nowrap; }
 	.positioning { font-size: var(--nd-text-xl); line-height: 1.35; max-width: 32ch; color: var(--nd-text); }
 	.personal { font-family: var(--nd-font-mono); font-size: var(--nd-text-sm); }
 	.row { display: flex; flex-wrap: wrap; gap: var(--nd-space-4); align-items: center; }
@@ -120,7 +123,7 @@
 	.scn { position: absolute; top: var(--nd-space-4); left: var(--nd-space-4); color: var(--nd-accent); }
 	.scn2 { position: absolute; bottom: var(--nd-space-4); right: var(--nd-space-4); }
 
-	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-16) var(--nd-gutter) 0; display: grid; gap: var(--nd-space-24); }
+	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-16) var(--nd-gutter) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nd-space-24); }
 	.more { display: inline-block; margin-top: var(--nd-space-4); font-family: var(--nd-font-ui); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: var(--nd-text-sm); }
 
 	.now { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); border-block: 1px solid var(--nd-line); }

@@ -27,7 +27,7 @@
 </div>
 
 <style>
-	.content { max-width: 56rem; margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; gap: var(--nd-space-10); }
+	.content { max-width: 56rem; margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nd-space-10); }
 	.head { display: flex; gap: var(--nd-space-8); align-items: flex-start; justify-content: space-between; }
 	.head > div { flex: 1; }
 	.intro { color: var(--nd-text-dim); }

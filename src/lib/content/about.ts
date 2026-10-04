@@ -3,10 +3,12 @@ export const about = {
 	// Personal name seal (姓名印): full name, read right column first. 安迪 Andy + 凯恩 Kane.
 	seal: { text: '安迪凯恩', label: 'Seal: Andy Kane (安迪凯恩)' },
 	portrait: '', // '/images/portrait.jpg' (put the file in static/images/). Empty = no image.
-	intro: '‹One paragraph in first person: who you are, what you do for a living, what you explore on the side.›',
+	intro: "I'm Andrew. I research world models for Physical AI. By day, I'm a Solutions Architect. I help startups build robots. After hours, I write books, build tools and run experiments in the Lab.",
 	bio: [
-		'‹Paragraph 2: your path so far. Where you started, what changed.›',
-		'‹Paragraph 3: what you care about in your work. Opinions welcome.›'
+		// Human-centric AI
+		"I'm not worried about AI. I'm worried about what humans will do with it. So I build for people first. Human-centric AI means systems that improve lives. Better healthcare. Better disaster response. A better standard of living for all.",
+		// Responsible AI
+		"Responsible AI is about impact. Every system has outcomes nobody planned for. The second- and third-order effects are where the real risk hides. So I look for them early, and plan what to do about them. The question isn't what AI will do. It's what we will do with it."
 	],
 	// Principles: the higher-level idea first, then how it shows up day to day.
 	// `tag` names the source idea in small mono text under the title.
@@ -34,6 +36,7 @@ export const about = {
 		{ when: '2010–2026', what: 'Corpo', zh: '公司员工', note: 'Turned corpo. Drove revenue. Chased that sweet shareholder return. The upside: a seat on some amazing projects.' },
 		{ when: 'After hours', what: 'Netrunner', zh: '网络黑客', note: 'Jacking in after the shift. World models, robots and this site.' }
 	],
-	stack: ['‹Python›', '‹Go›', '‹Svelte›', '‹AWS / GCP›', '‹PyTorch›', '‹…›'],
+	// Technologies in real use. Add each new one used in a project or the Lab (see cyberpunk_apps/CLAUDE.md).
+	stack: ['Python', 'Go', 'Svelte', 'AWS', 'PyTorch', 'CUDA', 'C/C++'],
 	colophon: 'Built with SvelteKit and NEONDECK. Prerendered to static HTML. Hosted on Cloudflare.'
 };

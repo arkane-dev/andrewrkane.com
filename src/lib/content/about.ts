@@ -13,10 +13,12 @@ export const about = {
 		{ title: '‹Principle›', body: '‹…›' },
 		{ title: '‹Principle›', body: '‹…›' }
 	],
+	// Lifepath: the story, told as Cyberpunk 2077 lifepaths. The CV lives on LinkedIn.
 	timeline: [
-		{ when: '‹2024–now›', what: '‹Role / company or independent›', note: '‹One line on what you did›' },
-		{ when: '‹2019–2024›', what: '‹Role / company›', note: '‹…›' },
-		{ when: '‹2015–2019›', what: '‹Role / company›', note: '‹…›' }
+		{ when: '1985–2003', what: 'Streetkid', zh: '街头小子', note: "Born in '85. Eighteen years learning to survive." },
+		{ when: '2003–2010', what: 'Nomad', zh: '流浪者', note: 'Lived the nomad life. Studied. Spent a few years as an archaeologist, digging in the dirt. Learned to rebuild a lost world from fragments.' },
+		{ when: '2010–2026', what: 'Corpo', zh: '公司员工', note: 'Turned corpo. Drove revenue. Chased that sweet shareholder return. The upside: a seat on some amazing projects.' },
+		{ when: 'After hours', what: 'Netrunner', zh: '网络黑客', note: 'Jacking in after the shift. World models, robots and this site.' }
 	],
 	stack: ['‹Python›', '‹Go›', '‹Svelte›', '‹AWS / GCP›', '‹PyTorch›', '‹…›'],
 	colophon: 'Built with SvelteKit and NEONDECK. Prerendered to static HTML. Hosted on Cloudflare.'

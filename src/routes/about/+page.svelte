@@ -3,6 +3,7 @@
 	import { SectionHeader, HanziMark, Seal, Button, Tag } from '@cyberpunk-apps/neondeck';
 	import Seo from '#lib/components/Seo.svelte';
 	import { site, about } from '#lib';
+	const linkedin = site.socials.find((s) => s.label === 'LinkedIn');
 </script>
 
 <Seo title="About" description={about.intro} />
@@ -37,19 +38,23 @@
 
 	<section class="two">
 		<div>
-			<SectionHeader index="03" zh="经历" title="Timeline" level={3} />
+			<SectionHeader index="03" zh="生涯" title="Lifepath" level={3} />
 			<ol class="timeline">
 				{#each about.timeline as t, i (i)}
-					<li><span class="nd-mono when">{t.when}</span><b>{t.what}</b><span class="note">{t.note}</span></li>
+					<li><span class="nd-mono when">{t.when}</span><b>{t.what}<span class="lp-zh" lang="zh-Hans">{t.zh}</span></b><span class="note">{t.note}</span></li>
 				{/each}
 			</ol>
+			{#if linkedin}<p class="nd-meta cv">The CV version lives on <a href={linkedin.href}>LinkedIn</a>.</p>{/if}
 		</div>
 		<div>
 			<SectionHeader index="04" zh="工具箱" title="Stack" level={3} />
 			<div class="stack">{#each about.stack as s (s)}<Tag tone="accent-2">{s}</Tag>{/each}</div>
 			<SectionHeader index="05" zh="本站" title="This site" level={3} />
 			<p class="nd-meta">{about.colophon}</p>
-			<p class="nd-meta"><a href="/now">/now</a> · <a href="/rss.xml">rss</a> · {#each site.socials as s, i (s.href)}{#if i} · {/if}<a href={s.href}>{s.label.toLowerCase()}</a>{/each}</p>
+			<ul class="links nd-meta">
+				<li><a href="/now">/now</a></li>
+				{#each site.socials as s (s.href)}<li><a href={s.href}>{s.label.toLowerCase()}</a></li>{/each}
+			</ul>
 		</div>
 	</section>
 </div>
@@ -75,6 +80,11 @@
 	.timeline li { display: grid; gap: 2px; padding: 0 0 var(--nd-space-5) var(--nd-space-5); position: relative; }
 	.timeline li::before { content: ''; position: absolute; left: -4px; top: 0.45em; width: 7px; height: 7px; background: var(--nd-accent); }
 	.when { color: var(--nd-accent); font-size: var(--nd-text-xs); }
+	.timeline b { font-family: var(--nd-font-ui); font-size: var(--nd-text-lg); letter-spacing: var(--nd-tracking-label); text-transform: uppercase; }
+	.lp-zh { margin-left: 0.6em; font-family: var(--nd-font-cjk); font-weight: 900; font-size: var(--nd-text-sm); letter-spacing: 0.06em; color: var(--nd-accent-2); }
+	.cv { margin-top: var(--nd-space-2); }
+	.links { display: flex; flex-wrap: wrap; gap: var(--nd-space-1) var(--nd-space-3); margin: 0; padding: 0; list-style: none; }
+	.links li + li::before { content: '·'; margin-right: var(--nd-space-3); color: var(--nd-text-mute); }
 	.note { color: var(--nd-text-dim); font-size: var(--nd-text-sm); }
 	.stack { display: flex; flex-wrap: wrap; gap: var(--nd-space-2); margin-bottom: var(--nd-space-10); }
 	@media (max-width: 860px) {

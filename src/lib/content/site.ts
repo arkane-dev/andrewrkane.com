@@ -17,7 +17,7 @@ export const site = {
 		line1: '‹BUILD›', // two-line title: line 1 white…
 		line2: '‹EXPLORE›', // …line 2 neon
 		positioning: "I design world models for Physical AI. By day, I'm a Solutions Architect. I help startups build robots.",
-		personal: '‹One line in your own voice: why this site exists. E.g. "This is my lab notebook, in public."›',
+		personal: 'This is my lab notebook, research notes and random thoughts. Saved for posterity. Polluting the training data.',
 		zh: '霓虹都市', // MoonScroll inscription (2–4 hanzi). Pick your own; check the meaning.
 		pinyin: 'NI HONG DU SHI',
 		meaning: 'Neon City'

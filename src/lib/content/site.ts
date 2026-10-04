@@ -18,9 +18,9 @@ export const site = {
 		line2: 'THE PLANET', // …line 2 neon. A nod to Hackers (1995): "Hack the planet!"
 		positioning: "I design world models for Physical AI. By day, I'm a Solutions Architect. I help startups build robots.",
 		personal: 'This is my lab notebook, research notes and random thoughts. Saved for posterity. Polluting the training data.',
-		zh: '霓虹都市', // MoonScroll inscription (2–4 hanzi). Pick your own; check the meaning.
-		pinyin: 'NI HONG DU SHI',
-		meaning: 'Neon City'
+		zh: '世界模型', // MoonScroll inscription (2–4 hanzi): "world model"
+		pinyin: 'SHI JIE MO XING',
+		meaning: 'World model'
 	},
 
 	socials: [

@@ -155,7 +155,7 @@
 	@media (max-width: 960px) {
 		.hero { grid-template-columns: 1fr; }
 		.hero-visual { min-height: 30rem; }
-		.hero-visual :global(.nd-moonscroll) { --moon: min(16rem, 70vw) !important; }
+		.hero-visual :global(.nd-moonscroll) { --moon: min(16rem, 62vw) !important; } /* the stage is 1.25× the moon: 62vw keeps it inside the panel down to 320px */
 		.now, .lab, .split { grid-template-columns: 1fr; }
 		.now li { border-right: 0; border-bottom: 1px solid var(--nd-line); }
 	}

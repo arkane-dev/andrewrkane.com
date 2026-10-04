@@ -32,7 +32,9 @@
 	.head > div { flex: 1; }
 	.intro { color: var(--nd-text-dim); }
 	.focus { margin: var(--nd-space-3) 0 0; padding-left: 1.4em; display: grid; gap: var(--nd-space-4); }
-	.focus li { display: grid; gap: 2px; }
+	.focus li { padding-left: var(--nd-space-2); } /* stay display:list-item so the numbers render */
+	.focus b, .focus span { display: block; }
+	.focus span { margin-top: 2px; }
 	.focus li::marker { color: var(--nd-accent); font-family: var(--nd-font-mono); }
 	.focus b { font-family: var(--nd-font-display); font-size: var(--nd-text-lg); }
 	.focus span { color: var(--nd-text-dim); }

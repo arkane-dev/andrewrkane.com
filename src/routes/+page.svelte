@@ -124,7 +124,7 @@
 	.more { display: inline-block; margin-top: var(--nd-space-4); font-family: var(--nd-font-ui); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: var(--nd-text-sm); }
 
 	.now { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); border-block: 1px solid var(--nd-line); }
-	.now li { display: grid; gap: var(--nd-space-1); padding: var(--nd-space-5); border-right: 1px solid var(--nd-line); }
+	.now li { display: grid; align-content: start; gap: var(--nd-space-1); padding: var(--nd-space-5); border-right: 1px solid var(--nd-line); }
 	.now li:last-child { border-right: 0; }
 	.now b { color: var(--nd-accent-2); font-family: var(--nd-font-ui); letter-spacing: 0.06em; text-transform: uppercase; }
 	.now span:last-child { color: var(--nd-text-dim); font-size: var(--nd-text-sm); }

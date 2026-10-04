@@ -13,7 +13,7 @@ export const site = {
 
 	// Hero (landing page). Keep the positioning line short: it's the business half.
 	hero: {
-		kicker: '> AI RESEARCHER // ‹ROLE›', // second slot: a focus or title, e.g. WORLD MODELS // small mono line above the title
+		kicker: '> AI RESEARCHER // ‹ROLE›', // small mono line above the title; ‹ROLE› = a focus or second title, e.g. WORLD MODELS
 		line1: '‹BUILD›', // two-line title: line 1 white…
 		line2: '‹EXPLORE›', // …line 2 neon
 		positioning: '‹One-line positioning: what you build, for whom. E.g. "Solutions architect building AI tools and writing about how they work."›',

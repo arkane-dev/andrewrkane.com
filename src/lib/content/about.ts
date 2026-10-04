@@ -8,10 +8,16 @@ export const about = {
 		'‹Paragraph 2: your path so far. Where you started, what changed.›',
 		'‹Paragraph 3: what you care about in your work. Opinions welcome.›'
 	],
+	// Principles: the higher-level idea first, then how it shows up day to day.
+	// `tag` names the source idea in small mono text under the title.
 	principles: [
-		{ title: '‹Principle›', body: '‹One sentence on how you work. E.g. "Ship small, measure, then decide."›' },
-		{ title: '‹Principle›', body: '‹…›' },
-		{ title: '‹Principle›', body: '‹…›' }
+		{
+			title: 'Close the loop',
+			tag: 'OODA · PDCA',
+			body: 'Observe, orient, decide, act. Then go again. Day to day, that means ship small, measure, then decide. When the work needs rigor, the loop becomes plan, do, check, act. Agile where we can. Systematic where we must.'
+		},
+		{ title: '‹Principle›', tag: '‹source idea›', body: '‹The higher-level idea, then how it shows up in practice.›' },
+		{ title: '‹Principle›', tag: '‹source idea›', body: '‹…›' }
 	],
 	// Lifepath: the story, told as Cyberpunk 2077 lifepaths. The CV lives on LinkedIn.
 	timeline: [

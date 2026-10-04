@@ -31,7 +31,7 @@
 		<SectionHeader index="02" zh="原则" title="How I work" />
 		<div class="principles">
 			{#each about.principles as pr, i (i)}
-				<div class="pr"><span class="nd-index">0{i + 1}</span><h4>{pr.title}</h4><p>{pr.body}</p></div>
+				<div class="pr"><span class="nd-index">0{i + 1}</span><h4>{pr.title}</h4>{#if pr.tag}<span class="tag nd-mono">{pr.tag}</span>{/if}<p>{pr.body}</p></div>
 			{/each}
 		</div>
 	</section>
@@ -74,6 +74,7 @@
 	.pr { padding: var(--nd-space-6) var(--nd-space-5); border-right: 1px solid var(--nd-line); }
 	.pr:last-child { border-right: 0; }
 	.pr h4 { margin: var(--nd-space-2) 0; color: var(--nd-accent-2); font-family: var(--nd-font-ui); letter-spacing: 0.08em; }
+	.pr .tag { display: block; margin: calc(var(--nd-space-1) * -1) 0 var(--nd-space-3); color: var(--nd-text-mute); font-size: var(--nd-text-xs); letter-spacing: 0.08em; }
 	.pr p { margin: 0; color: var(--nd-text-dim); font-size: var(--nd-text-sm); }
 	.two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--nd-space-12); }
 	.timeline { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--nd-line-strong); }

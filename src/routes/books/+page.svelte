@@ -52,5 +52,5 @@
 	.plate { display: inline-flex; padding: 3px; background: var(--nd-ink); --nd-text-mute: #8885b9; --nd-text-on-neon: #070818; }
 	h3 { margin: var(--nd-space-1) 0 var(--nd-space-2); color: var(--nd-ink); font-size: var(--nd-text-xl); }
 	.row { display: flex; flex-wrap: wrap; gap: var(--nd-space-2); align-items: center; }
-	@media (max-width: 900px) { .vols { grid-template-columns: 1fr; } .series { padding: var(--nd-space-16) var(--nd-space-5) var(--nd-space-8); } .seal { top: var(--nd-space-4); right: var(--nd-space-4); } }
+	@media (max-width: 900px) { .vols { grid-template-columns: 1fr; } .series { padding: var(--nd-space-5) var(--nd-space-5) var(--nd-space-8); } .seal { position: static; display: flex; justify-content: flex-end; justify-self: stretch; margin-bottom: var(--nd-space-3); /* in flow on phones: never covers the text */ } }
 </style>

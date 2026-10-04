@@ -1,5 +1,7 @@
 // About page. Keep the bio short; the timeline and principles do the heavy lifting.
 export const about = {
+	// Personal name seal (姓名印): full name, read right column first. 安迪 Andy + 凯恩 Kane.
+	seal: { text: '安迪凯恩', label: 'Seal: Andy Kane (安迪凯恩)' },
 	portrait: '', // '/images/portrait.jpg' (put the file in static/images/). Empty = no image.
 	intro: '‹One paragraph in first person: who you are, what you do for a living, what you explore on the side.›',
 	bio: [

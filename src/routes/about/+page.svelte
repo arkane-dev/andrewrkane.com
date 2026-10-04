@@ -13,7 +13,7 @@
 	<article class="poster nd-paper">
 		<div class="band"><HanziMark text="关于" label="About" tone="sun" size="clamp(3rem, 6vw, 5rem)" /></div>
 		<div class="body">
-			<div class="seal"><Seal text="霓虹甲板" label="Neon Deck seal" size="clamp(4.5rem, 8vw, 6.5rem)" tilt={-2} /></div>
+			<div class="seal"><Seal text={about.seal.text} label={about.seal.label} size="clamp(4.5rem, 8vw, 6.5rem)" tilt={-2} /></div>
 			{#if about.portrait}<img class="portrait" src={about.portrait} alt={site.owner} />{/if}
 			<p class="nd-label">{site.owner} ─── {site.location}</p>
 			<h2 class="title">Hello.</h2>
@@ -80,7 +80,7 @@
 	@media (max-width: 860px) {
 		.poster, .two { grid-template-columns: 1fr; }
 		.band :global(.nd-hanzi) { writing-mode: horizontal-tb; }
-		.body { padding: var(--nd-space-16) var(--nd-space-5) var(--nd-space-8); }
-		.seal { right: var(--nd-space-4); top: var(--nd-space-4); }
+		.body { padding: var(--nd-space-5) var(--nd-space-5) var(--nd-space-8); }
+		.seal { position: static; display: flex; justify-content: flex-end; justify-self: stretch; margin-bottom: var(--nd-space-3); /* in flow on phones: never covers the text */ }
 	}
 </style>

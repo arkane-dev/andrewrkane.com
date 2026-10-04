@@ -51,6 +51,7 @@ export interface Book {
 	status: Status;
 	readHref?: string; // web edition
 	pdfHref?: string; // PDF download
+	buyHref?: string; // store page, e.g. Amazon
 	tone: 'magenta' | 'cyan' | 'violet' | 'gold';
 }
 

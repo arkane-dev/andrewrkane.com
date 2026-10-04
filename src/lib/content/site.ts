@@ -6,7 +6,7 @@ export const site = {
 	owner: 'Andrew R. Kane',
 	title: 'Andrew R. Kane', // <title> suffix and RSS title
 	domain: 'https://‹your-domain.dev›', // no trailing slash; used for RSS, sitemap, canonical URLs
-	description: '‹One sentence for search engines and link previews: who you are and what this site is.›',
+	description: 'Andrew R. Kane designs world models for Physical AI. Research notes, tools and books, built in public.',
 	location: 'Newcastle, UK',
 	email: '‹hello@your-domain.dev›',
 	version: '0.1.0',
@@ -14,8 +14,8 @@ export const site = {
 	// Hero (landing page). Keep the positioning line short: it's the business half.
 	hero: {
 		kicker: '> AI RESEARCHER // PHYSICAL AI', // small mono line above the title
-		line1: '‹BUILD›', // two-line title: line 1 white…
-		line2: '‹EXPLORE›', // …line 2 neon
+		line1: 'MODEL', // two-line title: line 1 white…
+		line2: 'THE WORLD', // …line 2 neon
 		positioning: "I design world models for Physical AI. By day, I'm a Solutions Architect. I help startups build robots.",
 		personal: 'This is my lab notebook, research notes and random thoughts. Saved for posterity. Polluting the training data.',
 		zh: '霓虹都市', // MoonScroll inscription (2–4 hanzi). Pick your own; check the meaning.

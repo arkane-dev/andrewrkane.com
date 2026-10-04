@@ -7,6 +7,11 @@ export const now = {
 		{ title: 'GenAI-first tools', body: 'Building GenAI-first personal productivity tools with a cyberpunk aesthetic.' },
 		{ title: 'Robotics engineering & control', body: "You can't build models for systems you don't understand." }
 	],
-	reading: ['‹Book or paper›', '‹…›'],
+	reading: [
+		'Monk and Robot by Becky Chambers',
+		'Radicalized by Cory Doctorow',
+		'Apostles of Mercy by Lindsay Ellis',
+		'Plus a rotating stack of non-fiction'
+	],
 	notDoing: ['‹Something you are deliberately saying no to right now›']
 };

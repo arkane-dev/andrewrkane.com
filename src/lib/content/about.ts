@@ -21,7 +21,11 @@ export const about = {
 			tag: 'FIRST PRINCIPLES · FEYNMAN',
 			body: "Every plan rests on assumptions. Most go unspoken. Find the ones everyone missed. Test them first and get the real answer early. Then we know we're heading the right way. The easiest person to fool is yourself."
 		},
-		{ title: '‹Principle›', tag: '‹source idea›', body: '‹…›' }
+		{
+			title: 'Check the territory',
+			tag: 'BOX · KORZYBSKI',
+			body: 'All models are wrong. Some are useful. A world model is a map, never the territory. So build for useful, not perfect. Know where the map breaks. Then go back to the real world and check it again.'
+		}
 	],
 	// Lifepath: the story, told as Cyberpunk 2077 lifepaths. The CV lives on LinkedIn.
 	timeline: [

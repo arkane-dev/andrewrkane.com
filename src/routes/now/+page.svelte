@@ -21,7 +21,21 @@
 		<ol class="focus">{#each now.focus as f, i (i)}<li><b>{f.title}</b><span>{f.body}</span></li>{/each}</ol>
 	</section>
 	<section class="two">
-		<div><h3 class="nd-label">Reading</h3><ul>{#each now.reading as r, i (i)}<li>{r}</li>{/each}</ul></div>
+		<div>
+			<h3 class="nd-label">Reading</h3>
+			<ul>
+				{#each now.reading as r, i (i)}
+					{#if typeof r === 'string'}
+						<li>{r}</li>
+					{:else}
+						<li>
+							{r.label}
+							<ul class="sub">{#each r.items as it (it.href)}<li><a href={it.href} rel="external noopener">{it.title}</a></li>{/each}</ul>
+						</li>
+					{/if}
+				{/each}
+			</ul>
+		</div>
 		<div><h3 class="nd-label">Not doing</h3><ul>{#each now.notDoing as r, i (i)}<li>{r}</li>{/each}</ul></div>
 	</section>
 </div>
@@ -41,5 +55,8 @@
 	.two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--nd-space-8); }
 	ul { padding-left: 1.2em; }
 	li::marker { color: var(--nd-accent-2); }
+	.sub { margin-top: var(--nd-space-1); padding-left: 1.1em; font-size: var(--nd-text-sm); }
+	.sub li { margin: var(--nd-space-1) 0; }
+	.sub li::marker { content: '› '; color: var(--nd-text-mute); }
 	@media (max-width: 720px) { .head :global(.nd-sign) { display: none; } .two { grid-template-columns: 1fr; } }
 </style>

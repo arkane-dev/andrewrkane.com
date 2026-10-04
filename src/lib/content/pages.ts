@@ -1,26 +1,26 @@
 // Page intros and search/link-preview descriptions for the index pages.
 export const pages = {
 	blog: {
-		description: '‹One line: what you write about.›',
-		intro: '‹Two sentences: what you write about and how often. Notes from building, in plain language.›'
+		description: 'Notes on world models, Physical AI and building in public.',
+		intro: "Notes from the lab. World models, robots, tools and whatever I'm learning. Plain words. Posted when there's something worth saying."
 	},
 	projects: {
-		description: '‹Things I build: desktop apps, web tools, libraries. Source code and downloads.›',
-		intro: '‹Two sentences: what you build and why. Everything here has source code; desktop apps have downloads.›'
+		description: 'Things I build: desktop apps, web tools and libraries. Source code and downloads.',
+		intro: 'Things I build, mostly for myself first. Everything here has source code. Desktop apps get Linux and Windows downloads as they ship.'
 	},
 	tools: {
-		description: '‹Free web tools: GenAI pricing and sizing, and more.›',
-		intro: '‹Two sentences: small tools you built because you needed them. No sign-up, nothing leaves your browser (if true).›'
+		description: 'Free web tools for AI work. Start with GenAI pricing and sizing.',
+		intro: 'Small tools I built because I needed them. Free to use. No sign-up.'
 	},
 	lab: {
-		description: '‹Experiments, sketches and abandoned ideas, in public.›',
-		intro: "‹In your own voice: this is where you poke at things. Some become projects, most don't. Failures stay up.›"
+		description: 'Experiments, sketches and abandoned ideas. In public.',
+		intro: "This is where I poke at things. Some become projects. Most don't. The failures stay up, because that's where the lessons are."
 	},
 	now: {
-		intro: "‹One line: this is a /now page, what you're focused on this month. Inspired by nownownow.com.›"
+		intro: "What I'm focused on this month. A /now page, in the spirit of nownownow.com."
 	},
 	work: {
-		proofMeta: '‹testimonials, logos or case studies›',
-		firstEmail: '‹One sentence: what to include in the first email (goal, timeline, budget range).›'
+		proofMeta: 'what clients say',
+		firstEmail: 'Tell me the goal, the timeline and a rough budget. Short is fine.'
 	}
 };

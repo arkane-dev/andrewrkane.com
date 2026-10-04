@@ -5,7 +5,7 @@ import type { Book } from './types';
 export const series = {
 	title: "A Solutions Architect's Field Guide",
 	zh: '架构师手册',
-	summary: '‹Two or three sentences: who the series is for, what it covers, how it is different.›'
+	summary: 'A field guide for solutions architects moving into data science and AI. Four volumes, 83 chapters, from statistics to world models. Every chapter pairs the ideas with trade-offs, a worked example and code you can run.'
 };
 
 export const books: Book[] = [
@@ -15,7 +15,7 @@ export const books: Book[] = [
 		title: 'Classical Data Science',
 		subtitle: "A Solutions Architect's Field Guide, Volume 1",
 		zh: '经典',
-		summary: '‹From business framing to classical ML, the foundations.›',
+		summary: 'The foundations. Framing the business problem, the maths, Python and SQL. Then the classical ML toolkit: ensembles, validation, features, evaluation and time series.',
 		chapters: 20,
 		status: 'building',
 		tone: 'magenta',
@@ -27,7 +27,7 @@ export const books: Book[] = [
 		title: 'Modern AI',
 		subtitle: "A Solutions Architect's Field Guide, Volume 2",
 		zh: '现代',
-		summary: '‹Deep learning, transformers, LLMs in practice.›',
+		summary: 'From MLOps to LLMs. Responsible AI, deployment and monitoring. Then neural networks, transformers, RAG, fine-tuning, RLHF and agents.',
 		chapters: 17,
 		status: 'building',
 		tone: 'cyan',
@@ -39,7 +39,7 @@ export const books: Book[] = [
 		title: 'Systems & Performance',
 		subtitle: "A Solutions Architect's Field Guide, Volume 3",
 		zh: '系统',
-		summary: '‹GPUs, kernels, serving, and making it fast.›',
+		summary: 'Making it fast. GPU architecture, CUDA and Triton kernels. Then CPU performance: profiling, SIMD, parallelism and memory. Ends with an end-to-end optimization.',
 		chapters: 20,
 		status: 'building',
 		tone: 'violet',
@@ -51,7 +51,7 @@ export const books: Book[] = [
 		title: 'Applied AI Domains',
 		subtitle: "A Solutions Architect's Field Guide, Volume 4",
 		zh: '应用',
-		summary: '‹Physical AI, image models, knowledge graphs and more.›',
+		summary: 'Three frontiers. Physical AI: perception, world models, VLAs and robot policies. Image models, from CNNs to diffusion. Knowledge graphs, GraphRAG and agentic reasoning.',
 		chapters: 26,
 		status: 'building',
 		tone: 'gold',

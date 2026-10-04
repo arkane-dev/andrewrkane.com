@@ -7,16 +7,9 @@ export const tools: Tool[] = [
 		slug: 'genai-calculator',
 		name: 'GenAI Pricing & Sizing',
 		zh: '算力计算器',
-		summary: '‹Tokens in, dollars and GPUs out. Compare API cost with self-hosting.›',
+		summary: 'Tokens in, dollars and GPUs out. Compare API cost with running it yourself.',
 		href: '/tools/genai-calculator/',
 		status: 'idea',
 		project: 'genai-calculator'
-	},
-	{
-		slug: '‹next-tool›',
-		name: '‹Next tool›',
-		summary: '‹Placeholder: a second small web tool. Delete if you only have one.›',
-		href: '#',
-		status: 'idea'
 	}
 ];

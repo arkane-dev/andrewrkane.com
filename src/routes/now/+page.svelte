@@ -36,7 +36,17 @@
 				{/each}
 			</ul>
 		</div>
-		<div><h3 class="nd-label">Not doing</h3><ul>{#each now.notDoing as r, i (i)}<li>{r}</li>{/each}</ul></div>
+		<div>
+			<h3 class="nd-label">Not doing</h3>
+			<ul>
+				{#each now.notDoing as r, i (i)}
+					{@const at = r.link && r.linkText ? r.text.indexOf(r.linkText) : -1}
+					<li>
+						{#if at >= 0}{r.text.slice(0, at)}<a href={r.link} rel="external noopener">{r.linkText}</a>{r.text.slice(at + r.linkText!.length)}{:else}{r.text}{/if}
+					</li>
+				{/each}
+			</ul>
+		</div>
 	</section>
 </div>
 

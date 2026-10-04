@@ -21,5 +21,8 @@ export const now = {
 			]
 		}
 	] as (string | { label: string; items: { title: string; href: string }[] })[],
-	notDoing: ['‹Something you are deliberately saying no to right now›']
+	// What I'm deliberately not focusing on. `link` (optional) turns `linkText` inside `text` into a link.
+	notDoing: [
+		{ text: 'Decision models, such as Jev.', linkText: 'Jev', link: 'https://en.wikipedia.org/wiki/Jev_(AI_model)' }
+	] as { text: string; linkText?: string; link?: string }[]
 };

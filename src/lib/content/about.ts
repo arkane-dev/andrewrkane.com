@@ -19,5 +19,5 @@ export const about = {
 		{ when: '‹2015–2019›', what: '‹Role / company›', note: '‹…›' }
 	],
 	stack: ['‹Python›', '‹Go›', '‹Svelte›', '‹AWS / GCP›', '‹PyTorch›', '‹…›'],
-	colophon: 'Built with SvelteKit and NEONDECK, prerendered to static HTML. ‹Hosted on …›'
+	colophon: 'Built with SvelteKit and NEONDECK. Prerendered to static HTML. Hosted on Cloudflare.'
 };

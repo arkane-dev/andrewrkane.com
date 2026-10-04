@@ -1,1 +1,1 @@
-export { site } from './config.js';
+export * from './content';

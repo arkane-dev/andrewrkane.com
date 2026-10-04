@@ -2,12 +2,12 @@
 // Everything wrapped in ‹ › is a placeholder. `npm run todo` lists what's left.
 export const site = {
 	name: 'site', // repo/folder name (leave)
-	brand: '‹YOURNAME›_', // top-left brand block. NEONDECK brands end in "_"
-	owner: '‹Your Name›',
-	title: '‹Your Name›', // <title> suffix and RSS title
+	brand: 'ANDREW_KANE_', // top-left brand block. NEONDECK brands end in "_"
+	owner: 'Andrew R. Kane',
+	title: 'Andrew R. Kane', // <title> suffix and RSS title
 	domain: 'https://‹your-domain.dev›', // no trailing slash; used for RSS, sitemap, canonical URLs
 	description: '‹One sentence for search engines and link previews: who you are and what this site is.›',
-	location: '‹City, Country›',
+	location: 'Newcastle, UK',
 	email: '‹hello@your-domain.dev›',
 	version: '0.1.0',
 

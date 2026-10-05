@@ -82,15 +82,15 @@
 	<!-- WORK WITH ME: the business CTA -->
 	<section>
 		<SectionHeader index="07" zh="合作" title="Work with me" />
-		<Panel title="Available for work" index="08" accent="cyan" active>
+		<Panel title={work.available ? 'Available for work' : 'Get in touch'} index="08" accent="cyan" active>
 			<div class="cta">
 				<div>
-					<Tag tone="success" dot>{work.availability}</Tag>
+					<Tag tone={work.available ? 'success' : 'muted'} dot>{work.availability}</Tag>
 					<p class="lede">{work.intro}</p>
 					<ul class="svc">{#each work.services as s (s.title)}<li>{s.title}</li>{/each}</ul>
 				</div>
 				<div class="row">
-					<Button arrow href="/work">How I work</Button>
+					<Button arrow href="/work">What I do</Button>
 					<Button variant="outline" href={work.cta.href}>{work.cta.label}</Button>
 				</div>
 			</div>

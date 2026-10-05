@@ -21,6 +21,6 @@ export const pages = {
 	},
 	work: {
 		proofMeta: 'what clients say',
-		firstEmail: 'Tell me the goal, the timeline and a rough budget. Short is fine.'
+		firstEmail: "Tell me what you're working on and where you're stuck. Short is fine."
 	}
 };

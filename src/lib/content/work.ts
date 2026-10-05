@@ -11,5 +11,5 @@ export const work = {
 	],
 	process: [] as { step: string; body: string }[],
 	proof: [] as { quote: string; who: string }[],
-	cta: { label: 'Get in touch', href: 'mailto:‹hello@your-domain.dev›' }
+	cta: { label: 'Get in touch', href: 'mailto:hello@andrewrkane.com' }
 };

@@ -5,10 +5,10 @@ export const site = {
 	brand: 'ARKANE_', // top-left brand block. NEONDECK brands end in "_"
 	owner: 'Andrew R. Kane',
 	title: 'Andrew R. Kane', // <title> suffix and RSS title
-	domain: 'https://‹your-domain.dev›', // no trailing slash; used for RSS, sitemap, canonical URLs
+	domain: 'https://andrewrkane.com', // no trailing slash; used for RSS, sitemap, canonical URLs
 	description: 'Andrew R. Kane designs world models for Physical AI. Research notes, tools and books, built in public.',
 	location: 'Newcastle, UK',
-	email: '‹hello@your-domain.dev›',
+	email: 'hello@andrewrkane.com',
 	version: '0.1.0',
 
 	// Hero (landing page). Keep the positioning line short: it's the business half.

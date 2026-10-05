@@ -1,6 +1,6 @@
 import type { Project } from './types';
 
-// Prefilled from cyberpunk_apps/BACKLOG.md. Statuses are real as of 2026-10-04; copy is placeholder.
+// Prefilled from cyberpunk_apps/BACKLOG.md. Statuses are real as of 2026-10-05.
 // Desktop downloads: point `href` at release assets once builds exist (see templates/README.md).
 export const projects: Project[] = [
 	{
@@ -11,9 +11,9 @@ export const projects: Project[] = [
 		status: 'live',
 		summary: 'The cyberpunk design system every project here is built with.',
 		description: [
-			'‹What it is: a Svelte 5 design system: tokens, components, a design language doc, WCAG-checked palette.›',
-			'‹Why you built it: one look across every app and site, so each new project starts on-brand.›',
-			'‹What you learned: e.g. contrast trade-offs with neon, Chinese typography on the web.›'
+			'A Svelte 5 design system: design tokens, components, a design language doc, and a palette checked against WCAG 2.2 AA.',
+			'I built it so every app and site here shares one look. Each new project starts on-brand.',
+			'What surprised me: Claude took a set of reference images and turned them into a design language that met all my expectations in under an hour. It was as good at tuning that language for high contrast.'
 		],
 		stack: ['Svelte 5', 'SvelteKit', 'CSS custom properties', 'axe-core'],
 		featured: true,
@@ -26,8 +26,11 @@ export const projects: Project[] = [
 		zh: '算力',
 		kind: 'web',
 		status: 'idea',
-		summary: '‹Estimate what a GenAI workload costs and what hardware it needs.›',
-		description: ['‹Problem, audience, how it works, how prices stay current.›'],
+		summary: 'Estimate what a GenAI workload costs and what hardware it needs.',
+		description: [
+			'It answers three questions. Does this model fit on this instance? What is the best cluster to serve this model at this scale? Is it cheaper to self-host, or to pay per token with an API vendor?',
+			'It runs in your browser. Nothing you enter is sent to me or to any server.'
+		],
 		stack: ['SvelteKit', 'NEONDECK'],
 		featured: true,
 		url: '/tools/genai-calculator/'
@@ -39,53 +42,66 @@ export const projects: Project[] = [
 		kind: 'book',
 		status: 'idea',
 		summary: 'The four-volume Solutions Architect\'s Field Guide, readable online.',
-		description: ['‹How the web edition is built: Quarto/LaTeX source → paper-style pages.›'],
+		description: ['The chapters are written in Quarto, with LaTeX for the math. The web edition renders them as paper-style pages. Each book has a PDF download.'],
 		stack: ['Quarto', 'LaTeX', 'SvelteKit'],
 		featured: true,
 		url: '/books'
 	},
 	{
 		slug: 'zettelkasten',
-		name: '‹Zettelkasten›',
+		name: 'Zettelkasten',
 		zh: '卡片盒',
 		kind: 'desktop',
 		status: 'idea',
-		summary: '‹An opinionated, local-first notes system.›',
-		description: ['‹What the "opinions" are, and why Obsidian was not enough.›'],
+		summary: 'A multi-modal knowledge graph that goes beyond notes.',
+		description: [
+			'Obsidian already does the knowledge graph well. This extends it beyond notes.',
+			'Code snippets, bare images and uploaded PDFs sit in the graph next to your notes. The code runs in place.'
+		],
 		stack: ['Wails', 'Go', 'SvelteKit'],
 		featured: true,
 		downloads: []
 	},
 	{
 		slug: 'research-companion',
-		name: '‹Research Companion›',
+		name: 'Research Companion',
 		zh: '研究',
 		kind: 'desktop',
 		status: 'idea',
-		summary: '‹A local research assistant for academics.›',
-		description: ['‹Who it is for, what it replaces, privacy story (runs locally).›'],
+		summary: 'A research assistant for academics, with the model you choose.',
+		description: [
+			'A desktop library for your papers. Import PDFs, read and annotate, and link each note back to the passage it came from. Ask questions across your library and get answers that cite the source.',
+			'You choose the model, local or hosted. Claude comes first. ChatGPT, anything on OpenRouter, or any OpenAI-compatible API also work.',
+			'Open research gets the best Claude model you can access. Secure research stays on your machine.'
+		],
 		stack: ['Wails', 'Go', 'SvelteKit'],
 		downloads: []
 	},
 	{
 		slug: 'genai-writer',
-		name: '‹GenAI Writer›',
+		name: 'GenAI Writer',
 		zh: '写作',
-		kind: 'desktop',
-		status: 'idea',
-		summary: '‹A writing tool with AI drafting and accept/reject diffs.›',
-		description: ['‹What kinds of writing, which models, what makes it different.›'],
-		stack: ['Wails', 'Go', 'SvelteKit'],
-		downloads: []
+		kind: 'web',
+		status: 'building',
+		summary: 'A document editor that puts what you say ahead of how it looks.',
+		description: [
+			'You don\'t start from a blank page. You build a content tree: sections that hold text, images, code and equations. For each one, you describe in plain words what it should say. The AI writes the prose to fit its place in the document.',
+			'Move a section and the document adapts. Rewrite one part without losing the rest. A second pass merges a section\'s text blocks into one voice.',
+			'Documents live in your browser. Any OpenAI-compatible model works, including local ones through Ollama. Export to Word, PDF, Markdown or OpenDocument.'
+		],
+		stack: ['SvelteKit', 'Skeleton', 'Tailwind CSS', 'IndexedDB'],
+		started: '2026-05'
 	},
 	{
 		slug: 'ide',
-		name: '‹IDE›',
+		name: 'IDE',
 		zh: '编辑器',
 		kind: 'desktop',
 		status: 'idea',
-		summary: '‹An IDE shaped around one developer\'s workflow.›',
-		description: ['‹The workflow it serves and the pain points it removes.›'],
+		summary: 'Everything I need to write code, on one screen.',
+		description: [
+			'One screen holds the whole workflow. A terminal. A code editor that doubles as a notebook. An output panel for images and charts. And a Claude Code terminal, built in.'
+		],
 		stack: ['Wails', 'Go', 'SvelteKit'],
 		downloads: []
 	}

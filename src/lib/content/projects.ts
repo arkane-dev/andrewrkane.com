@@ -81,16 +81,17 @@ export const projects: Project[] = [
 		slug: 'genai-writer',
 		name: 'GenAI Writer',
 		zh: '写作',
-		kind: 'web',
+		kind: 'desktop',
 		status: 'building',
 		summary: 'A document editor that puts what you say ahead of how it looks.',
 		description: [
 			'You don\'t start from a blank page. You build a content tree: sections that hold text, images, code and equations. For each one, you describe in plain words what it should say. The AI writes the prose to fit its place in the document.',
 			'Move a section and the document adapts. Rewrite one part without losing the rest. A second pass merges a section\'s text blocks into one voice.',
-			'Documents live in your browser. Any OpenAI-compatible model works, including local ones through Ollama. Export to Word, PDF, Markdown or OpenDocument.'
+			'Documents stay on your machine. Any OpenAI-compatible model works, including local ones through Ollama. Export to Word, PDF, Markdown or OpenDocument.'
 		],
-		stack: ['SvelteKit', 'Skeleton', 'Tailwind CSS', 'IndexedDB'],
-		started: '2026-05'
+		stack: ['Wails', 'Go', 'SvelteKit', 'Skeleton', 'Tailwind CSS'],
+		started: '2026-05',
+		downloads: []
 	},
 	{
 		slug: 'ide',

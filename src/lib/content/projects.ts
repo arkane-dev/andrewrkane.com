@@ -89,7 +89,7 @@ export const projects: Project[] = [
 			'Move a section and the document adapts. Rewrite one part without losing the rest. A second pass merges a section\'s text blocks into one voice.',
 			'Documents stay on your machine. Any OpenAI-compatible model works, including local ones through Ollama. Export to Word, PDF, Markdown or OpenDocument.'
 		],
-		stack: ['Wails', 'Go', 'SvelteKit', 'Skeleton', 'Tailwind CSS'],
+		stack: ['Wails', 'Go', 'SvelteKit', 'NEONDECK'],
 		started: '2026-05',
 		downloads: []
 	},

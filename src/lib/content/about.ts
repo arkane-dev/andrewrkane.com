@@ -37,6 +37,6 @@ export const about = {
 		{ when: 'After hours', what: 'Netrunner', zh: '网络黑客', note: 'Jacking in after the shift. World models, robots and this site.' }
 	],
 	// Technologies in real use. Add each new one used in a project or the Lab (see cyberpunk_apps/CLAUDE.md).
-	stack: ['Python', 'Go', 'Svelte', 'AWS', 'PyTorch', 'CUDA', 'C/C++'],
+	stack: ['Python', 'Go', 'Svelte', 'Wails', 'AWS', 'PyTorch', 'CUDA', 'C/C++'],
 	colophon: 'Built with SvelteKit and NEONDECK. Prerendered to static HTML. Hosted on Cloudflare.'
 };

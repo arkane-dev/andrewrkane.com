@@ -51,7 +51,7 @@
 							</tbody>
 						</table>
 					{:else}
-						<p class="nd-meta">&gt; no builds yet<span class="nd-cursor"></span></p>
+						<p class="nd-meta">&gt; {p.downloadsNote ?? 'no builds yet'}<span class="nd-cursor"></span></p>
 					{/if}
 				</Panel>
 			{/if}

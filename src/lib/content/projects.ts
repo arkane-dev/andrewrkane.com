@@ -82,16 +82,25 @@ export const projects: Project[] = [
 		name: 'GenAI Writer',
 		zh: '写作',
 		kind: 'desktop',
-		status: 'building',
+		status: 'live',
 		summary: 'A document editor that puts what you say ahead of how it looks.',
 		description: [
-			'You don\'t start from a blank page. You build a content tree: sections that hold text, images, code and equations. For each one, you describe in plain words what it should say. The AI writes the prose to fit its place in the document.',
-			'Move a section and the document adapts. Rewrite one part without losing the rest. A second pass merges a section\'s text blocks into one voice.',
-			'Documents stay on your machine. Any OpenAI-compatible model works, including local ones through Ollama. Export to Word, PDF, Markdown or OpenDocument.'
+			'You don\'t start from a blank page. You build a content tree: sections that hold text, images, code, equations and tables. For each part, you describe in plain words what it should say. The AI writes the prose to fit its place in the document.',
+			'Move a section and the document adapts. Rewrite one part without losing the rest. Every change is saved, with a full history you can restore from.',
+			'Documents sit on shelves as data shards. Drag a shard to another shelf to move it. Everything is stored as plain JSON files on your machine, so you can back it up, sync it or put it in git.',
+			'Use any OpenAI-compatible model: OpenAI, OpenRouter, or a local model through Ollama. Export to Word, PDF, Markdown, OpenDocument or HTML.'
 		],
 		stack: ['Wails', 'Go', 'SvelteKit', 'NEONDECK'],
+		featured: true,
 		started: '2026-05',
-		downloads: []
+		screenshots: [
+			{ src: '/images/genai-writer/shelves.webp', alt: 'The library: documents as glowing data shards standing on shelves. The open document is lit magenta and marked LOADED.' },
+			{ src: '/images/genai-writer/editor.webp', alt: 'The editor: a content tree of sections and text blocks on the left, and a live preview of the document on cream paper on the right.' },
+			{ src: '/images/genai-writer/generate.webp', alt: 'A generated document, shown on paper, after a local Gemma model wrote both sections.' }
+		],
+		changelog: [{ version: '0.1.0', date: '2026-10-06', notes: 'First release. Desktop app with shelves of data shards, AI drafting with any OpenAI-compatible model, history, and five export formats.' }],
+		downloads: [],
+		downloadsNote: 'Linux and Windows builds coming soon'
 	},
 	{
 		slug: 'ide',

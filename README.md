@@ -1,6 +1,6 @@
-# site
+# andrewrkane.com
 
-The main website: landing, about, work, blog, projects (code + downloads), tools, books, lab, now.
+Source for [andrewrkane.com](https://andrewrkane.com). The main website: landing, about, work, blog, projects (code + downloads), tools, books, lab, now.
 SvelteKit (Svelte 5), fully prerendered (adapter-static), NEONDECK styling.
 
 **To change content, read [CONTENT_GUIDE.md](CONTENT_GUIDE.md).** All words live in `src/lib/content/` and `src/content/blog/`.

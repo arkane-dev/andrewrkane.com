@@ -81,5 +81,6 @@
 	aside { display: grid; gap: var(--nd-space-5); align-content: start; }
 	.shots { display: grid; gap: var(--nd-space-4); margin-top: var(--nd-space-6); }
 	.shots img { border: 1px solid var(--nd-line); }
+	.nd-table .num { white-space: nowrap; }
 	@media (max-width: 900px) { .cols { grid-template-columns: 1fr; } .head :global(.nd-hanzi) { display: none; } }
 </style>

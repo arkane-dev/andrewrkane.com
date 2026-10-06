@@ -24,7 +24,7 @@ export const site = {
 	},
 
 	socials: [
-		{ label: 'GitHub', href: 'https://github.com/‹handle›' },
+		{ label: 'GitHub', href: 'https://github.com/arkane-dev' },
 		{ label: 'LinkedIn', href: 'https://www.linkedin.com/in/andrew-kane-058368134/' },
 		{ label: 'RSS', href: '/rss.xml' }
 	],

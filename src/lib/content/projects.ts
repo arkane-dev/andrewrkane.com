@@ -18,7 +18,7 @@ export const projects: Project[] = [
 		stack: ['Svelte 5', 'SvelteKit', 'CSS custom properties', 'axe-core'],
 		featured: true,
 		started: '2026-10',
-		// repo: 'https://github.com/<handle>/neondeck', // ‹add when the repo is public›
+		repo: 'https://github.com/arkane-dev/neondeck'
 	},
 	{
 		slug: 'genai-calculator',
@@ -99,8 +99,11 @@ export const projects: Project[] = [
 			{ src: '/images/genai-writer/generate.webp', alt: 'A generated document, shown on paper, after a local Gemma model wrote both sections.' }
 		],
 		changelog: [{ version: '0.1.0', date: '2026-10-06', notes: 'First release. Desktop app with shelves of data shards, AI drafting with any OpenAI-compatible model, history, and five export formats.' }],
-		downloads: [],
-		downloadsNote: 'Linux and Windows builds coming soon'
+		repo: 'https://github.com/arkane-dev/genai-writer',
+		downloads: [
+			{ platform: 'linux', arch: 'amd64', file: 'genai-writer-0.1.0-linux-amd64.tar.gz', href: 'https://github.com/arkane-dev/genai-writer/releases/download/v0.1.0/genai-writer-0.1.0-linux-amd64.tar.gz', size: '22.5 MB', version: '0.1.0' },
+			{ platform: 'windows', arch: 'amd64', file: 'genai-writer-0.1.0-windows-amd64.zip', href: 'https://github.com/arkane-dev/genai-writer/releases/download/v0.1.0/genai-writer-0.1.0-windows-amd64.zip', size: '22.9 MB', version: '0.1.0' }
+		]
 	},
 	{
 		slug: 'ide',

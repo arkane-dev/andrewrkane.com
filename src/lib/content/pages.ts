@@ -9,7 +9,7 @@ export const pages = {
 		intro: 'Things I build, mostly for myself first. Everything here has source code. Desktop apps get Linux and Windows downloads as they ship.'
 	},
 	tools: {
-		description: 'Free web tools for AI work. Start with GenAI pricing and sizing.',
+		description: 'Free tools for AI work, in your browser or on your desktop. GenAI pricing and sizing, and an AI document writer.',
 		intro: 'Small tools I built because I needed them. Free to use. No sign-up.'
 	},
 	lab: {

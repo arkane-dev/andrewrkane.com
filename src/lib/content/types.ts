@@ -35,7 +35,8 @@ export interface Tool {
 	name: string;
 	zh?: string;
 	summary: string;
-	href: string; // where the tool lives (/tools/<slug>/ or a subdomain)
+	kind?: 'web' | 'desktop'; // web (default) opens in a new tab. desktop links to its downloads.
+	href: string; // where the tool lives (/tools/<slug>/ or a subdomain), or its downloads for a desktop tool
 	status: Status;
 	project?: string; // slug in projects.ts for the "how it's built" page
 }

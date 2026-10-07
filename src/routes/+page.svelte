@@ -67,7 +67,8 @@
 		<div>
 			<SectionHeader index="05" zh="工具" title="Tools" level={3} />
 			{#each tools as t (t.slug)}
-				<a class="line" href={t.status === 'idea' && t.project ? `/projects/${t.project}` : t.href} target={t.status !== 'idea' ? '_blank' : undefined} rel={t.status !== 'idea' ? 'noopener' : undefined}><b>{t.name}</b>{#if t.status !== 'idea'}<span class="visually-hidden"> (opens in a new tab)</span>{/if}<span>{t.summary}</span><StatusTag status={t.status} /></a>
+				{@const newTab = t.status !== 'idea' && t.kind !== 'desktop'}
+				<a class="line" href={t.status === 'idea' && t.project ? `/projects/${t.project}` : t.href} target={newTab ? '_blank' : undefined} rel={newTab ? 'noopener' : undefined}><b>{t.name}</b>{#if newTab}<span class="visually-hidden"> (opens in a new tab)</span>{/if}<span>{t.summary}</span><StatusTag status={t.status} /></a>
 			{/each}
 		</div>
 		<div>

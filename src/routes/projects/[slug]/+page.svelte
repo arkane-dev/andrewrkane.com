@@ -41,6 +41,7 @@
 			</Panel>
 
 			{#if p.kind === 'desktop'}
+				<div id="downloads">
 				<Panel title="Downloads" index="03" cut="sm" accent="cyan">
 					{#if p.downloads?.length}
 						<table class="nd-table">
@@ -54,6 +55,7 @@
 						<p class="nd-meta">&gt; {p.downloadsNote ?? 'no builds yet'}<span class="nd-cursor"></span></p>
 					{/if}
 				</Panel>
+				</div>
 			{/if}
 		</aside>
 	</div>
@@ -78,6 +80,7 @@
 	.summary { font-size: var(--nd-text-lg); color: var(--nd-text-dim); }
 	.row { display: flex; flex-wrap: wrap; gap: var(--nd-space-3); }
 	.cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--nd-space-10); }
+	#downloads { scroll-margin-top: var(--nd-space-16); }
 	aside { display: grid; gap: var(--nd-space-5); align-content: start; }
 	.shots { display: grid; gap: var(--nd-space-4); margin-top: var(--nd-space-6); }
 	.shots img { border: 1px solid var(--nd-line); }

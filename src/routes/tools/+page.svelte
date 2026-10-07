@@ -10,7 +10,7 @@
 
 <div class="content">
 	<div class="banner nd-led-bg"><DotMatrix text="工具" label="Tools" tone="cyan" height="5rem" /></div>
-	<SectionHeader index="01" zh="工具" title="Tools" meta="free · runs in your browser" />
+	<SectionHeader index="01" zh="工具" title="Tools" meta="free · browser and desktop" />
 	<p class="intro">{pages.tools.intro}</p>
 
 	<div class="grid">
@@ -19,7 +19,7 @@
 				<StatusTag status={t.status} />
 				<p>{t.summary}</p>
 				<div class="row">
-					{#if t.status === 'idea'}<Button disabled>Coming soon</Button>{:else}<Button arrow href={t.href} target="_blank" rel="noopener">Open tool<span class="visually-hidden"> (opens in a new tab)</span></Button>{/if}
+					{#if t.status === 'idea'}<Button disabled>Coming soon</Button>{:else if t.kind === 'desktop'}<Button arrow href={t.href}>Download</Button>{:else}<Button arrow href={t.href} target="_blank" rel="noopener">Open tool<span class="visually-hidden"> (opens in a new tab)</span></Button>{/if}
 					{#if t.project}<Button variant="ghost" href="/projects/{t.project}">How it's built</Button>{/if}
 				</div>
 			</Panel>

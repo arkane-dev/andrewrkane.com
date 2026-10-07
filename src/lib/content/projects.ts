@@ -108,13 +108,14 @@ export const projects: Project[] = [
 			{ src: '/images/genai-writer/generate.webp', alt: 'A generated document, shown on paper, after a local Gemma model wrote both sections.' }
 		],
 		changelog: [
-			{ version: '0.1.1', date: '2026-10-07', notes: 'Generation follows your instructions and streams in the editor. PDF export prints on white. Maximise works with mixed portrait and landscape monitors.' },
+			{ version: '0.1.1', date: '2026-10-07', notes: 'Generation follows your instructions and streams in the editor. PDF export prints on white. Maximise works with mixed portrait and landscape monitors. First macOS build, unsigned.' },
 			{ version: '0.1.0', date: '2026-10-06', notes: 'First release. Desktop app with shelves of data shards, AI drafting with any OpenAI-compatible model, history, and five export formats.' }
 		],
 		repo: 'https://github.com/arkane-dev/genai-writer',
 		downloads: [
 			{ platform: 'linux', arch: 'amd64', file: 'genai-writer-0.1.1-linux-amd64.tar.gz', href: 'https://github.com/arkane-dev/genai-writer/releases/download/v0.1.1/genai-writer-0.1.1-linux-amd64.tar.gz', size: '22.5 MB', version: '0.1.1' },
-			{ platform: 'windows', arch: 'amd64', file: 'genai-writer-0.1.1-windows-amd64.zip', href: 'https://github.com/arkane-dev/genai-writer/releases/download/v0.1.1/genai-writer-0.1.1-windows-amd64.zip', size: '22.9 MB', version: '0.1.1' }
+			{ platform: 'windows', arch: 'amd64', file: 'genai-writer-0.1.1-windows-amd64.zip', href: 'https://github.com/arkane-dev/genai-writer/releases/download/v0.1.1/genai-writer-0.1.1-windows-amd64.zip', size: '22.9 MB', version: '0.1.1' },
+			{ platform: 'macos', arch: 'universal', file: 'genai-writer-0.1.1-macos-universal.zip', href: 'https://github.com/arkane-dev/genai-writer/releases/download/v0.1.1/genai-writer-0.1.1-macos-universal.zip', size: '44.2 MB', version: '0.1.1' }
 		]
 	},
 	{

@@ -1,0 +1,84 @@
+# Build andrewrkane.com and deploy it to Cloudflare Pages.
+#
+# The site and its web tools install NEONDECK from ../sharable_assets, so this job
+# checks out three repos side by side, the same layout as on the dev machine:
+#
+#   site/               this repo
+#   sharable_assets/    arkane-dev/neondeck
+#   genai-calculator/   arkane-dev/genai-calculator  (built into /tools/genai-calculator)
+#
+# Needs two repo secrets: CLOUDFLARE_API_TOKEN (permission: Cloudflare Pages — Edit)
+# and CLOUDFLARE_ACCOUNT_ID.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  # Run by hand from the Actions tab, e.g. after a NEONDECK or calculator change.
+  workflow_dispatch:
+  # Other repos can trigger a deploy with: gh workflow run deploy.yml -R arkane-dev/andrewrkane.com
+  repository_dispatch:
+    types: [deploy]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      PAGES_PROJECT: andrewrkane
+    steps:
+      - name: Check out the site
+        uses: actions/checkout@v4
+        with:
+          path: site
+
+      - name: Check out NEONDECK
+        uses: actions/checkout@v4
+        with:
+          repository: arkane-dev/neondeck
+          path: sharable_assets
+
+      - name: Check out the GenAI Calculator
+        uses: actions/checkout@v4
+        with:
+          repository: arkane-dev/genai-calculator
+          path: genai-calculator
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Build NEONDECK
+        working-directory: sharable_assets/neondeck
+        run: npm ci --no-audit --no-fund && npm run build
+
+      - name: Install the calculator
+        working-directory: genai-calculator
+        run: npm ci --no-audit --no-fund
+
+      - name: Build the site (and its tools)
+        working-directory: site
+        run: npm ci --no-audit --no-fund && npm run build
+
+      - name: Create the Pages project on first run
+        working-directory: site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@4 pages project list | grep -qw "$PAGES_PROJECT" \
+            || npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch main
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: site
+          command: pages deploy build --project-name=${{ env.PAGES_PROJECT }} --branch=main

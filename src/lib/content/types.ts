@@ -66,3 +66,21 @@ export interface Post {
 	draft?: boolean;
 	minutes: number; // reading time, computed
 }
+
+// Lab entries live in src/content/lab/<slug>.md (see src/lib/server/lab.ts).
+// An entry links to a blog post (post), to its own deep-dive page (a Markdown body), or to nothing.
+export interface LabEntry {
+	slug: string;
+	title: string;
+	zh?: string;
+	date: string; // YYYY-MM or YYYY-MM-DD
+	status: Status | 'abandoned';
+	summary: string;
+	tags: string[];
+	post?: string; // blog slug, optionally with #anchor: the entry links to /blog/<post>
+	project?: string; // project slug, shown on the deep dive
+	outputs?: { label: string; href: string }[]; // files, screenshots, repos shown beside a deep dive
+	draft?: boolean;
+	href?: string; // computed: /blog/<post>, /lab/<slug> or none
+	link?: 'post' | 'deep-dive'; // computed: what href points at
+}

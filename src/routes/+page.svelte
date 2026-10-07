@@ -8,7 +8,7 @@
 	import ProjectCard from '#lib/components/ProjectCard.svelte';
 	import PostList from '#lib/components/PostList.svelte';
 	import StatusTag from '#lib/components/StatusTag.svelte';
-	import { site, projects, tools, books, series, now, work, lab } from '#lib';
+	import { site, projects, tools, books, series, now, work } from '#lib';
 
 	let { data } = $props();
 	const featured = projects.filter((p) => p.featured).slice(0, 4);
@@ -102,8 +102,8 @@
 	<section>
 		<SectionHeader index="09" zh="实验室" title="From the lab" meta="experiments · unfinished on purpose" />
 		<div class="lab">
-			{#each lab.slice(0, 3) as e (e.title)}
-				<div class="exp"><span class="nd-meta">{e.date}</span><b>{e.title}</b><p>{e.summary}</p><StatusTag status={e.status} /></div>
+			{#each data.lab as e (e.slug)}
+				<div class="exp"><span class="nd-meta">{e.date}</span><b>{#if e.href}<a href={e.href}>{e.title}</a>{:else}{e.title}{/if}</b><p>{e.summary}</p><StatusTag status={e.status} /></div>
 			{/each}
 		</div>
 		<a class="more" href="/lab">Enter the lab →</a>
@@ -151,6 +151,8 @@
 	.lab { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--nd-space-5); }
 	.exp { display: grid; gap: var(--nd-space-2); align-content: start; justify-items: start; padding: var(--nd-space-5); border: 1px dashed var(--nd-line-strong); }
 	.exp p { margin: 0; color: var(--nd-text-dim); font-size: var(--nd-text-sm); }
+	.exp b a { color: inherit; }
+	.exp b a:hover, .exp b a:focus-visible { color: var(--nd-accent); }
 
 	@media (max-width: 1100px) { .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 	@media (max-width: 960px) {

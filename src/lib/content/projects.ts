@@ -61,13 +61,15 @@ export const projects: Project[] = [
 		name: 'Zettelkasten',
 		zh: '卡片盒',
 		kind: 'desktop',
-		status: 'idea',
+		status: 'building',
 		summary: 'A multi-modal knowledge graph that goes beyond notes.',
 		description: [
 			'Obsidian already does the knowledge graph well. This extends it beyond notes.',
-			'Code snippets, bare images and uploaded PDFs sit in the graph next to your notes. The code runs in place.'
+			'PDFs, Word and Excel files and archived web pages sit in the graph next to your notes. Each one gets an AI summary and a space for your own notes. Notebooks and code blocks run in place.',
+			'GraphRAG groups related ideas into communities, at as many levels as the data needs. Each community gets a summary and a space for notes. It rebuilds on a schedule and keeps your notes.',
+			'Built as an Obsidian plugin with a local Python service. The design is in the Lab.'
 		],
-		stack: ['Wails', 'Go', 'SvelteKit'],
+		stack: ['Obsidian', 'TypeScript', 'Svelte', 'Python'],
 		featured: true,
 		downloads: []
 	},

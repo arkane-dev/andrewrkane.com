@@ -3,7 +3,9 @@
 	import { SectionHeader, Tag } from '@cyberpunk-apps/neondeck';
 	import Seo from '#lib/components/Seo.svelte';
 	import StatusTag from '#lib/components/StatusTag.svelte';
-	import { lab, pages } from '#lib';
+	import { pages } from '#lib';
+
+	let { data } = $props();
 </script>
 
 <Seo title="Lab" description={pages.lab.description} />
@@ -13,13 +15,13 @@
 	<p class="intro">{pages.lab.intro}</p>
 
 	<ol class="log">
-		{#each lab as e, i (e.title + i)}
+		{#each data.entries as e (e.slug)}
 			<li>
 				<span class="nd-mono date">{e.date}</span>
 				<div>
-					<h3>{#if e.zh}<span class="zh" lang="zh-Hans">{e.zh}</span>{/if}{e.title}</h3>
+					<h3>{#if e.zh}<span class="zh" lang="zh-Hans">{e.zh}</span>{/if}{#if e.href}<a href={e.href}>{e.title}</a>{:else}{e.title}{/if}</h3>
 					<p>{e.summary}</p>
-					<div class="tags"><StatusTag status={e.status} />{#each e.tags as t (t)}<Tag tone="muted">{t}</Tag>{/each}{#if e.href}<a href={e.href}>open →</a>{/if}</div>
+					<div class="tags"><StatusTag status={e.status} />{#each e.tags as t (t)}<Tag tone="muted">{t}</Tag>{/each}{#if e.href}<a class="go" href={e.href} aria-hidden="true" tabindex="-1">{e.link === 'post' ? 'read the post →' : 'deep dive →'}</a>{/if}</div>
 				</div>
 			</li>
 		{/each}
@@ -34,6 +36,9 @@
 	li::before { content: ''; position: absolute; left: calc(var(--nd-space-6) * -1 - 4px); top: 0.4em; width: 7px; height: 7px; background: var(--nd-accent); }
 	.date { color: var(--nd-text-mute); font-size: var(--nd-text-xs); }
 	h3 { margin: 0; font-size: var(--nd-text-lg); text-transform: none; }
+	h3 a { color: inherit; text-decoration: none; }
+	h3 a:hover, h3 a:focus-visible { color: var(--nd-accent); text-decoration: underline; }
+	.go { font-family: var(--nd-font-mono); font-size: var(--nd-text-xs); }
 	.zh { margin-right: 0.5em; font-family: var(--nd-font-cjk); color: var(--nd-accent); }
 	p { margin: var(--nd-space-1) 0 var(--nd-space-2); color: var(--nd-text-dim); }
 	.tags { display: flex; flex-wrap: wrap; gap: var(--nd-space-2); align-items: center; }

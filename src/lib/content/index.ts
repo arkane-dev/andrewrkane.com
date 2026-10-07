@@ -6,5 +6,4 @@ export { books, series } from './books';
 export { about } from './about';
 export { work } from './work';
 export { now } from './now';
-export { lab } from './lab';
 export { pages } from './pages';

@@ -34,23 +34,23 @@ jobs:
       PAGES_PROJECT: andrewrkane
     steps:
       - name: Check out the site
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: site
 
       - name: Check out NEONDECK
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: arkane-dev/neondeck
           path: sharable_assets
 
       - name: Check out the GenAI Calculator
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: arkane-dev/genai-calculator
           path: genai-calculator
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
 
@@ -76,7 +76,7 @@ jobs:
             || npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch main
 
       - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

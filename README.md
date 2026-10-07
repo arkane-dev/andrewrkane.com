@@ -26,3 +26,7 @@ npm run update:neondeck       # after rebuilding sharable_assets/neondeck
 | `vite.config.ts` | prerender ignores 404s under `/tools/*` only (tools deploy separately) |
 
 Accessibility: axe-core reports 0 WCAG 2.2 AA violations on all pages at 1440px and 400px (2026-10-04).
+
+## License
+
+[MIT](LICENSE) © 2026 Andrew R. Kane

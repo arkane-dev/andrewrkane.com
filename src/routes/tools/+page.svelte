@@ -19,7 +19,7 @@
 				<StatusTag status={t.status} />
 				<p>{t.summary}</p>
 				<div class="row">
-					{#if t.status === 'idea'}<Button disabled>Coming soon</Button>{:else}<Button arrow href={t.href}>Open tool</Button>{/if}
+					{#if t.status === 'idea'}<Button disabled>Coming soon</Button>{:else}<Button arrow href={t.href} data-sveltekit-reload>Open tool</Button>{/if}
 					{#if t.project}<Button variant="ghost" href="/projects/{t.project}">How it's built</Button>{/if}
 				</div>
 			</Panel>

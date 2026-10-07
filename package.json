@@ -5,7 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "vite dev",
-		"build": "vite build",
+		"build": "vite build && npm run build:tools",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
@@ -13,7 +13,9 @@
 		"lint": "prettier --check .",
 		"format": "prettier --write .",
 		"update:neondeck": "rm -rf node_modules/@cyberpunk-apps/neondeck && npm install",
-		"todo": "grep -rnE \"‹|TODO\\\\(content\\\\)\" src --include=*.ts --include=*.svelte --include=*.md | sed -E \"s/^([^:]+:[0-9]+):\\s*/\\1  /\"; echo; echo \"$(grep -rcE \"‹\" src --include=*.ts --include=*.svelte --include=*.md | awk -F: \"{s+=\\$2} END {print s}\") placeholder lines left\""
+		"todo": "grep -rnE \"\u2039|TODO\\\\(content\\\\)\" src --include=*.ts --include=*.svelte --include=*.md | sed -E \"s/^([^:]+:[0-9]+):\\s*/\\1  /\"; echo; echo \"$(grep -rcE \"\u2039\" src --include=*.ts --include=*.svelte --include=*.md | awk -F: \"{s+=\\$2} END {print s}\") placeholder lines left\"",
+		"build:site": "vite build",
+		"build:tools": "bash scripts/build-tools.sh"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-static": "^4.0.0",

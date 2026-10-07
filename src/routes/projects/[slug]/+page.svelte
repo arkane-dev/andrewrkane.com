@@ -19,7 +19,7 @@
 			<h1>{p.name}</h1>
 			<p class="summary">{p.summary}</p>
 			<div class="row">
-				{#if p.url && p.status !== 'idea'}<Button arrow href={p.url}>Open</Button>{/if}
+				{#if p.url && p.status !== 'idea'}<Button arrow href={p.url} data-sveltekit-reload>Open</Button>{/if}
 				{#if p.repo}<Button variant="outline" arrow href={p.repo}>Source code</Button>{/if}
 			</div>
 		</div>

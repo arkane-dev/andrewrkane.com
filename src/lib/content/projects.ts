@@ -25,15 +25,24 @@ export const projects: Project[] = [
 		name: 'GenAI Calculator',
 		zh: '算力',
 		kind: 'web',
-		status: 'idea',
+		status: 'live',
 		summary: 'Estimate what a GenAI workload costs and what hardware it needs.',
 		description: [
 			'It answers three questions. Does this model fit on this instance? What is the best cluster to serve this model at this scale? Is it cheaper to self-host, or to pay per token with an API vendor?',
-			'It runs in your browser. Nothing you enter is sent to me or to any server.'
+			'It runs in your browser. Nothing you enter is sent to me or to any server.',
+			'Five tabs: Workload sizes a cluster for your traffic, Modelling shows memory, throughput and the bottleneck, Self-host vs API finds the break-even point, Training covers fine-tuning, and Math shows every calculation step by step.',
+			'It works with any cloud or your own hardware. GPU prices are the median market rate and API prices come from OpenRouter, both dated October 2026. Every price is editable, so you can plug in a real quote.'
 		],
-		stack: ['SvelteKit', 'NEONDECK'],
+		stack: ['SvelteKit', 'KaTeX', 'NEONDECK'],
 		featured: true,
-		url: '/tools/genai-calculator/'
+		started: '2026-09',
+		repo: 'https://github.com/arkane-dev/genai-calculator',
+		url: '/tools/genai-calculator/',
+		screenshots: [
+			{ src: '/images/genai-calculator/workload.webp', alt: 'The Workload tab: a cluster of 8 H100 GPUs sized for 256 concurrent users, with time to first token, per-user speed and a live cluster topology.' },
+			{ src: '/images/genai-calculator/economics.webp', alt: 'The Self-host vs API tab: for Llama 3.1 70B the API wins at 40% duty cycle, costing $2.3k a month against $20.3k to self-host.' }
+		],
+		changelog: [{ version: '0.1.0', date: '2026-10-07', notes: 'First public release. Cloud-agnostic workload sizing, self-host vs API break-even, training estimates and step-by-step math.' }]
 	},
 	{
 		slug: 'books',

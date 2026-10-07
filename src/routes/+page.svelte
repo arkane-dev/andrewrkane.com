@@ -67,7 +67,7 @@
 		<div>
 			<SectionHeader index="05" zh="工具" title="Tools" level={3} />
 			{#each tools as t (t.slug)}
-				<a class="line" href={t.status === 'idea' && t.project ? `/projects/${t.project}` : t.href}><b>{t.name}</b><span>{t.summary}</span><StatusTag status={t.status} /></a>
+				<a class="line" href={t.status === 'idea' && t.project ? `/projects/${t.project}` : t.href} data-sveltekit-reload={t.status !== 'idea' || undefined}><b>{t.name}</b><span>{t.summary}</span><StatusTag status={t.status} /></a>
 			{/each}
 		</div>
 		<div>

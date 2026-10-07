@@ -9,7 +9,7 @@ export const tools: Tool[] = [
 		zh: '算力计算器',
 		summary: 'Tokens in, dollars and GPUs out. Compare API cost with running it yourself.',
 		href: '/tools/genai-calculator/',
-		status: 'idea',
+		status: 'live',
 		project: 'genai-calculator'
 	}
 ];

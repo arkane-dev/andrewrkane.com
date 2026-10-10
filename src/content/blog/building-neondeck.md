@@ -3,6 +3,7 @@ title: "Building NEONDECK: a cyberpunk design system"
 date: 2026-10-04
 summary: "How a folder of reference images became one design language for every app and site, with neon that passes WCAG."
 tags: [design, svelte, accessibility]
+zh: 日志
 ---
 
 I have seven projects on the go. A website, desktop apps, a book series, a calculator. I wanted them to feel like one thing. Same colors, same type, same shapes. So before I built any of them, I built a design system. I called it NEONDECK.

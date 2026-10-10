@@ -7,3 +7,4 @@ export { about } from './about';
 export { work } from './work';
 export { now } from './now';
 export { pages } from './pages';
+export { bands, isBand, type Band } from './bands';

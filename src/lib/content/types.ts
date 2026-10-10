@@ -1,4 +1,5 @@
 // Shapes for all site content. Edit the data files next to this one, not the pages.
+import type { Band } from './bands';
 export type Status = 'idea' | 'building' | 'beta' | 'live' | 'archived';
 export type Link = { label: string; href: string };
 
@@ -63,6 +64,7 @@ export interface Post {
 	date: string; // YYYY-MM-DD
 	summary: string;
 	tags: string[];
+	zh: Band; // band word on the paper page, see bands.ts
 	draft?: boolean;
 	minutes: number; // reading time, computed
 }
@@ -73,6 +75,7 @@ export interface LabEntry {
 	slug: string;
 	title: string;
 	zh?: string;
+	zhLang: 'zh-Hans' | 'ja'; // ja only for the abandoned Tokyo layer, which shows the old Japanese look
 	date: string; // YYYY-MM or YYYY-MM-DD
 	status: Status | 'abandoned';
 	summary: string;

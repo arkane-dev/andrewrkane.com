@@ -1,8 +1,9 @@
 // Blog pipeline: Markdown files in src/content/blog/ → metadata + HTML, at build time.
-// Frontmatter: title, date (YYYY-MM-DD), summary, tags [..], draft (optional).
+// Frontmatter: title, date (YYYY-MM-DD), summary, tags [..], zh (optional band word, see bands.ts), draft (optional).
 import matter from 'gray-matter';
 import { renderMarkdown } from './markdown';
 import type { Post } from '../content/types';
+import { bands, isBand } from '../content/bands';
 
 const files = import.meta.glob('/src/content/blog/*.md', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 
@@ -10,6 +11,8 @@ function parse(path: string, raw: string) {
 	const { data, content } = matter(raw);
 	const slug = path.split('/').pop()!.replace(/\.md$/, '');
 	const date = data.date instanceof Date ? data.date.toISOString().slice(0, 10) : String(data.date ?? '');
+	const zh = String(data.zh ?? '文章');
+	if (!isBand(zh)) throw new Error(`${path}: zh "${zh}" must be one of ${Object.keys(bands).join(' ')}`);
 	const words = content.split(/\s+/).filter(Boolean).length;
 	const meta: Post = {
 		slug,
@@ -17,6 +20,7 @@ function parse(path: string, raw: string) {
 		date,
 		summary: String(data.summary ?? ''),
 		tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
+		zh,
 		draft: Boolean(data.draft),
 		minutes: Math.max(1, Math.round(words / 220))
 	};

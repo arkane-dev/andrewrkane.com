@@ -1,5 +1,5 @@
 // Lab pipeline: Markdown files in src/content/lab/ → entries + deep-dive HTML, at build time.
-// Frontmatter: title, zh, date, status, summary, tags, and optional post, project, outputs, draft.
+// Frontmatter: title, zh, zhLang (zh-Hans default, or ja), date, status, summary, tags, and optional post, project, outputs, draft.
 // The body is optional. An entry with a body gets a deep-dive page at /lab/<slug>.
 // An entry with `post` links to that blog post instead.
 import matter from 'gray-matter';
@@ -17,6 +17,7 @@ function parse(path: string, raw: string) {
 		slug,
 		title: String(data.title ?? slug),
 		zh: data.zh ? String(data.zh) : undefined,
+		zhLang: data.zhLang === 'ja' ? 'ja' : 'zh-Hans',
 		date,
 		status: data.status ?? 'idea',
 		summary: String(data.summary ?? ''),

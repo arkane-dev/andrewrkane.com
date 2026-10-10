@@ -19,7 +19,7 @@
 			<li>
 				<span class="nd-mono date">{e.date}</span>
 				<div>
-					<h3>{#if e.zh}<span class="zh" lang="zh-Hans">{e.zh}</span>{/if}{#if e.href}<a href={e.href}>{e.title}</a>{:else}{e.title}{/if}</h3>
+					<h3>{#if e.zh}<span class="zh" lang={e.zhLang}>{e.zh}</span>{/if}{#if e.href}<a href={e.href}>{e.title}</a>{:else}{e.title}{/if}</h3>
 					<p>{e.summary}</p>
 					<div class="tags"><StatusTag status={e.status} />{#each e.tags as t (t)}<Tag tone="muted">{t}</Tag>{/each}{#if e.href}<a class="go" href={e.href} aria-hidden="true" tabindex="-1">{e.link === 'post' ? 'read the post →' : 'deep dive →'}</a>{/if}</div>
 				</div>

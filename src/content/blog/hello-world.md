@@ -3,6 +3,7 @@ title: "Hello, world: why this site exists"
 date: 2026-10-04
 summary: "Who I am, what lives here, and why I'm building it all in the open."
 tags: [meta]
+zh: 随笔
 ---
 
 I'm Andrew. I research world models for Physical AI. By day, I'm a Solutions Architect. I help startups build robots. This site is my lab notebook: research notes, tools, books and experiments, all in one place.

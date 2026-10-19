@@ -115,4 +115,60 @@ The AI summary sits between markers, so a rebuild can replace it. Software never
 4. **GraphRAG.** Index, community notes, matching, schedule, community graph view.
 5. **Polish.** A NEONDECK Obsidian theme, then a public release.
 
-The spike results go here when they're in: timings, call counts and sample community reports.
+## Spike results
+
+The spike ran from 9 to 11 October. The plan holds. Two details changed, and GraphRAG got much cheaper.
+
+The test corpus: 50 documents, about 244,000 words. 19 AI and robotics papers, 8 prop and cosplay books, and 23 Chinese recipes as PDFs and saved web pages. Three domains that shouldn't mix. That makes community quality easy to check.
+
+### Readers
+
+Word works through mammoth, Excel through SheetJS with a tab per sheet. PDFs use Obsidian's own viewer.
+
+Saved web pages were the surprise. A "save complete" page keeps its assets in a `_files` folder, and Obsidian blocks the viewer from loading them. No styles, no images. A single file with everything inlined looks like the live page. So web capture must produce one self-contained file, as SingleFile does.
+
+### Code
+
+The plugin sends code to the service, and the service runs it in a Jupyter kernel, one per note. State carries between blocks. The first run takes about a second, to start the kernel. After that a run takes about 7 ms. Matplotlib plots come back as images.
+
+One catch. A code block processor claims every block in its language, so it would make all Python in the vault runnable. The plugin checks for `run` in the fence line and leaves other blocks as plain code.
+
+### GraphRAG
+
+Everything ran on one RTX 5090 through Ollama. I tried four set-ups.
+
+| Run | Time | Top-level purity |
+|---|---|---|
+| gemma3 27B, the paper's method | 5 h 29 min | 98.8% |
+| qwen3 30B-A3B, the paper's method | 10 h 51 min | 96.0% |
+| Noun-phrase graph, every report | 7 h 52 min | 98.9% |
+| Hybrid | **35 min** | 98.8% |
+
+Purity is the share of a community's chunks that come from its main domain, averaged over the top level. All four keep cooking, cosplay and AI apart.
+
+The first gemma3 run worked, with two kinds of noise. Author names from reference lists became 3,085 of its 8,928 entities. Quantities such as "1 kg" and "105°C" became entities too. qwen3 built a bigger graph with the same noise, in twice the time. Some of its descriptions added facts that weren't in the source. That's the wrong trade for notes that must stay true to their sources.
+
+The noun-phrase graph replaces LLM extraction with phrase matching. Phrases that share a chunk get an edge. It builds in 6 minutes, and its communities are as clean as the LLM graph's. They also join more documents. The slow part is the reports, because each one reads raw text.
+
+The hybrid keeps what worked:
+
+1. Cut reference lists and appendices from the papers.
+2. Build the noun-phrase graph.
+3. Write reports for the top two levels only. That's 85 reports, not 976.
+4. Tag entities with [GLiNER](https://github.com/urchade/GLiNER), a small typed NER model. Types: concept, method, dataset, tool, material, ingredient. It took 8 seconds.
+
+The top-level communities read like a table of contents for the corpus. There are 18. A few: the Hierarchical Reasoning Model, prompt caching for LLM inference, cosplay armor and props, Sichuan recipes, ReAct. Every finding in a report cites the chunks behind it.
+
+GLiNER entities make good links. Cosplay armor links to worbla, EVA foam, hot air gun and Dremel. Game theory links to prisoner's dilemma, shadow of the future and theory of mind. The types are rough. Model names come out as datasets, and resin comes out as an ingredient. Better labels and a stop-list should fix most of it.
+
+### Keeping it in sync
+
+GraphRAG's update mode only appends. New documents form their own communities and never join old ones. Edited documents are skipped, because it compares titles. Deletions are ignored.
+
+Clustering takes 7 seconds on this corpus. Reports take the time. So each rebuild will re-cluster the whole graph and pay the LLM only for what changed. Extract from changed notes only, found by content hash. Match new communities to old ones. Rewrite a report only when its membership moved by roughly 20% or more. Short notes stay whole as one chunk, so an edited note means one chunk to re-read.
+
+One question is still open. Does a small change reshuffle the communities? That's the first test in Phase 4.
+
+### Next
+
+Phase 1: the plugin and the service, set up for real.

@@ -1,0 +1,84 @@
+<p>Solutions Architects sit at one of the most interesting intersections in modern technology: between what customers need and what’s technically possible. For years, that meant knowing cloud infrastructure, distributed systems, and integration patterns. That’s no longer enough — customers now build machine learning pipelines and ask hard questions that can’t be answered from a whitepaper.</p>
+<p><em>Classical Data Science</em> is Volume 1 of a series written for that reader: someone who already thinks in systems and already knows Python, but needs a rigorous, end-to-end path through data science before tackling modern AI in Volume 2. This book covers the foundations, data work, classical machine learning, evaluation, and deployment that most practicing data scientists spend most of their time in — less glamorous than large language models, but where most real problems still get solved.</p>
+<p>The AWS Solutions Architect angle is not incidental. Every chapter that has a natural cloud-native counterpart includes an <strong>AWS SageMaker Notes</strong> sidebar, so the path from “I understand this technique” to “I can deploy this technique on AWS” stays short throughout.</p>
+<section id="how-to-read-this-book" class="level2">
+<h2 class="anchored" data-anchor-id="how-to-read-this-book">How to Read This Book</h2>
+<p>Each chapter follows a consistent anatomy, adapted from the Diataxis documentation framework <span class="citation" data-cites="procida2020diataxis">(<a href="#ref-procida2020diataxis" role="doc-biblioref">Procida 2020</a>)</span>:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Section</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Motivation</td>
+<td>The problem that existed before this technique, in plain language</td>
+</tr>
+<tr class="even">
+<td>Exposition</td>
+<td>The mechanism — why the technique works, not just how to invoke it</td>
+</tr>
+<tr class="odd">
+<td>Trade-offs and Limits</td>
+<td>Where the technique holds up, and where it quietly fails</td>
+</tr>
+<tr class="even">
+<td>Procedures</td>
+<td>Formally labeled, task-oriented recipes with code listings</td>
+</tr>
+<tr class="odd">
+<td>Worked Example</td>
+<td>A narrated run showing the technique applied to a realistic scenario</td>
+</tr>
+<tr class="even">
+<td>AWS SageMaker Notes</td>
+<td>The managed-service equivalent, and when it’s worth the overhead</td>
+</tr>
+<tr class="odd">
+<td>History and Further Reading</td>
+<td>Context, and where to go deeper</td>
+</tr>
+<tr class="even">
+<td>How This Connects</td>
+<td>Explicit links to chapters this one builds on and enables</td>
+</tr>
+<tr class="odd">
+<td>Exercises</td>
+<td>Difficulty-tagged practice, answers in Appendix B</td>
+</tr>
+<tr class="even">
+<td>Mental Model</td>
+<td>A one-line distillation to carry forward</td>
+</tr>
+</tbody>
+</table>
+<p>You don’t have to read a chapter start to finish in one sitting. Many readers read Motivation through Trade-offs first, work through the Worked Example at a computer later, and keep Appendix A open as a desk reference while coding.</p>
+</section>
+<section id="notation-and-conventions" class="level2">
+<h2 class="anchored" data-anchor-id="notation-and-conventions">Notation and Conventions</h2>
+<p>Formulas are typeset in standard mathematical notation (e.g.&nbsp;<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent="true"><mi>y</mi><mo>^</mo></mover><mo>=</mo><mi>σ</mi><mo stretchy="false">(</mo><msup><mi>w</mi><mi mathvariant="normal">⊤</mi></msup><mi>x</mi><mo>+</mo><mi>b</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\hat{y} = \sigma(w^\top x + b)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0991em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">⊤</span></span></span></span></span></span></span></span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">b</span><span class="mclose">)</span></span></span></span>). Code listings are numbered per chapter (Listing 4.3 is the third listing in Chapter 4) and correspond to a notebook of the same number in the companion repository, <code>book-companion-notebooks</code>, cited in full the first time each chapter references it.</p>
+<p>Exercises are tagged by kind, not just difficulty:</p>
+<ul>
+<li><strong>[W] Warm-up</strong> — checks understanding of a definition or fact; a few minutes.</li>
+<li><strong>[A] Applied</strong> — apply the chapter’s method to new data or parameters; requires running code.</li>
+<li><strong>[E] Extension</strong> — combines this chapter with prior material, or probes a trade-off boundary; open-ended.</li>
+<li><strong>[R] Research</strong> — requires reading outside the chapter; discussion only in Appendix B, no single answer.</li>
+</ul>
+</section>
+<section id="prerequisites-map" class="level2">
+<h2 class="anchored" data-anchor-id="prerequisites-map">Prerequisites Map</h2>
+<p>This volume assumes comfort with Python (functions, loops, classes, <code>pip</code>) and the command line, but no prior statistics, calculus, or machine learning background — those foundations are built in Chapters 1-5. Chapters are meant to be read in order on a first pass; later chapters assume earlier ones.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-procida2020diataxis" class="csl-entry" role="listitem">
+Procida, Daniele. 2020. <em>Diataxis: A Systematic Framework for Technical Documentation</em>.
+</div>
+</div>
+</section>

@@ -1,0 +1,456 @@
+<p>Feature engineering fills a dataset with columns. This chapter is about admitting that not all of them are useful. One-hot encoding, interaction terms, datetime extraction: you’ve done it all. A modelling table can carry hundreds of columns. Past a point, more columns stop helping and start hurting. Models overfit. Training slows. Distance-based methods stop behaving sensibly. Two different operations both go by the name “dimensionality reduction,” which invites confusion rather than avoiding it. Feature <em>selection</em> keeps a subset of the original columns, so “income” stays income. Feature <em>extraction</em> builds a smaller number of new columns that are blends of the originals, trading interpretability for compactness. Both exist to fight the same enemy: the curse of dimensionality. Knowing which one a given situation needs matters as much as knowing how to run either.</p>
+<section id="motivation" class="level2" data-number="15.1">
+<h2 data-number="15.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">15.1</span> Motivation</h2>
+<p>Module 14’s feature engineering deliberately produces more candidate columns than a model needs. The theory is that it’s cheaper to generate too much signal and prune it than to under-engineer and miss something. That pruning step is this chapter. Without it, a model trained on hundreds of largely redundant or irrelevant features doesn’t just run slower. It performs worse. It has more surface area on which to fit noise instead of signal. The goal is a feature set that is as small as it can be, without discarding anything that helps. Get there by keeping the best of what already exists (selection), or by compressing everything into fewer, denser dimensions (extraction).</p>
+</section>
+<section id="exposition" class="level2" data-number="15.2">
+<h2 data-number="15.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">15.2</span> Exposition</h2>
+<section id="the-curse-of-dimensionality" class="level3" data-number="15.2.1">
+<h3 data-number="15.2.1" class="anchored" data-anchor-id="the-curse-of-dimensionality"><span class="header-section-number">15.2.1</span> The Curse of Dimensionality</h3>
+<p>Three things get worse as the number of features grows. <em>Distances stop being informative</em>. In high dimensions, the ratio between the nearest and farthest neighbour’s distance shrinks toward 1. “Nearest” stops meaning much for the algorithms that depend on it: KNN, K-Means, anything built on Euclidean or cosine similarity. <em>The data becomes sparse relative to the space</em>. Keeping the same density of training examples per unit volume requires the number of examples to grow exponentially with the number of dimensions. With 20 features and a modest sample size, the data is a thin cloud in a mostly empty 20-dimensional space. <em>Overfitting risk rises</em>. More features means more ways to fit noise rather than signal, especially with a fixed number of rows. 500 features and 1,000 rows gives a model enormous freedom to memorise the training set rather than learn from it. There’s also a practical cost, independent of any statistical concerns: more features means more compute, more memory, and slower training.</p>
+<p>The sparsity claim is easy to say and easy to underestimate, so it’s worth making concrete with numbers. Picture a cube of jelly, one unit of length on each side, with a million tiny balls suspended in it. One ball per data point. Say the cube has 3 dimensions: three features, each ranging over that unit of length. A million evenly-spaced balls sit roughly <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi mathvariant="normal">/</mi><mroot><mn>1,000,000</mn><mn>3</mn></mroot><mo>=</mo><mn>1</mn><mi mathvariant="normal">/</mi><mn>100</mn></mrow><annotation encoding="application/x-tex">1/\sqrt[3]{1{,}000{,}000} = 1/100</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.06em;vertical-align:-0.25em;"></span><span class="mord">1/</span><span class="mord sqrt"><span class="katex-root"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6702em;"><span style="top:-2.848em;"><span class="pstrut" style="height:2.5em;"></span><span class="katex-sizing reset-size6 size1 mtight"><span class="mord mtight"><span class="mord mtight">3</span></span></span></span></span></span></span></span><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.81em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span><span style="top:-2.77em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.23em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1/100</span></span></span></span> of the cube’s side apart from their nearest neighbours. That’s close enough that “nearest” means something. Now stretch that same cube into 20 dimensions. One axis per feature. Keep the same million balls. The average spacing between a ball and its nearest neighbour becomes <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi mathvariant="normal">/</mi><mroot><mn>1,000,000</mn><mn>20</mn></mroot><mo>≈</mo><mn>1</mn><mi mathvariant="normal">/</mi><mn>1.995</mn><mo>≈</mo><mn>0.501</mn></mrow><annotation encoding="application/x-tex">1/\sqrt[20]{1{,}000{,}000} \approx 1/1.995 \approx 0.501</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.06em;vertical-align:-0.25em;"></span><span class="mord">1/</span><span class="mord sqrt"><span class="katex-root"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.6702em;"><span style="top:-2.848em;"><span class="pstrut" style="height:2.5em;"></span><span class="katex-sizing reset-size6 size1 mtight"><span class="mord mtight"><span class="mord mtight">20</span></span></span></span></span></span></span></span><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.81em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span><span style="top:-2.77em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.23em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1/1.995</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.501</span></span></span></span>: roughly half the entire length of the cube’s side. The same million points that felt dense in 3 dimensions are, in 20 dimensions, spaced about as far apart as two points picked at random. No amount of data collection closes that gap. Matching the 3-dimensional spacing of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi mathvariant="normal">/</mi><mn>100</mn></mrow><annotation encoding="application/x-tex">1/100</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1/100</span></span></span></span> in 20 dimensions would need <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>100</mn><mn>20</mn></msup><mo>=</mo><msup><mn>10</mn><mn>40</mn></msup></mrow><annotation encoding="application/x-tex">100^{20} = 10^{40}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">10</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">20</span></span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">40</span></span></span></span></span></span></span></span></span></span></span></span> balls, about <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>10</mn><mn>34</mn></msup></mrow><annotation encoding="application/x-tex">10^{34}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">34</span></span></span></span></span></span></span></span></span></span></span></span> times the million we started with. This is the curse. Adding dimensions doesn’t make a dataset a little sparser. It makes it exponentially, catastrophically sparser, for a fixed number of examples.</p>
+</section>
+<section id="feature-selection-filter-wrapper-embedded" class="level3" data-number="15.2.2">
+<h3 data-number="15.2.2" class="anchored" data-anchor-id="feature-selection-filter-wrapper-embedded"><span class="header-section-number">15.2.2</span> Feature Selection: Filter, Wrapper, Embedded</h3>
+<p>Selection methods fall into three families, distinguished by how they decide which features matter.</p>
+<p><strong>Filter methods</strong> score each feature independently of any model, then keep the top scorers:</p>
+<ul>
+<li><strong>Variance threshold</strong> drops near-constant features, which carry no signal for any model.</li>
+<li><strong>Correlation with the target</strong> keeps features most linearly related to <code>y</code>. It’s cheap but blind to non-linear relationships, so a feature with a perfect U-shaped relationship to the target scores near-zero linear correlation and gets wrongly discarded.</li>
+<li><strong>Mutual information</strong> measures any dependency, linear or not, between a feature and the target. Slower than correlation, but far more reliable at catching non-linear signal.</li>
+</ul>
+<p>Filters are fast (score everything once, sort, cut) but they ignore how features interact with each other and with whatever model will consume them.</p>
+<p><strong>Wrapper methods</strong> use the downstream model’s own performance to decide what to keep, searching over subsets directly rather than scoring features in isolation. Recursive Feature Elimination (RFE) trains the model, ranks features by importance or coefficient magnitude, drops the weakest, and repeats until reaching a target count. This directly optimises for what actually matters: model performance. But it’s expensive. It retrains the model repeatedly. And the resulting subset is specific to whichever model did the selecting.</p>
+<p><strong>Embedded methods</strong> get selection for free as a side effect of training a model that has sparsity or importance built in. L1 regularisation (Lasso) drives some coefficients exactly to zero, building selection into the loss function (Chapter 18 covers regularisation in depth). Tree-based importances (Random Forest, gradient-boosted trees) naturally produce a feature ranking as a byproduct of how often and how effectively each feature was used for splitting. Embedded methods are usually the best default in practice: they give selection signal without a separate search loop. But the importance scores can be biased toward high-cardinality or correlated features. Treat them as a hint, nothing more.</p>
+</section>
+<section id="feature-extraction-pca" class="level3" data-number="15.2.3">
+<h3 data-number="15.2.3" class="anchored" data-anchor-id="feature-extraction-pca"><span class="header-section-number">15.2.3</span> Feature Extraction: PCA</h3>
+<p>Principal Component Analysis doesn’t select features. It constructs new ones. The idea: find the direction in feature space along which the data varies most, call that the first principal component. Find the next direction (orthogonal to the first) that captures the most <em>remaining</em> variance. Repeat. Mathematically this is an eigendecomposition of the feature covariance matrix. If <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">Σ</mi></mrow><annotation encoding="application/x-tex">\Sigma</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord">Σ</span></span></span></span> is the covariance matrix of the standardised features, PCA finds its eigenvectors and eigenvalues:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">Σ</mi><mi>v</mi><mo>=</mo><mi>λ</mi><mi>v</mi></mrow><annotation encoding="application/x-tex">\Sigma v = \lambda v</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord">Σ</span><span class="mord mathnormal" style="margin-right:0.0359em;">v</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">λ</span><span class="mord mathnormal" style="margin-right:0.0359em;">v</span></span></span></span></span></p>
+<p>Each eigenvector <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>v</mi></mrow><annotation encoding="application/x-tex">v</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">v</span></span></span></span> is a principal component (a direction in feature space) and its eigenvalue <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>λ</mi></mrow><annotation encoding="application/x-tex">\lambda</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">λ</span></span></span></span> is the amount of variance captured along that direction. Sorting components by eigenvalue, largest first, and keeping the top <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span></span></span></span> gives the <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span></span></span></span>-dimensional linear subspace that preserves the most variance possible for that value of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span></span></span></span>. In practice, a dataset almost never needs every original dimension to explain the bulk of its variance. Ten correlated features might contain only three or four independent “directions” of information. PCA finds them.</p>
+<p>Standardise features before applying PCA. Variance is scale-dependent, and PCA chooses directions of maximum variance. A feature measured in dollars (range: thousands) will dominate the variance calculation over one measured in years (range: tens), purely because of its scale, not because it’s more informative. There are no right answers here, only trade-offs. With PCA the trade-off is interpretability. Component 1 is something like <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.31</mn><mo>×</mo><mtext>income</mtext><mo>−</mo><mn>0.22</mn><mo>×</mo><mtext>age</mtext><mo>+</mo><mn>0.18</mn><mo>×</mo><mtext>tenure</mtext><mo>+</mo><mo>…</mo></mrow><annotation encoding="application/x-tex">0.31 \times \text{income} - 0.22 \times \text{age} + 0.18 \times \text{tenure} + \dots</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">0.31</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7512em;vertical-align:-0.0833em;"></span><span class="mord text"><span class="mord">income</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">0.22</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7778em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">age</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">0.18</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6984em;vertical-align:-0.0833em;"></span><span class="mord text"><span class="mord">tenure</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.123em;"></span><span class="minner">…</span></span></span></span>: a blend rather than a concept. Say a prediction needs to be explained in terms of a specific original variable, for a regulator, or a customer. Tree-based feature importance on the raw features is the better fit.</p>
+</section>
+<section id="a-note-on-kernel-pca" class="level3" data-number="15.2.4">
+<h3 data-number="15.2.4" class="anchored" data-anchor-id="a-note-on-kernel-pca"><span class="header-section-number">15.2.4</span> A Note on Kernel PCA</h3>
+<p>PCA assumes the informative structure in the data is linear: one direction, or a few, that variance stretches along. When it isn’t, kernel PCA applies the same kernel trick Chapter 11 introduces for Support Vector Machines. It implicitly maps the data into a higher-dimensional space via a kernel function, then runs ordinary PCA there. Kernel PCA is a different tool, not a drop-in upgrade. The resulting components are harder to interpret. There’s no simple way back to the original feature space, the way ordinary PCA has. The choice of kernel and its parameters becomes its own modelling decision. It’s worth reaching for when a scatter plot, or a failed linear PCA, suggests the real structure curves through feature space rather than sitting along a straight line.</p>
+</section>
+<section id="t-sne-and-umap-visualisation-not-modelling-features" class="level3" data-number="15.2.5">
+<h3 data-number="15.2.5" class="anchored" data-anchor-id="t-sne-and-umap-visualisation-not-modelling-features"><span class="header-section-number">15.2.5</span> t-SNE and UMAP: Visualisation, Not Modelling Features</h3>
+<p>t-SNE and UMAP are non-linear dimensionality reduction techniques. They’re almost always used to compress data to 2 or 3 dimensions for visualisation, rather than as inputs to a downstream model. Both preserve <em>local</em> neighbourhood structure, meaning points close together in the original high-dimensional space should stay close together in the embedding, rather than PCA’s global objective of maximising total variance. This makes them better at revealing cluster structure visually. PCA can smear well-separated real clusters together if the axis of maximum variance doesn’t align with what actually separates them. t-SNE or UMAP will usually recover more of that separation, though not always cleanly.</p>
+<div id="lst-pca-smear" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pca-smear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.1: Three real clusters, PCA vs.&nbsp;UMAP vs.&nbsp;t-SNE, when a noisy nuisance dimension dominates variance
+</figcaption>
+<div aria-describedby="lst-pca-smear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-3"><span class="im">from</span> sklearn.datasets <span class="im">import</span> make_blobs</span>
+<span id="cb1-4"><span class="im">from</span> sklearn.decomposition <span class="im">import</span> PCA</span>
+<span id="cb1-5"><span class="im">from</span> sklearn.manifold <span class="im">import</span> TSNE</span>
+<span id="cb1-6"><span class="im">from</span> sklearn.metrics <span class="im">import</span> silhouette_score</span>
+<span id="cb1-7"><span class="im">import</span> umap</span>
+<span id="cb1-8"></span>
+<span id="cb1-9"><span class="co"># Three clusters, well separated in 2 dimensions, plus a</span></span>
+<span id="cb1-10"><span class="co"># third, high-variance dimension that carries no cluster</span></span>
+<span id="cb1-11"><span class="co"># signal at all -- pure noise, added on top.</span></span>
+<span id="cb1-12">X_clusters, y <span class="op">=</span> make_blobs(</span>
+<span id="cb1-13">    n_samples<span class="op">=</span><span class="dv">300</span>, centers<span class="op">=</span><span class="dv">3</span>, n_features<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb1-14">    cluster_std<span class="op">=</span><span class="fl">0.5</span>, center_box<span class="op">=</span>(<span class="op">-</span><span class="dv">2</span>, <span class="dv">2</span>), random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb1-15">)</span>
+<span id="cb1-16">rng <span class="op">=</span> np.random.RandomState(<span class="dv">42</span>)</span>
+<span id="cb1-17">noise_dim <span class="op">=</span> rng.normal(loc<span class="op">=</span><span class="dv">0</span>, scale<span class="op">=</span><span class="dv">10</span>, size<span class="op">=</span>(<span class="dv">300</span>, <span class="dv">1</span>))</span>
+<span id="cb1-18">X <span class="op">=</span> np.hstack([X_clusters, noise_dim])</span>
+<span id="cb1-19"></span>
+<span id="cb1-20">X_pca <span class="op">=</span> PCA(n_components<span class="op">=</span><span class="dv">2</span>, random_state<span class="op">=</span><span class="dv">42</span>).fit_transform(X)</span>
+<span id="cb1-21">X_umap <span class="op">=</span> umap.UMAP(n_components<span class="op">=</span><span class="dv">2</span>, random_state<span class="op">=</span><span class="dv">42</span>).fit_transform(X)</span>
+<span id="cb1-22">X_tsne <span class="op">=</span> TSNE(n_components<span class="op">=</span><span class="dv">2</span>, random_state<span class="op">=</span><span class="dv">42</span>).fit_transform(X)</span>
+<span id="cb1-23"></span>
+<span id="cb1-24">pca_sil <span class="op">=</span> silhouette_score(X_pca, y)</span>
+<span id="cb1-25">umap_sil <span class="op">=</span> silhouette_score(X_umap, y)</span>
+<span id="cb1-26">tsne_sil <span class="op">=</span> silhouette_score(X_tsne, y)</span>
+<span id="cb1-27"><span class="bu">print</span>(<span class="ss">f'PCA silhouette:  </span><span class="sc">{</span>pca_sil<span class="sc">:.4f}</span><span class="ss">'</span>)</span>
+<span id="cb1-28"><span class="bu">print</span>(<span class="ss">f'UMAP silhouette: </span><span class="sc">{</span>umap_sil<span class="sc">:.4f}</span><span class="ss">'</span>)</span>
+<span id="cb1-29"><span class="bu">print</span>(<span class="ss">f't-SNE silhouette (default perplexity=30): </span><span class="sc">{</span>tsne_sil<span class="sc">:.4f}</span><span class="ss">'</span>)</span>
+<span id="cb1-30"></span>
+<span id="cb1-31">fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">5</span>))</span>
+<span id="cb1-32">axes[<span class="dv">0</span>].scatter(X_pca[:, <span class="dv">0</span>], X_pca[:, <span class="dv">1</span>], c<span class="op">=</span>y, cmap<span class="op">=</span><span class="st">'viridis'</span>, alpha<span class="op">=</span><span class="fl">0.75</span>, s<span class="op">=</span><span class="dv">30</span>)</span>
+<span id="cb1-33">axes[<span class="dv">0</span>].set_title(<span class="ss">f'PCA (silhouette = </span><span class="sc">{</span>pca_sil<span class="sc">:.3f}</span><span class="ss">)'</span>)</span>
+<span id="cb1-34">axes[<span class="dv">0</span>].set_xlabel(<span class="st">'PC1'</span>)</span>
+<span id="cb1-35">axes[<span class="dv">0</span>].set_ylabel(<span class="st">'PC2'</span>)</span>
+<span id="cb1-36">axes[<span class="dv">1</span>].scatter(X_umap[:, <span class="dv">0</span>], X_umap[:, <span class="dv">1</span>], c<span class="op">=</span>y, cmap<span class="op">=</span><span class="st">'viridis'</span>, alpha<span class="op">=</span><span class="fl">0.75</span>, s<span class="op">=</span><span class="dv">30</span>)</span>
+<span id="cb1-37">axes[<span class="dv">1</span>].set_title(<span class="ss">f'UMAP (silhouette = </span><span class="sc">{</span>umap_sil<span class="sc">:.3f}</span><span class="ss">)'</span>)</span>
+<span id="cb1-38">axes[<span class="dv">1</span>].set_xlabel(<span class="st">'UMAP1'</span>)</span>
+<span id="cb1-39">axes[<span class="dv">1</span>].set_ylabel(<span class="st">'UMAP2'</span>)</span>
+<span id="cb1-40">plt.tight_layout()</span>
+<span id="cb1-41">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<div id="fig-pca-vs-umap-smear" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-pca-vs-umap-smear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch15/pca-vs-umap-smear.png" class="img-fluid figure-img" style="width:90.0%" alt="The same three clusters, embedded by PCA (left) and UMAP (right), with a single noisy nuisance dimension added to the original two." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-pca-vs-umap-smear-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;15.1: The same three clusters, embedded by PCA (left) and UMAP (right), with a single noisy nuisance dimension added to the original two.
+</figcaption>
+</figure>
+</div>
+<p><a href="#fig-pca-vs-umap-smear" class="quarto-xref">Figure&nbsp;<span>15.1</span></a> is the honest picture, not the idealised one. PCA’s top component chases the noisy nuisance dimension, since it has by far the largest variance. Two of the three clusters (purple and teal) merge into a single smeared mass, while the third (yellow) stays visibly apart. Silhouette score: 0.0073, close to the 0 that means “no cluster structure visible at all.” UMAP does better, but “better” here means partial, not perfect. Yellow separates cleanly, and purple and teal pull apart along most of their length, though they still touch where the embedding curls back on itself. Silhouette score 0.0772, roughly ten times higher than PCA’s: a real and measured improvement, not a clean sweep.</p>
+<p>t-SNE, run on the same data with its default settings, is the surprise: 0.0033, worse than PCA, not better. That’s not a bug in the method. t-SNE builds its neighbourhood graph from distances measured in the <em>original</em> feature space, the same space where the noise dimension’s huge scale already dominates every pairwise distance. A method built to preserve local neighbourhoods still inherits whatever those neighbourhoods look like in the raw data, noise dimension included, unless something else, a smaller perplexity, a prior scaling step, counteracts it. Rerunning with <code>perplexity=12</code> instead of the default 30 gives 0.107, better than UMAP, on the exact same data. That swing, from worse-than-PCA to better-than-UMAP on one hyperparameter change, is the sensitivity this chapter’s Trade-offs section warns about, made concrete.</p>
+<p>The moral isn’t “UMAP is better than PCA,” and it isn’t “t-SNE and UMAP always fix this” either. PCA’s global-variance objective can be actively misled by a single noisy, high-variance column that has nothing to do with the structure that actually matters. A local-structure method recovers <em>some</em> of what PCA lost, but only if its own settings are tuned to the data, and a default configuration is no guarantee of that. That’s exactly why it’s worth looking at the real picture, with real numbers, instead of assuming the textbook one.</p>
+<p>There are three separate reasons their output shouldn’t feed a model, though. First: both are typically non-parametric in their classic form. There’s no simple <code>transform()</code> for new data with the same guarantee as the fitted embedding. UMAP supports <code>transform()</code> with caveats, while classic t-SNE does not, without retraining on the combined dataset. Second: distances <em>between</em> clusters in the embedding aren’t meaningful. Only local neighbourhood structure within a cluster is preserved reliably, so two clusters that look far apart aren’t necessarily “more different” than two that look close. Third: both are stochastic and sensitive to hyperparameters (perplexity for t-SNE; <code>n_neighbors</code> and <code>min_dist</code> for UMAP). Rerunning with a different seed or parameter can meaningfully change the layout. That’s fine for a one-off exploratory plot, but a poor foundation for a reproducible production feature. Use t-SNE and UMAP to look at data: check whether classes separate, spot outlier clusters, sanity-check a clustering result from Chapter 19. Use PCA, or regular feature selection, when reduced dimensions need to feed a model.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="15.3">
+<h2 data-number="15.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">15.3</span> Trade-offs and Limits</h2>
+<p>Selection preserves interpretability and is safe to defend to a stakeholder (“we use income and tenure”). Extraction squeezes out more redundancy but gives up that interpretability entirely. Filters are cheap and model-agnostic, but ignore feature interactions. Wrappers are thorough, but expensive and specific to whichever model did the searching. Embedded methods are the best per-cost trade-off for most tabular problems, and are the reasonable place to start. Between PCA and t-SNE/UMAP: PCA is linear, deterministic, and reversible. An approximation of the original data can be reconstructed from it, which makes it suitable both for visualisation and as a preprocessing step for a downstream model. t-SNE and UMAP are non-linear and much better for visual cluster discovery, but they’re the wrong tool whenever reduced features need to be deployed and explained.</p>
+<p>It’s also worth asking whether this chapter’s machinery is needed at all. Tree-based models (Random Forest, XGBoost, LightGBM) are relatively robust to irrelevant features. They won’t split on features that don’t help. Feature selection matters most for linear models, distance-based models (KNN, K-Means), and any case where training cost or interpretability is a real constraint. It is not a required step before training.</p>
+</section>
+<section id="procedures" class="level2" data-number="15.4">
+<h2 data-number="15.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">15.4</span> Procedures</h2>
+<p id="proc-15-1"><strong>Procedure 15.1 (Drop Low-Variance and Highly Correlated Features).</strong> <em>When to use:</em> as a first, cheap pass before any modelling, to remove features that are almost constant or redundant with another feature.</p>
+<div id="lst-variance-corr" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-variance-corr-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.2: Dropping near-constant columns and one of each highly-correlated pair
+</figcaption>
+<div aria-describedby="lst-variance-corr-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sklearn.feature_selection <span class="im">import</span> VarianceThreshold</span>
+<span id="cb2-2"><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb2-3"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-4"></span>
+<span id="cb2-5"><span class="co"># Drop near-constant columns (threshold is variance, not</span></span>
+<span id="cb2-6"><span class="co"># std, tune for your scale)</span></span>
+<span id="cb2-7">selector <span class="op">=</span> VarianceThreshold(threshold<span class="op">=</span><span class="fl">0.01</span>)</span>
+<span id="cb2-8">X_reduced <span class="op">=</span> selector.fit_transform(X_train)</span>
+<span id="cb2-9">kept_columns <span class="op">=</span> X_train.columns[selector.get_support()]</span>
+<span id="cb2-10"></span>
+<span id="cb2-11"><span class="co"># Drop one of each highly-correlated pair</span></span>
+<span id="cb2-12">corr_matrix <span class="op">=</span> X_train.corr().<span class="bu">abs</span>()</span>
+<span id="cb2-13">upper_mask <span class="op">=</span> np.triu(np.ones(corr_matrix.shape), k<span class="op">=</span><span class="dv">1</span>).astype(<span class="bu">bool</span>)</span>
+<span id="cb2-14">upper <span class="op">=</span> corr_matrix.where(upper_mask)</span>
+<span id="cb2-15">to_drop <span class="op">=</span> [col <span class="cf">for</span> col <span class="kw">in</span> upper.columns <span class="cf">if</span> <span class="bu">any</span>(upper[col] <span class="op">&gt;</span> <span class="fl">0.95</span>)]</span>
+<span id="cb2-16">X_train_decorrelated <span class="op">=</span> X_train.drop(columns<span class="op">=</span>to_drop)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> running <code>VarianceThreshold</code> on unscaled data. A feature ranging 0-1,000,000 will always look “high variance” even if it’s useless, while a feature ranging 0-1 might get dropped even if it’s highly predictive. Scale first, or reserve variance thresholding for features already on comparable scales such as one-hot encoded columns.</p>
+<p id="proc-15-2"><strong>Procedure 15.2 (Select Features by Mutual Information).</strong> <em>When to use:</em> a fast, non-linear-aware ranking of features against the target, without training a full model.</p>
+<div id="lst-mutual-info" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mutual-info-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.3: Ranking and selecting top features by mutual information with the target
+</figcaption>
+<div aria-describedby="lst-mutual-info-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> sklearn.feature_selection <span class="im">import</span> (</span>
+<span id="cb3-2">    mutual_info_classif,</span>
+<span id="cb3-3">    mutual_info_regression,</span>
+<span id="cb3-4">    SelectKBest,</span>
+<span id="cb3-5">)</span>
+<span id="cb3-6"></span>
+<span id="cb3-7">mi_scores <span class="op">=</span> mutual_info_classif(X_train, y_train, random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb3-8">mi_ranking <span class="op">=</span> (</span>
+<span id="cb3-9">    pd.Series(mi_scores, index<span class="op">=</span>X_train.columns)</span>
+<span id="cb3-10">    .sort_values(ascending<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb3-11">)</span>
+<span id="cb3-12"></span>
+<span id="cb3-13">selector <span class="op">=</span> SelectKBest(score_func<span class="op">=</span>mutual_info_classif, k<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb3-14">X_selected <span class="op">=</span> selector.fit_transform(X_train, y_train)</span>
+<span id="cb3-15">selected_columns <span class="op">=</span> X_train.columns[selector.get_support()]</span>
+<span id="cb3-16"><span class="co"># For a regression target, use mutual_info_regression instead</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> computing mutual information, or any selection statistic, on the full dataset before the train/test split: that leaks test-set information into the feature-selection decision. Fit the selector on the training fold only, then apply the same selected columns to the test set.</p>
+<p id="proc-15-3"><strong>Procedure 15.3 (Run Recursive Feature Elimination).</strong> <em>When to use:</em> finding the feature subset that most helps a specific model, when retraining it repeatedly is affordable.</p>
+<div id="lst-rfe" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rfe-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.4: RFE with a fixed target count, and RFECV letting cross-validation choose the count
+</figcaption>
+<div aria-describedby="lst-rfe-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> sklearn.feature_selection <span class="im">import</span> RFE, RFECV</span>
+<span id="cb4-2"><span class="im">from</span> sklearn.ensemble <span class="im">import</span> RandomForestClassifier</span>
+<span id="cb4-3"></span>
+<span id="cb4-4">model <span class="op">=</span> RandomForestClassifier(n_estimators<span class="op">=</span><span class="dv">100</span>, random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb4-5">rfe <span class="op">=</span> RFE(estimator<span class="op">=</span>model, n_features_to_select<span class="op">=</span><span class="dv">10</span>, step<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb4-6">rfe.fit(X_train, y_train)</span>
+<span id="cb4-7">selected_columns <span class="op">=</span> X_train.columns[rfe.support_]</span>
+<span id="cb4-8"></span>
+<span id="cb4-9"><span class="co"># Let cross-validation choose the count automatically</span></span>
+<span id="cb4-10"><span class="co"># (preferred: avoids guessing)</span></span>
+<span id="cb4-11">rfecv <span class="op">=</span> RFECV(estimator<span class="op">=</span>model, step<span class="op">=</span><span class="dv">1</span>, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'accuracy'</span>)</span>
+<span id="cb4-12">rfecv.fit(X_train, y_train)</span>
+<span id="cb4-13"><span class="bu">print</span>(<span class="ss">f"Optimal number of features: </span><span class="sc">{</span>rfecv<span class="sc">.</span>n_features_<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb4-14">selected_columns <span class="op">=</span> X_train.columns[rfecv.support_]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> using a slow model (a deep neural network, a large XGBoost ensemble) inside RFE. Each elimination step retrains from scratch, so runtime multiplies by the number of features removed. Use a fast, well-regularised model for the search; it’s not being deployed, only used to rank features.</p>
+<p id="proc-15-4"><strong>Procedure 15.4 (Use Tree-Based Feature Importance for Selection).</strong> <em>When to use:</em> a tree ensemble is already in use, or affordable to fit, and selection is wanted essentially for free.</p>
+<div id="lst-tree-importance" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-tree-importance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.5: Selecting features above the median Random Forest importance
+</figcaption>
+<div aria-describedby="lst-tree-importance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">from</span> sklearn.ensemble <span class="im">import</span> RandomForestClassifier</span>
+<span id="cb5-2"><span class="im">from</span> sklearn.feature_selection <span class="im">import</span> SelectFromModel</span>
+<span id="cb5-3"></span>
+<span id="cb5-4">rf <span class="op">=</span> RandomForestClassifier(n_estimators<span class="op">=</span><span class="dv">200</span>, random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb5-5">rf.fit(X_train, y_train)</span>
+<span id="cb5-6"></span>
+<span id="cb5-7">importances <span class="op">=</span> (</span>
+<span id="cb5-8">    pd.Series(rf.feature_importances_, index<span class="op">=</span>X_train.columns)</span>
+<span id="cb5-9">    .sort_values(ascending<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb5-10">)</span>
+<span id="cb5-11"></span>
+<span id="cb5-12">selector <span class="op">=</span> SelectFromModel(rf, prefit<span class="op">=</span><span class="va">True</span>, threshold<span class="op">=</span><span class="st">'median'</span>)</span>
+<span id="cb5-13">X_selected <span class="op">=</span> selector.transform(X_train)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> trusting importance rankings blindly when features are highly correlated. Tree models split arbitrarily between two near-identical correlated features, diluting importance across both and making each look less important than a single, non-redundant version would. Decorrelate first (Procedure 15.1) if this matters.</p>
+<p id="proc-15-5"><strong>Procedure 15.5 (Choose the Number of PCA Components).</strong> <em>When to use:</em> after deciding PCA is appropriate (linear structure, a need for a reproducible transform) before fitting the final model.</p>
+<div id="lst-pca-components" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pca-components-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.6: Scree plot and cumulative variance to choose a PCA component count, or letting sklearn pick one directly
+</figcaption>
+<div aria-describedby="lst-pca-components-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> StandardScaler</span>
+<span id="cb6-2"><span class="im">from</span> sklearn.decomposition <span class="im">import</span> PCA</span>
+<span id="cb6-3"><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb6-4"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb6-5"></span>
+<span id="cb6-6"><span class="co"># Always scale first</span></span>
+<span id="cb6-7">X_scaled <span class="op">=</span> StandardScaler().fit_transform(X_train)</span>
+<span id="cb6-8"></span>
+<span id="cb6-9">pca_full <span class="op">=</span> PCA().fit(X_scaled)</span>
+<span id="cb6-10">cumulative_variance <span class="op">=</span> np.cumsum(pca_full.explained_variance_ratio_)</span>
+<span id="cb6-11"></span>
+<span id="cb6-12">plt.plot(</span>
+<span id="cb6-13">    <span class="bu">range</span>(<span class="dv">1</span>, <span class="bu">len</span>(cumulative_variance) <span class="op">+</span> <span class="dv">1</span>),</span>
+<span id="cb6-14">    cumulative_variance,</span>
+<span id="cb6-15">    marker<span class="op">=</span><span class="st">'o'</span>,</span>
+<span id="cb6-16">)</span>
+<span id="cb6-17">plt.axhline(</span>
+<span id="cb6-18">    <span class="fl">0.95</span>, color<span class="op">=</span><span class="st">'red'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, label<span class="op">=</span><span class="st">'95% variance'</span></span>
+<span id="cb6-19">)</span>
+<span id="cb6-20">plt.xlabel(<span class="st">'Number of components'</span>)</span>
+<span id="cb6-21">plt.ylabel(<span class="st">'Cumulative explained variance'</span>)</span>
+<span id="cb6-22">plt.legend()</span>
+<span id="cb6-23">plt.show()</span>
+<span id="cb6-24"></span>
+<span id="cb6-25"><span class="co"># Or just ask for a variance target directly:</span></span>
+<span id="cb6-26"><span class="co"># sklearn picks the count</span></span>
+<span id="cb6-27">pca <span class="op">=</span> PCA(n_components<span class="op">=</span><span class="fl">0.95</span>)</span>
+<span id="cb6-28">X_pca <span class="op">=</span> pca.fit_transform(X_scaled)</span>
+<span id="cb6-29"><span class="bu">print</span>(<span class="ss">f"Components needed for 95% variance: </span><span class="sc">{</span>pca<span class="sc">.</span>n_components_<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> fitting <code>PCA</code> on training and test data combined “to get a stable transform”: this leaks test-set variance structure into the transform. Fit on training data only, and call <code>.transform()</code>, never <code>.fit_transform()</code>, on the test set.</p>
+<p id="proc-15-6"><strong>Procedure 15.6 (Interpret PCA Loadings).</strong> <em>When to use:</em> explaining, even approximately, what a principal component “means.”</p>
+<div id="lst-pca-loadings" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pca-loadings-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.7: Reading which original features drive a given principal component
+</figcaption>
+<div aria-describedby="lst-pca-loadings-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">pca <span class="op">=</span> PCA(n_components<span class="op">=</span><span class="dv">3</span>).fit(X_scaled)</span>
+<span id="cb7-2"></span>
+<span id="cb7-3">loadings <span class="op">=</span> pd.DataFrame(</span>
+<span id="cb7-4">    pca.components_.T,</span>
+<span id="cb7-5">    columns<span class="op">=</span>[<span class="ss">f'PC</span><span class="sc">{</span>i<span class="op">+</span><span class="dv">1</span><span class="sc">}</span><span class="ss">'</span> <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>)],</span>
+<span id="cb7-6">    index<span class="op">=</span>X_train.columns,</span>
+<span id="cb7-7">)</span>
+<span id="cb7-8"></span>
+<span id="cb7-9"><span class="bu">print</span>(loadings[<span class="st">'PC1'</span>].<span class="bu">abs</span>().sort_values(ascending<span class="op">=</span><span class="va">False</span>).head(<span class="dv">5</span>))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>A large positive or negative loading means that feature strongly drives the component: the sign indicates direction only, not importance. If PC1 loads heavily and positively on <code>income</code>, <code>credit_limit</code>, and <code>spend</code>, it’s roughly “overall financial scale,” but that’s a rough label, not a rigorous claim.</p>
+</section>
+<section id="worked-example" class="level2" data-number="15.5">
+<h2 data-number="15.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">15.5</span> Worked Example</h2>
+<p>The tutorial notebook builds a synthetic classification dataset with 50 features: 10 truly informative, 10 redundant (linear combinations of the informative ones), and 30 pure noise. It then runs every selection and extraction technique against it and compares downstream Random Forest accuracy and fit time. A baseline using all 50 features scores:</p>
+<div id="lst-baseline-eval" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-baseline-eval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.8: Baseline evaluation function used throughout the comparison
+</figcaption>
+<div aria-describedby="lst-baseline-eval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><span class="kw">def</span> evaluate(X_tr, X_te, y_tr, y_te, label, model<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb8-2">    <span class="cf">if</span> model <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb8-3">        model <span class="op">=</span> RandomForestClassifier(</span>
+<span id="cb8-4">            n_estimators<span class="op">=</span><span class="dv">200</span>, random_state<span class="op">=</span>RANDOM_SEED</span>
+<span id="cb8-5">        )</span>
+<span id="cb8-6">    start <span class="op">=</span> time.time()</span>
+<span id="cb8-7">    model.fit(X_tr, y_tr)</span>
+<span id="cb8-8">    fit_time <span class="op">=</span> time.time() <span class="op">-</span> start</span>
+<span id="cb8-9">    acc <span class="op">=</span> model.score(X_te, y_te)</span>
+<span id="cb8-10">    <span class="bu">print</span>(</span>
+<span id="cb8-11">        <span class="ss">f"</span><span class="sc">{</span>label<span class="sc">:32s}</span><span class="ss"> | n_features=</span><span class="sc">{</span>X_tr<span class="sc">.</span>shape[<span class="dv">1</span>]<span class="sc">:3d}</span><span class="ss"> | "</span></span>
+<span id="cb8-12">        <span class="ss">f"fit_time=</span><span class="sc">{</span>fit_time<span class="sc">:.3f}</span><span class="ss">s | test_accuracy=</span><span class="sc">{</span>acc<span class="sc">:.4f}</span><span class="ss">"</span></span>
+<span id="cb8-13">    )</span>
+<span id="cb8-14">    <span class="cf">return</span> {</span>
+<span id="cb8-15">        <span class="st">"label"</span>: label,</span>
+<span id="cb8-16">        <span class="st">"n_features"</span>: X_tr.shape[<span class="dv">1</span>],</span>
+<span id="cb8-17">        <span class="st">"fit_time"</span>: fit_time,</span>
+<span id="cb8-18">        <span class="st">"accuracy"</span>: acc,</span>
+<span id="cb8-19">    }</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Running the full comparison on a 1,500-row training split (2,000 samples, 25% held out, <code>random_state=42</code> throughout) produces:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Features</th>
+<th>Fit time (s)</th>
+<th>Test accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Wrapper: RFECV</td>
+<td>26</td>
+<td>0.552</td>
+<td>0.928</td>
+</tr>
+<tr class="even">
+<td>Embedded: RF importance (median threshold)</td>
+<td>25</td>
+<td>0.550</td>
+<td>0.922</td>
+</tr>
+<tr class="odd">
+<td>Baseline (all 50 features)</td>
+<td>50</td>
+<td>0.754</td>
+<td>0.912</td>
+</tr>
+<tr class="even">
+<td>Filter: mutual information (top 15)</td>
+<td>15</td>
+<td>0.397</td>
+<td>0.884</td>
+</tr>
+<tr class="odd">
+<td>Extraction: PCA (37 components)</td>
+<td>37</td>
+<td>0.705</td>
+<td>0.868</td>
+</tr>
+</tbody>
+</table>
+<p>The pattern matches what this chapter’s Trade-offs section predicts. RFECV and the embedded Random Forest importance method don’t just match the 50-feature baseline, they beat it, using roughly half the columns and shedding noise features that were otherwise available for the model to overfit on. The mutual-information filter and PCA extraction both trail the baseline slightly here. PCA’s 37-component result is a reminder that when there’s real informative structure spread across many original dimensions, not just redundancy to compress, extraction can lose a little relative to a wrapper method that gets to see actual downstream accuracy during selection. Mutual information’s top-15 list: <code>feature_0</code>, <code>feature_5</code>, <code>feature_6</code>, <code>feature_7</code>, <code>feature_9</code>, <code>feature_18</code>, <code>feature_23</code>, <code>feature_25</code>, <code>feature_26</code>, <code>feature_37</code>, <code>feature_38</code>, <code>feature_43</code>, <code>feature_45</code>, <code>feature_48</code>, <code>feature_49</code>. It draws heavily from the first 20 columns, which is exactly where <code>make_classification</code> places the informative and redundant features, confirming the filter is finding real signal rather than noise.</p>
+<p>On the extraction side, fit <code>PCA()</code> with no component limit on the scaled 50-feature training set and read the cumulative explained-variance curve. <strong>37 components are needed to reach 95% of the variance.</strong> Not a dramatic compression. 20 of the 50 features carry genuine signal, and PCA still has to represent all of that spread-out structure, without the pure-noise columns contributing meaningfully.</p>
+<div id="lst-pca-95" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pca-95-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;15.9: Finding the component count needed for 95% cumulative explained variance
+</figcaption>
+<div aria-describedby="lst-pca-95-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1">pca_full <span class="op">=</span> PCA(random_state<span class="op">=</span>RANDOM_SEED).fit(X_train_scaled)</span>
+<span id="cb9-2">cumulative_variance <span class="op">=</span> np.cumsum(pca_full.explained_variance_ratio_)</span>
+<span id="cb9-3">n_components_95 <span class="op">=</span> np.argmax(cumulative_variance <span class="op">&gt;=</span> <span class="fl">0.95</span>) <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb9-4"><span class="bu">print</span>(</span>
+<span id="cb9-5">    <span class="ss">f"Components needed for 95% variance: </span><span class="sc">{</span>n_components_95<span class="sc">}</span><span class="ss"> "</span></span>
+<span id="cb9-6">    <span class="st">"(out of 50 original features)"</span></span>
+<span id="cb9-7">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The second half of the notebook switches from modelling to pure visualisation. It loads the classic 64-pixel handwritten-digits dataset (1,797 samples, 10 classes) and compares PCA, t-SNE, and UMAP as they each compress it to 2D. Timing the three on this machine: PCA runs in 0.05s, t-SNE in 1.54s, and UMAP in 8.58s. PCA’s near-instant linear projection against two much slower non-linear methods is exactly the relative-speed ordering this chapter’s Exposition describes. Visually, plotting each embedding coloured by true digit class, PCA produces a reasonable but often overlapping scatter, since it optimises for global variance rather than class separation. t-SNE and UMAP, neither of which ever sees the labels, typically produce much tighter, more visually distinct clusters per digit, because both are explicitly preserving local neighbourhood structure rather than total spread.</p>
+</section>
+<section id="aws-sagemaker-notes" class="level2" data-number="15.6">
+<h2 data-number="15.6" class="anchored" data-anchor-id="aws-sagemaker-notes"><span class="header-section-number">15.6</span> AWS SageMaker Notes</h2>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><span class="co"># SageMaker's built-in PCA algorithm: useful for very</span></span>
+<span id="cb10-2"><span class="co"># large datasets that don't fit in memory on a single</span></span>
+<span id="cb10-3"><span class="co"># machine (distributed PCA)</span></span>
+<span id="cb10-4"><span class="im">import</span> sagemaker</span>
+<span id="cb10-5"><span class="im">from</span> sagemaker <span class="im">import</span> PCA <span class="im">as</span> SageMakerPCA</span>
+<span id="cb10-6"></span>
+<span id="cb10-7">pca_estimator <span class="op">=</span> SageMakerPCA(</span>
+<span id="cb10-8">    role<span class="op">=</span>role,</span>
+<span id="cb10-9">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb10-10">    instance_type<span class="op">=</span><span class="st">'ml.m5.xlarge'</span>,</span>
+<span id="cb10-11">    num_components<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb10-12">    mini_batch_size<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb10-13">)</span>
+<span id="cb10-14"><span class="co"># pca_estimator.fit(train_data_s3_uri)</span></span>
+<span id="cb10-15"></span>
+<span id="cb10-16"><span class="co"># For feature selection at scale, SageMaker Data Wrangler</span></span>
+<span id="cb10-17"><span class="co"># includes a "Balance and Feature Correlation" analysis</span></span>
+<span id="cb10-18"><span class="co"># plus a "Feature Importance" report that combines with</span></span>
+<span id="cb10-19"><span class="co"># the same drop-column transforms used above.</span></span></code></pre></div>
+<p><strong>When to prefer SageMaker’s built-in PCA:</strong> only when the dataset doesn’t fit in memory on one machine. For anything that fits comfortably in a pandas DataFrame, <code>sklearn.decomposition.PCA</code> is simpler and just as correct.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="15.7">
+<h2 data-number="15.7" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">15.7</span> History and Further Reading</h2>
+<p>Murphy’s Introduction, Chapter 20, works through the PCA derivation both via eigendecomposition and via SVD with worked examples <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Burkov gives a concise treatment of dimensionality reduction and feature selection side by side <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019, 9</a>)</span>. Géron’s <em>Hands-On Machine Learning</em>, Ch. 8, works through PCA and kernel PCA with Scikit-Learn code, a practical complement to this chapter’s derivations and its brief kernel PCA note above. It also covers LLE, a dimensionality-reduction technique not included here <span class="citation" data-cites="geron2019hands">(<a href="#ref-geron2019hands" role="doc-biblioref">Géron 2019</a>)</span>. Wattenberg et al.’s “How to Use t-SNE Effectively” (distill.pub, 2016) is essential reading before trusting any t-SNE plot, and the UMAP documentation’s “How UMAP Works” gives an accessible account of the algorithm’s topological motivation, both worth reading in full before either technique is used to justify a claim about data structure.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="15.8">
+<h2 data-number="15.8" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">15.8</span> How This Connects</h2>
+<p>This chapter builds on Chapter 3’s linear algebra (PCA is an eigendecomposition of the covariance matrix) and on the mutual information machinery from Chapter 5, one of the filter-selection criteria used above. It also assumes Chapter 14’s feature engineering has already produced the candidate columns being pruned here. It enables Chapter 16 (Model Evaluation), since a smaller, cleaner feature set is usually easier to evaluate and less prone to overfitting-driven metric inflation. It also enables Chapter 19 (Unsupervised Learning), where t-SNE/UMAP visualisation is a standard way to sanity-check a clustering result. It’s often confused with feature engineering (Chapter 14): engineering <em>creates</em> candidate features, while this chapter <em>reduces</em> them.</p>
+</section>
+<section id="exercises" class="level2" data-number="15.9">
+<h2 data-number="15.9" class="anchored" data-anchor-id="exercises"><span class="header-section-number">15.9</span> Exercises</h2>
+<ol type="1">
+<li id="ex-15-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in your own words why feature selection preserves interpretability while feature extraction does not, using the “income is still income” framing from this chapter.</p></li>
+<li id="ex-15-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Classify each of the following as a filter, wrapper, or embedded method, and give one reason: (a) dropping features with variance below 0.01; (b) RFECV; (c) keeping features with Random Forest importance above the median.</p></li>
+<li id="ex-15-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-mutual-info" class="quarto-xref">Listing&nbsp;<span>15.3</span></a> as a starting point, rerun mutual-information selection with <code>k=5</code> instead of <code>k=10</code> on the synthetic dataset from <a href="#lst-baseline-eval" class="quarto-xref">Listing&nbsp;<span>15.8</span></a>, and report whether the resulting 5 features are a subset of the 15 reported in the Worked Example.</p></li>
+<li id="ex-15-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-pca-95" class="quarto-xref">Listing&nbsp;<span>15.9</span></a>’s logic, find how many components are needed to reach 99% cumulative explained variance on the same 50-feature training set, and compare the result to the 37 needed for 95%.</p></li>
+<li id="ex-15-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Reproduce the digits-dataset PCA vs.&nbsp;t-SNE timing comparison from the Worked Example, but with <code>perplexity=5</code> instead of <code>perplexity=30</code> in the t-SNE call. Describe qualitatively how the resulting 2D plot’s cluster tightness changes.</p></li>
+<li id="ex-15-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The Worked Example shows RFECV and embedded Random Forest importance both <em>beating</em> the 50-feature baseline. Using the curse of dimensionality from this chapter’s Exposition, explain why removing features can improve accuracy rather than merely preserving it.</p></li>
+<li id="ex-15-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A regulator requires that a credit-scoring model’s predictions be explainable in terms of the original applicant-provided variables. A colleague proposes using PCA to cut a 200-feature dataset down to 20 components first. Write two or three sentences explaining why this is likely to cause a problem, and what you’d suggest instead.</p></li>
+<li id="ex-15-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Wattenberg et al.&nbsp;“How to Use t-SNE Effectively” piece cited above. Identify one t-SNE pitfall it describes that this chapter did not mention, and explain how it would change the interpretation of the digits-dataset t-SNE plot in the Worked Example.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="15.10">
+<h2 data-number="15.10" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">15.10</span> Mental Model</h2>
+<p>Feature engineering fills a toolbox. Feature selection and dimensionality reduction decide which tools are actually needed for the job in front of you. Selection removes tools that won’t be used. Extraction welds several overlapping tools down into one multi-purpose one. Both exist because a toolbox that’s overflowing slows everything down, hurting more than it helps.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-geron2019hands" class="csl-entry" role="listitem">
+Géron, Aurélien. 2019. <em>Hands-on Machine Learning with Scikit-Learn, Keras, and TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+</div>
+</section>

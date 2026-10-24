@@ -1,0 +1,372 @@
+<p>When ML projects fail, it’s not always because the model was bad. They often fail because the model was solving the wrong problem. A customer asks for “AI to improve our operations.” Six months later, a team ships a churn model that scores customers accurately. But operations never plugged it into any workflow. Nothing changed. This chapter is about the translation step that prevents that failure mode: turning a vague business ask into a precisely defined ML problem statement, before anyone writes a line of code.</p>
+<section id="motivation" class="level2" data-number="2.1">
+<h2 data-number="2.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">2.1</span> Motivation</h2>
+<p>The gap between “we want AI” and “we have a deployable ML system solving a defined business problem” is where Solutions Architects excel. Every ML project starts with a business problem. Your job is to translate that problem into a precisely defined ML task before touching data. That translation has three steps: understand the business goal, define the ML problem, and define success in measurable terms. These sound obvious. In practice, most projects skip or rush all three. The rest of this chapter shows what happens when they do.</p>
+</section>
+<section id="exposition" class="level2" data-number="2.2">
+<h2 data-number="2.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">2.2</span> Exposition</h2>
+<section id="understanding-the-business-goal" class="level3" data-number="2.2.1">
+<h3 data-number="2.2.1" class="anchored" data-anchor-id="understanding-the-business-goal"><span class="header-section-number">2.2.1</span> Understanding the Business Goal</h3>
+<p>The customer’s stated ask is almost never the right ML problem. A few examples:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Customer says</th>
+<th>What they actually need</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>“We want to predict churn”</td>
+<td>Reduce revenue loss → need to identify <em>preventable</em> churn with enough lead time to act</td>
+</tr>
+<tr class="even">
+<td>“We want to understand our customers better”</td>
+<td>Segment customers → unsupervised clustering, not a predictive model</td>
+</tr>
+<tr class="odd">
+<td>“We want a recommendation engine”</td>
+<td>Increase conversion → rank items by probability of purchase per user</td>
+</tr>
+<tr class="even">
+<td>“We want to detect fraud”</td>
+<td>Minimise fraud loss → anomaly detection with a specific false-positive budget</td>
+</tr>
+</tbody>
+</table>
+<p>This isn’t a data science problem. It’s a translation problem. Requirements engineering solved a version of it decades before ML existed. The customer’s stated ask is usually a solution, not a need: “we want a recommendation engine” describes a piece of software, not a business outcome. The real requirement sits one level up: increase conversion. The recommendation engine is one way to get there. Maybe not the best one. Digging out the real requirement, not the stated solution, is job zero.</p>
+<p>A reliable way to do that: stop talking to just one person. Most ML engagements interview whoever asked for the project and treat that as “the customer’s requirements.” But almost every project has three distinct people or groups behind the ask. They rarely agree on what matters:</p>
+<ul>
+<li><strong>The sponsor</strong> pays for the project and owns the business outcome. For a churn model, that’s usually a VP of Customer Success with a revenue target.</li>
+<li><strong>The customer</strong> accepts the deliverable and judges whether it solved the problem. That might be a Director of Retention who has to sign off before the model goes live.</li>
+<li><strong>The users</strong> are the people who touch the model’s output every day. For a churn model, that’s the retention agents working the accounts the model flags.</li>
+</ul>
+<p>Talk to only the sponsor, and the goal statement reads like a budget line: reduce churn, save money. Talk to only the users, and you’ll hear the operational detail no one above them knows. Retention agents often ignore a raw risk score unless it comes with a reason and a suggested next action. A lone number gives them nothing to act on. Miss that, and the model can hit every accuracy target in the spec and still get ignored on the floor. Skipping the users is one of the most common ways an accurate model ships and changes nothing.</p>
+<p>Once the goal is understood from all three angles, write it down using three prongs: <strong>purpose</strong>, <strong>advantage</strong>, and <strong>measurement</strong>.</p>
+<ul>
+<li><strong>Purpose</strong>: what the project is trying to do, in plain language. Not “build a churn model,” but “identify customers at risk of cancelling with enough lead time for a retention agent to intervene.”</li>
+<li><strong>Advantage</strong>: the business benefit, tied to money or a metric leadership already tracks. “Reduce the revenue lost to preventable cancellations.”</li>
+<li><strong>Measurement</strong>: how you’ll know it worked, stated as a number. “1,500 prevented cancellations per month” is a measurement. “Improved retention” is not.</li>
+</ul>
+<p>Purpose and advantage are usually easy to get agreement on. Measurement is where vague projects get caught: if nobody can state a number, the goal isn’t defined yet, no matter how much everyone nodded along in the kickoff meeting.</p>
+<p>This process matters because it determines what gets built. “Predict churn” leads to a classifier. “Reduce preventable revenue loss” leads to a classifier <em>plus</em> a scoring system <em>plus</em> an intervention workflow. The model alone is worthless without the others.</p>
+</section>
+<section id="defining-the-ml-problem" class="level3" data-number="2.2.2">
+<h3 data-number="2.2.2" class="anchored" data-anchor-id="defining-the-ml-problem"><span class="header-section-number">2.2.2</span> Defining the ML Problem</h3>
+<p>Once the goal statement exists, with purpose, advantage, and measurement all written down, five questions turn it into something a model can be built against.</p>
+<p><strong>What is the label?</strong> This is the thing you want to predict. It must be specific, measurable, and tied to a real event. “Customer satisfaction” is not a label. “Customer submits a cancellation request within 30 days” is.</p>
+<p><strong>What is the unit of analysis?</strong> What does one row in your training data represent? One customer, one transaction, one day per customer? Getting this wrong produces models that leak future information into the past, or that predict at the wrong granularity.</p>
+<p><strong>What features are available at prediction time?</strong> A model is only useful if you can run it in production. If your most predictive feature requires data that doesn’t exist until after the event you’re predicting, the model is useless. This is one of the most common mistakes in ML projects.</p>
+<p><strong>What is the prediction horizon?</strong> “Predict churn 30 days before it happens” is a different problem from “predict churn 3 days before.” The former gives time to intervene. The latter not so much.</p>
+<p><strong>Is ML the right tool?</strong> ML is often unnecessary. Does a simpler rule already work well enough? Is there a pattern to learn, or is the process effectively random? Is there enough data? Appendix A’s ML Suitability Checklist gives a fuller diagnostic.</p>
+</section>
+<section id="defining-success" class="level3" data-number="2.2.3">
+<h3 data-number="2.2.3" class="anchored" data-anchor-id="defining-success"><span class="header-section-number">2.2.3</span> Defining Success</h3>
+<p>This is the measurement prong from the goal statement, formalised: a business metric that’s actually testable, not just a metric that sounds good. “Accuracy” is almost never the right metric in business contexts. If 95% of transactions are legitimate and 5% are fraud, a model that predicts “legitimate” for every transaction scores 95% accuracy and catches zero fraud. Useless. Business success metrics instead connect model outputs to business outcomes:</p>
+<ul>
+<li><strong>Fraud detection</strong>: catch 80% of fraud (recall ≥ 0.8) while reviewing no more than 2% of transactions manually (precision ≥ 0.4 at threshold).</li>
+<li><strong>Churn prevention</strong>: score the top 10% of at-risk customers. Intervention converts 15% of those, for a target of ≥ 1,500 prevented cancellations per month.</li>
+<li><strong>Recommendation</strong>: increase click-through rate from 1.2% to 1.8% in an A/B test (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>&lt;</mo><mn>0.05</mn></mrow><annotation encoding="application/x-tex">p &lt; 0.05</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7335em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&lt;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.05</span></span></span></span>).</li>
+</ul>
+<p>Notice none of these are model metrics. They’re business outcomes derived from model performance. A problem statement needs both.</p>
+</section>
+<section id="the-precision-recall-trade-off-as-a-business-decision" class="level3" data-number="2.2.4">
+<h3 data-number="2.2.4" class="anchored" data-anchor-id="the-precision-recall-trade-off-as-a-business-decision"><span class="header-section-number">2.2.4</span> The Precision-Recall Trade-off as a Business Decision</h3>
+<p>Every classification model produces a probability for each prediction, and a <strong>threshold</strong> above which you act. Moving the threshold trades precision against recall:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Precision</mtext><mo>=</mo><mfrac><mrow><mi>T</mi><mi>P</mi></mrow><mrow><mi>T</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>P</mi></mrow></mfrac><mspace width="2em"></mspace><mtext>Recall</mtext><mo>=</mo><mfrac><mrow><mi>T</mi><mi>P</mi></mrow><mrow><mi>T</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>N</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{Precision} = \frac{TP}{TP + FP} \qquad \text{Recall} = \frac{TP}{TP + FN}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">Precision</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.1297em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:2em;"></span><span class="mord text"><span class="mord">Recall</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.1297em;vertical-align:-0.7693em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7693em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+<p>A high, strict threshold flags something only when the model is confident. High precision, low recall, misses real cases. A low, permissive threshold flags anything that looks suspicious. High recall, low precision, many false positives. Which one is right isn’t a data science decision. It’s a business decision: what does a false positive cost, versus a false negative? The business owns that answer, not the model.</p>
+<p>There’s a formula version of this trade-off too: the <strong>F-beta score</strong>, a weighted variant of the familiar F1 score.</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>F</mi><mi>β</mi></msub><mo>=</mo><mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><msup><mi>β</mi><mn>2</mn></msup><mo stretchy="false">)</mo><mo>⋅</mo><mfrac><mrow><mtext>Precision</mtext><mo>×</mo><mtext>Recall</mtext></mrow><mrow><msup><mi>β</mi><mn>2</mn></msup><mo>⋅</mo><mtext>Precision</mtext><mo>+</mo><mtext>Recall</mtext></mrow></mfrac></mrow><annotation encoding="application/x-tex">F_\beta = (1 + \beta^2) \cdot \frac{\text{Precision} \times \text{Recall}}{\beta^2 \cdot \text{Precision} + \text{Recall}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.9694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0528em;">β</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.1141em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8641em;"><span style="top:-3.113em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2519em;vertical-align:-0.8804em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord">Precision</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord">Recall</span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord">Precision</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord">Recall</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8804em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+<p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi></mrow><annotation encoding="application/x-tex">\beta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span></span></span></span> sets how much more recall matters than precision. Set <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">\beta = 1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> and it’s the ordinary F1 score. That treats a false positive and a false negative as equally costly, which is rarely true in a real business. A practical starting point: set <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi></mrow><annotation encoding="application/x-tex">\beta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span></span></span></span> to the ratio of the two costs, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi><mo>=</mo><msub><mi>C</mi><mrow><mi>F</mi><mi>N</mi></mrow></msub><mi mathvariant="normal">/</mi><msub><mi>C</mi><mrow><mi>F</mi><mi>P</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\beta = C_{FN} / C_{FP}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0715em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.1389em;">F</span><span class="mord mathnormal mtight" style="margin-right:0.109em;">N</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord">/</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0715em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.1389em;">F</span><span class="mord mathnormal mtight" style="margin-right:0.1389em;">P</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>. A missed fraud case at $200 against a $5 manual review, the same cost pair Procedure 2.4 uses, gives <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi><mo>=</mo><mn>40</mn></mrow><annotation encoding="application/x-tex">\beta = 40</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">40</span></span></span></span>: a score weighted almost entirely toward recall. This isn’t a substitute for the threshold-cost sweep in Procedure 2.4. That sweep finds the actual optimal threshold, dollar for dollar. The F-beta score is a faster single number for comparing two candidate models before either one has a chosen threshold at all.</p>
+</section>
+<section id="sec-ml-problem-taxonomy" class="level3" data-number="2.2.5">
+<h3 data-number="2.2.5" class="anchored" data-anchor-id="sec-ml-problem-taxonomy"><span class="header-section-number">2.2.5</span> The ML Problem Type Taxonomy</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Type</th>
+<th>Question being answered</th>
+<th>Label type</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Binary classification</td>
+<td>Will this happen or not?</td>
+<td>0/1, True/False</td>
+<td>Churn, fraud, click</td>
+</tr>
+<tr class="even">
+<td>Multi-class classification</td>
+<td>Which category?</td>
+<td>One of N classes</td>
+<td>Product category, sentiment</td>
+</tr>
+<tr class="odd">
+<td>Regression</td>
+<td>How much / when?</td>
+<td>Continuous number</td>
+<td>Revenue, time-to-event, price</td>
+</tr>
+<tr class="even">
+<td>Ranking</td>
+<td>In what order?</td>
+<td>Relative order</td>
+<td>Search results, recommendations</td>
+</tr>
+<tr class="odd">
+<td>Clustering</td>
+<td>What natural groups exist?</td>
+<td>None (unsupervised)</td>
+<td>Customer segments, topic groups</td>
+</tr>
+<tr class="even">
+<td>Anomaly detection</td>
+<td>Is this unusual?</td>
+<td>None or sparse labels</td>
+<td>Fraud, sensor failure, intrusion</td>
+</tr>
+<tr class="odd">
+<td>Time series forecasting</td>
+<td>What will happen next?</td>
+<td>Future value</td>
+<td>Demand, sales, traffic</td>
+</tr>
+</tbody>
+</table>
+<p>Picking the wrong type means building the wrong thing. “Customer segments” sounds like clustering. But if churn labels already exist, supervised classification can find segments <em>that differ in churn rate</em>. That’s far more actionable than an unsupervised grouping.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="2.3">
+<h2 data-number="2.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">2.3</span> Trade-offs and Limits</h2>
+<p>Wrong framing kills ML projects in three recurring ways. <strong>The label problem</strong>: a team builds a model to predict “customer engagement score” because that’s the metric on the dashboard. But the actual business goal is subscription renewals. Optimising engagement doesn’t move renewals. Six months of work produces no ROI. <strong>The leakage problem</strong>: a churn model shows 99% accuracy in testing, then drops to 60% in production. That’s because a feature like “days since last support ticket closed” is only populated <em>after</em> a customer has already churned. The model learned to detect the symptom, not the cause. <strong>The horizon problem</strong>: a churn model correctly predicts churn 3 days in advance. But the sales team’s intervention process takes 5 days minimum. The model is technically correct and practically useless.</p>
+<p>Each of these is a framing failure, not a modelling failure. That’s why it happens before Chapter 11’s classifiers ever enter the picture.</p>
+</section>
+<section id="procedures" class="level2" data-number="2.4">
+<h2 data-number="2.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">2.4</span> Procedures</h2>
+<p id="proc-2-1"><strong>Procedure 2.1 (Write a Structured ML Problem Statement).</strong> <em>When to use:</em> at the start of any ML engagement, before any data exploration or modelling. Fill in every field of the template in Appendix A’s Problem Statement Template before proceeding. Leaving a field blank is a signal that the framing isn’t finished.</p>
+<p id="proc-2-2"><strong>Procedure 2.2 (Identify the Label).</strong> <em>When to use:</em> when the customer describes a goal but hasn’t specified what to predict. Ask, in sequence. What event are we trying to predict? Turn “customer dissatisfaction” into “submits cancellation request.” When does that event occur? This forces a time window, e.g.&nbsp;“within 30 days of billing cycle end.” How do we know it happened? This forces measurability. What’s the unit: per customer, per transaction, per day? Then verify the label exists in the data:</p>
+<div id="lst-verify-label" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-verify-label-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;2.1: Verifying a candidate label exists and checking its class balance
+</figcaption>
+<div aria-describedby="lst-verify-label-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-2"></span>
+<span id="cb1-3">df <span class="op">=</span> pd.read_csv(<span class="st">'churn_dataset.csv'</span>)</span>
+<span id="cb1-4"><span class="bu">print</span>(df[<span class="st">'churned_within_30d'</span>].value_counts())</span>
+<span id="cb1-5"><span class="bu">print</span>(df[<span class="st">'churned_within_30d'</span>].isnull().<span class="bu">sum</span>(), <span class="st">"missing values"</span>)</span>
+<span id="cb1-6"><span class="bu">print</span>(<span class="ss">f"Positive rate: </span><span class="sc">{</span>df[<span class="st">'churned_within_30d'</span>]<span class="sc">.</span>mean()<span class="sc">:.1%}</span><span class="ss">"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> accepting a label the customer has already computed (e.g.&nbsp;an “engagement score” column) without checking whether that computed quantity was the actual business goal.</p>
+<p id="proc-2-3"><strong>Procedure 2.3 (Spot When ML Is Overkill).</strong> <em>When to use:</em> before committing to build a model. Check whether a simple rule already matches the required performance. Check whether the process is fundamentally random. Check whether there are at least roughly 1,000 labelled examples. A quick baseline makes this concrete. If a hand-written rule already clears the bar, ship the rule instead:</p>
+<div id="lst-rule-baseline" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rule-baseline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;2.2: Baselining a hand-written rule before building a model
+</figcaption>
+<div aria-describedby="lst-rule-baseline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sklearn.metrics <span class="im">import</span> classification_report</span>
+<span id="cb2-2"></span>
+<span id="cb2-3">rule_predictions <span class="op">=</span> (</span>
+<span id="cb2-4">    (df[<span class="st">'num_support_tickets_90d'</span>] <span class="op">&gt;</span> <span class="dv">2</span>)</span>
+<span id="cb2-5">    <span class="op">&amp;</span> (df[<span class="st">'payment_failures_6m'</span>] <span class="op">&gt;</span> <span class="dv">0</span>)</span>
+<span id="cb2-6">).astype(<span class="bu">int</span>)</span>
+<span id="cb2-7"></span>
+<span id="cb2-8"><span class="bu">print</span>(classification_report(</span>
+<span id="cb2-9">    df[<span class="st">'churned_within_30d'</span>], rule_predictions</span>
+<span id="cb2-10">))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-2-4"><strong>Procedure 2.4 (Translate Precision vs.&nbsp;Recall into a Business Decision).</strong> <em>When to use:</em> whenever a customer asks “how accurate is the model?” Redirect to this framing instead. Attach a dollar cost to a false positive and a false negative. Then sweep thresholds to find the cost-minimising point:</p>
+<div id="lst-threshold-cost" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-threshold-cost-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;2.3: Sweeping decision thresholds to minimise business cost, not maximise accuracy
+</figcaption>
+<div aria-describedby="lst-threshold-cost-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb3-2"><span class="im">from</span> sklearn.metrics <span class="im">import</span> confusion_matrix</span>
+<span id="cb3-3"></span>
+<span id="cb3-4"><span class="kw">def</span> business_cost(y_true, y_pred, fp_cost, fn_cost):</span>
+<span id="cb3-5">    tn, fp, fn, tp <span class="op">=</span> confusion_matrix(y_true, y_pred).ravel()</span>
+<span id="cb3-6">    <span class="cf">return</span> fp <span class="op">*</span> fp_cost <span class="op">+</span> fn <span class="op">*</span> fn_cost</span>
+<span id="cb3-7"></span>
+<span id="cb3-8"><span class="co"># e.g. $5 to manually review, $200 for a missed fraud case</span></span>
+<span id="cb3-9">fp_cost, fn_cost <span class="op">=</span> <span class="dv">5</span>, <span class="dv">200</span></span>
+<span id="cb3-10">thresholds <span class="op">=</span> np.linspace(<span class="fl">0.1</span>, <span class="fl">0.9</span>, <span class="dv">50</span>)</span>
+<span id="cb3-11">costs <span class="op">=</span> [</span>
+<span id="cb3-12">    business_cost(</span>
+<span id="cb3-13">        y_test, (probs <span class="op">&gt;</span> t).astype(<span class="bu">int</span>), fp_cost, fn_cost</span>
+<span id="cb3-14">    )</span>
+<span id="cb3-15">    <span class="cf">for</span> t <span class="kw">in</span> thresholds</span>
+<span id="cb3-16">]</span>
+<span id="cb3-17">optimal_threshold <span class="op">=</span> thresholds[np.argmin(costs)]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Rule of thumb:</strong> if a false positive is the expensive mistake (e.g.&nbsp;wrongful fraud flag), raise the threshold. If a false negative is the expensive mistake (e.g.&nbsp;missed cancer diagnosis), lower it. </p>
+<p id="proc-2-5"><strong>Procedure 2.5 (Check for Data Leakage).</strong> <em>When to use:</em> before finalising a feature list. Leakage produces models that look excellent in testing and fail in production. List every candidate feature. Ask whether it could encode information that wouldn’t exist at prediction time. Then sort features by correlation with the label. Anything above roughly 0.9 warrants investigation before use.</p>
+</section>
+<section id="worked-example" class="level2" data-number="2.5">
+<h2 data-number="2.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">2.5</span> Worked Example</h2>
+<p>Three Solutions Architect scenarios illustrate how differently “we want AI” cashes out once it’s framed. A telco says: <em>“We’re losing customers and we want to use AI to fix it.”</em> Working through Procedure 2.2 turns this into: predict <code>churned_within_30_days</code> per customer at end of billing cycle, 30 days ahead of the churn date, using account and support-ticket history available at that point. That’s a binary classification problem. A retailer’s <em>“we want to personalise our homepage”</em> becomes a ranking problem over (user, item) pairs with a 200ms latency budget. A manufacturer’s <em>“predict when machines will break down”</em> becomes multi-class classification over failure modes, on hourly-aggregated sensor windows, 48 hours ahead of failure. Three “AI” requests, three structurally different ML problems. None of them obvious from the customer’s original words.</p>
+<p>Continuing with the telco scenario, <a href="#lst-verify-label" class="quarto-xref">Listing&nbsp;<span>2.1</span></a>’s schema is used to generate a synthetic 10,000-row churn dataset. It’s inspected for label distribution before any modelling begins:</p>
+<div id="lst-schema-build" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-schema-build-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;2.4: Building and inspecting a correctly-schemaed churn dataset
+</figcaption>
+<div aria-describedby="lst-schema-build-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">feature_cols <span class="op">=</span> [</span>
+<span id="cb4-2">    <span class="st">'months_as_customer'</span>, <span class="st">'monthly_spend'</span>,</span>
+<span id="cb4-3">    <span class="st">'num_support_tickets_90d'</span>, <span class="st">'days_since_last_login'</span>,</span>
+<span id="cb4-4">    <span class="st">'num_products'</span>, <span class="st">'payment_failures_6m'</span>,</span>
+<span id="cb4-5">]</span>
+<span id="cb4-6">label_col <span class="op">=</span> <span class="st">'churned_within_30d'</span></span>
+<span id="cb4-7"></span>
+<span id="cb4-8">X <span class="op">=</span> df[feature_cols]</span>
+<span id="cb4-9">y <span class="op">=</span> df[label_col]</span>
+<span id="cb4-10"></span>
+<span id="cb4-11">X_train, X_test, y_train, y_test <span class="op">=</span> train_test_split(</span>
+<span id="cb4-12">    X, y, test_size<span class="op">=</span><span class="fl">0.2</span>, stratify<span class="op">=</span>y, random_state<span class="op">=</span>RANDOM_SEED</span>
+<span id="cb4-13">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The dataset comes out imbalanced. Far more non-churners than churners in any given month. That’s realistic. Chapter 13 (Cross-Validation &amp; Model Selection) and Chapter 16 (Model Evaluation) return to exactly this imbalance with stratified splits and class weighting. For now, the point is simpler: label separated from features, no leakage, class balance preserved across the split. That is the scaffold every later model in this book is built on.</p>
+<p>Procedure 2.4’s threshold sweep needs one thing this chapter hasn’t built yet: a model that outputs a probability. A quick, class-weighted logistic regression on the schema above supplies one, purely to make the mechanics concrete. This isn’t real model-building. Chapter 11 covers that properly.</p>
+<div id="lst-threshold-demo" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-threshold-demo-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;2.5: A quick baseline classifier, just to generate probabilities for the threshold-cost sweep
+</figcaption>
+<div aria-describedby="lst-threshold-demo-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression</span>
+<span id="cb5-2"></span>
+<span id="cb5-3">clf <span class="op">=</span> LogisticRegression(class_weight<span class="op">=</span><span class="st">'balanced'</span>, random_state<span class="op">=</span>RANDOM_SEED)</span>
+<span id="cb5-4">clf.fit(X_train, y_train)</span>
+<span id="cb5-5">probs <span class="op">=</span> clf.predict_proba(X_test)[:, <span class="dv">1</span>]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Run <a href="#lst-threshold-cost" class="quarto-xref">Listing&nbsp;<span>2.3</span></a>’s sweep against these probabilities, with <code>fp_cost=5</code> and <code>fn_cost=200</code>:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Threshold</th>
+<th>False positives</th>
+<th>False negatives</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0.3</td>
+<td>1,869</td>
+<td>0</td>
+<td>$9,345</td>
+</tr>
+<tr class="even">
+<td>0.5</td>
+<td>651</td>
+<td>75</td>
+<td>$18,255</td>
+</tr>
+<tr class="odd">
+<td>0.7</td>
+<td>37</td>
+<td>123</td>
+<td>$24,785</td>
+</tr>
+</tbody>
+</table>
+<p>0.3 wins by a wide margin, though it’s an extreme case: this model’s probabilities never drop below about 0.32, so a threshold of 0.3 flags essentially every customer in the test set. It still catches all 131 churners, and at $5 per false positive against $200 per missed churner, flagging everyone costs less than missing anyone. The full 50-point sweep finds the true minimum a little higher, near 0.34 ($9,185). Push the threshold to 0.7 instead, and the model misses 123 of those 131 churners to avoid a small number of false alarms: exactly the mistake a business that loses $200 per missed churner can’t afford. This is Procedure 2.4’s rule of thumb in action. The expensive mistake here is the missed churner, so the threshold belongs low.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">import</span> boto3</span>
+<span id="cb6-2"></span>
+<span id="cb6-3">s3 <span class="op">=</span> boto3.client(<span class="st">'s3'</span>)</span>
+<span id="cb6-4">s3.upload_file(</span>
+<span id="cb6-5">    <span class="st">'churn_dataset.csv'</span>,</span>
+<span id="cb6-6">    <span class="st">'your-bucket-name'</span>,</span>
+<span id="cb6-7">    <span class="st">'datasets/churn/churn_dataset.csv'</span>,</span>
+<span id="cb6-8">)</span>
+<span id="cb6-9"></span>
+<span id="cb6-10"><span class="co"># Register in SageMaker Feature Store</span></span>
+<span id="cb6-11"><span class="co"># (Chapter 26 covers this in detail)</span></span>
+<span id="cb6-12"><span class="co"># import sagemaker</span></span>
+<span id="cb6-13"><span class="co"># feature_store = sagemaker.feature_store.FeatureStore(</span></span>
+<span id="cb6-14"><span class="co">#     sagemaker_session=session</span></span>
+<span id="cb6-15"><span class="co"># )</span></span></code></pre></div>
+<p><strong>When to prefer SageMaker Feature Store:</strong> when multiple teams or models need to share the same feature definitions and require point-in-time correct feature retrieval. That avoids leakage at scale, not just within a single project.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="2.6">
+<h2 data-number="2.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">2.6</span> History and Further Reading</h2>
+<p>Burkov, Ch. 1–2, gives the formal definition of supervised learning and the anatomy of a dataset <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Thakur, Ch. 1, takes a practical approach to setting up an ML project from scratch <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Hadley Wickham’s “The Data Science Process” argues for an iterative framing. It’s worth reading against this chapter’s three-step sequence. See Exercise 2.7 <span class="citation" data-cites="wickham_data_science_process">(<a href="#ref-wickham_data_science_process" role="doc-biblioref">Wickham, n.d.</a>)</span>.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>If Requirements Gathering Interests You
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Everything above in “Understanding the Business Goal” (the sponsor/customer/user split, writing a goal as purpose, advantage, and measurement) is adapted from requirements engineering. That’s a discipline with decades of hard-won practice on exactly this translation problem. Suzanne Robertson and James Robertson’s <em>Mastering the Requirements Process</em> is the standard reference. It’s worth buying outright if this translation step interests you more than the modelling that follows it <span class="citation" data-cites="robertson2012mastering">(<a href="#ref-robertson2012mastering" role="doc-biblioref">Robertson and Robertson 2012</a>)</span>.</p>
+</div>
+</div>
+</section>
+<section id="how-this-connects" class="level2" data-number="2.7">
+<h2 data-number="2.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">2.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/classical-data-science/ch01-history-and-landscape" class="quarto-xref"><span>Chapter 1</span></a>, which surveys what kinds of models exist. It enables essentially everything after it. Most directly, Chapter 10 (The Data Science Lifecycle) builds the same framing into a repeatable process. It is often confused with requirements gathering. But framing is not just capturing what the customer wants. It is actively translating that want into a technically precise ML problem statement.</p>
+</section>
+<section id="exercises" class="level2" data-number="2.8">
+<h2 data-number="2.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">2.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-2-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A customer says “we want to predict customer satisfaction.” Explain in one sentence why this is not yet a usable label, and propose a candidate label that would be.</p></li>
+<li id="ex-2-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> For each of the following, name the correct entry from the <a href="#sec-ml-problem-taxonomy" class="quarto-xref"><span>Section 2.2.5</span></a> taxonomy: (a) grouping customers into segments with no target variable; (b) predicting the dollar value of a customer’s next order; (c) predicting whether a machine will fail in the next 48 hours.</p></li>
+<li id="ex-2-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the churn dataset schema from <a href="#lst-schema-build" class="quarto-xref">Listing&nbsp;<span>2.4</span></a>, propose a new candidate feature <code>days_since_last_price_increase</code>. Using Procedure 2.5, determine whether it is safe to use. Justify your answer.</p></li>
+<li id="ex-2-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-threshold-demo" class="quarto-xref">Listing&nbsp;<span>2.5</span></a>’s probabilities and <a href="#lst-threshold-cost" class="quarto-xref">Listing&nbsp;<span>2.3</span></a>’s sweep, verify the total business cost at thresholds 0.3, 0.5, and 0.7 with <code>fp_cost=5</code>, <code>fn_cost=200</code>. State which threshold minimises cost, and why.</p></li>
+<li id="ex-2-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The chapter argues accuracy is rarely the right metric. Construct a scenario, distinct from fraud or churn, where accuracy actually is an acceptable metric. Explain why the class-imbalance argument doesn’t apply there.</p></li>
+<li id="ex-2-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer asks for “AI to detect anomalies in manufacturing sensor data” but has zero historical examples of past failures. Using the ML Suitability Checklist in Appendix A, decide whether ML is appropriate here. If not, propose what to build instead.</p></li>
+<li id="ex-2-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Wickham piece cited above. Compare its iterative framing to this chapter’s three-step sequence (understand the goal → define the ML problem → define success). Where do they agree, and where does iteration break the sequential picture this chapter presents?</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="2.9">
+<h2 data-number="2.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">2.9</span> Mental Model</h2>
+<p>The ML problem statement is a contract. It specifies the prediction target, the unit of analysis, the features available at prediction time, the horizon, and the success metrics. If any one of these is ambiguous, the project fails. Not because of bad algorithms. Because of misaligned expectations. Write the contract before building anything.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-robertson2012mastering" class="csl-entry" role="listitem">
+Robertson, Suzanne, and James Robertson. 2012. <em>Mastering the Requirements Process: Getting Requirements Right</em>. 3rd ed. Addison-Wesley.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+<div id="ref-wickham_data_science_process" class="csl-entry" role="listitem">
+Wickham, Hadley. n.d. <em>The Data Science Process</em>.
+</div>
+</div>
+</section>

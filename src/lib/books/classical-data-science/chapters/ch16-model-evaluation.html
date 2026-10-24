@@ -1,0 +1,282 @@
+<p>Once a model is trained, a simple question follows: is it good? The naive answer (“measure accuracy”) is almost the wrong one. Choosing the wrong metric means optimising for the wrong thing and shipping a model that fails in production in ways that are surprising to whoever picked the metric. This chapter is about learning to ask “good for what?” before measuring anything.</p>
+<section id="motivation" class="level2" data-number="16.1">
+<h2 data-number="16.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">16.1</span> Motivation</h2>
+<p>Every evaluation metric is a choice about what to care about. A fraud-detection model that labels every transaction “not fraud” scores roughly 99.9% accuracy on a typical fraud dataset, because fraud is rare. That model is useless. It catches zero fraud while looking nearly perfect. The metric didn’t lie. Well, not exactly. It answered a question nobody asked. The foundation of all classification evaluation is the confusion matrix: a table that counts what a model got right and wrong, broken down by type. Every metric that follows is a formula built on top of that matrix.</p>
+</section>
+<section id="exposition" class="level2" data-number="16.2">
+<h2 data-number="16.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">16.2</span> Exposition</h2>
+<section id="the-confusion-matrix" class="level3" data-number="16.2.1">
+<h3 data-number="16.2.1" class="anchored" data-anchor-id="the-confusion-matrix"><span class="header-section-number">16.2.1</span> The Confusion Matrix</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th></th>
+<th>Predicted Positive</th>
+<th>Predicted Negative</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Actually Positive</strong></td>
+<td>True Positive (TP)</td>
+<td>False Negative (FN)</td>
+</tr>
+<tr class="even">
+<td><strong>Actually Negative</strong></td>
+<td>False Positive (FP)</td>
+<td>True Negative (TN)</td>
+</tr>
+</tbody>
+</table>
+<p>A false positive is a “false alarm” (Type I error). A false negative is a “missed it” (Type II error). Which one costs more depends entirely on domain. In cancer screening, missing a cancer (FN) is catastrophic. In spam filtering, flagging a legitimate email (FP) is merely annoying. No metric decision makes sense before that cost asymmetry is written down and understood.</p>
+</section>
+<section id="classification-metrics" class="level3" data-number="16.2.2">
+<h3 data-number="16.2.2" class="anchored" data-anchor-id="classification-metrics"><span class="header-section-number">16.2.2</span> Classification Metrics</h3>
+<p><strong>Accuracy</strong> (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mi>T</mi><mi>P</mi><mo>+</mo><mi>T</mi><mi>N</mi><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mi>T</mi><mi>P</mi><mo>+</mo><mi>T</mi><mi>N</mi><mo>+</mo><mi>F</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>N</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(TP+TN)/(TP+TN+FP+FN)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mclose">)</span><span class="mord">/</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mclose">)</span></span></span></span>) is useful only when classes are balanced and both error types cost the same. That combination doesn’t occur in practice. <strong>Precision</strong> (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>P</mi><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mi>T</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>P</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">TP/(TP+FP)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mord">/</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mclose">)</span></span></span></span>) answers “of everything predicted positive, how many actually were.” It matters when false positives are costly. <strong>Recall</strong> (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>P</mi><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mi>T</mi><mi>P</mi><mo>+</mo><mi>F</mi><mi>N</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">TP/(TP+FN)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mord">/</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mclose">)</span></span></span></span>) answers “of everything actually positive, how many were caught.” It matters when false negatives are costly. <strong>F1</strong> (the harmonic mean of precision and recall) gives a single balanced number when both matter and classes are imbalanced. <strong>ROC-AUC</strong> (Area Under the Receiver Operating Characteristic Curve) measures ranking quality across every possible decision threshold at once (1.0 perfect, 0.5 random). It’s useful for comparing models before a threshold is chosen. <strong>PR-AUC</strong> (Area Under the Precision-Recall Curve) does the same, but focuses on the positive class specifically. It’s the more honest choice under heavy imbalance, where ROC-AUC can look deceptively good. <strong>Log loss</strong> penalises confident wrong predictions heavily. It matters when the actual probability, not just the ranking, is going to drive a decision.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Why Harmonic, Not Arithmetic?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The familiar mean, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mi>a</mi><mo>+</mo><mi>b</mi><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">(a+b)/2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal">a</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">b</span><span class="mclose">)</span><span class="mord">/2</span></span></span></span>, treats a strong score and a weak one as interchangeable. Precision 1.0 and recall 0.01 average out to 0.505, which reads as “roughly middling” for a model that in practice catches almost nothing. The harmonic mean, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>a</mi><mi>b</mi><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mi>a</mi><mo>+</mo><mi>b</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">2ab/(a+b)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">2</span><span class="mord mathnormal">ab</span><span class="mord">/</span><span class="mopen">(</span><span class="mord mathnormal">a</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">b</span><span class="mclose">)</span></span></span></span>, doesn’t average the two numbers so much as average their <em>reciprocals</em>. That pulls the result sharply toward whichever number is smaller. The same precision 1.0 and recall 0.01 give a harmonic mean of 0.0198, close to the useless 0.01 and nothing like the reassuring 0.505 the arithmetic mean reported. That’s exactly the property F1 needs. A model has to do reasonably well on <em>both</em> precision and recall to get a good F1 score, because a harmonic mean can’t be dragged up by one strong number covering for one weak one the way an arithmetic mean can.</p>
+</div>
+</div>
+</section>
+<section id="the-precision-recall-trade-off" class="level3" data-number="16.2.3">
+<h3 data-number="16.2.3" class="anchored" data-anchor-id="the-precision-recall-trade-off"><span class="header-section-number">16.2.3</span> The Precision-Recall Trade-off</h3>
+<p>A classifier outputs a probability, not a label. A threshold (commonly 0.5) turns that probability into a decision. Lowering the threshold predicts positive more often, raising recall at the cost of precision. Raising the threshold does the opposite. There is no free lunch. The PR curve shows every trade-off point at once. The business context, what an FP costs versus what an FN costs, is what tells you where on that curve to operate.</p>
+</section>
+<section id="regression-metrics" class="level3" data-number="16.2.4">
+<h3 data-number="16.2.4" class="anchored" data-anchor-id="regression-metrics"><span class="header-section-number">16.2.4</span> Regression Metrics</h3>
+<p>MSE (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>mean</mtext><mo stretchy="false">(</mo><mo stretchy="false">(</mo><mi>y</mi><mo>−</mo><mover accent="true"><mi>y</mi><mo>^</mo></mover><msup><mo stretchy="false">)</mo><mn>2</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{mean}((y-\hat y)^2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">mean</span></span><span class="mopen">((</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="mclose"><span class="mclose">)</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span>) penalises large errors quadratically and is differentiable, which is why it’s used during training. RMSE (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msqrt><mtext>MSE</mtext></msqrt></mrow><annotation encoding="application/x-tex">\sqrt{\text{MSE}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.04em;vertical-align:-0.1133em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9267em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord text"><span class="mord">MSE</span></span></span></span><span style="top:-2.8867em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1133em;"><span></span></span></span></span></span></span></span></span>) is the same information in the target’s own units. MAE (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>mean</mtext><mo stretchy="false">(</mo><mi mathvariant="normal">∣</mi><mi>y</mi><mo>−</mo><mover accent="true"><mi>y</mi><mo>^</mo></mover><mi mathvariant="normal">∣</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{mean}(|y-\hat y|)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">mean</span></span><span class="mopen">(</span><span class="mord">∣</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="mord">∣</span><span class="mclose">)</span></span></span></span>) is less sensitive to outliers than RMSE. A large RMSE/MAE ratio, rule of thumb: above roughly 2x, is a diagnostic that outliers are present and influencing RMSE disproportionately. MAPE gives scale-invariant percentage error but breaks when the target can be zero. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>R</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">R^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span> gives the proportion of variance: 1 is perfect, 0 means no better than predicting the mean, and negative means actively worse than that trivial baseline.</p>
+</section>
+<section id="calibration" class="level3" data-number="16.2.5">
+<h3 data-number="16.2.5" class="anchored" data-anchor-id="calibration"><span class="header-section-number">16.2.5</span> Calibration</h3>
+<p>Calibration asks a simple question: when a model says 70% probability, is it actually right 70% of the time? A model can separate positives from negatives well, good discrimination, e.g.&nbsp;high ROC-AUC, while still being poorly calibrated. Its probabilities are systematically over- or under-confident. Calibration matters when the probability <em>itself</em> drives a decision. Insurance pricing, medical risk scores, and financial models all need calibrated probabilities, not just correctly-ordered ones. The reliability diagram plots predicted-probability bins against observed frequency. A perfectly calibrated model lies on the diagonal. Random Forests and boosted trees are a common source of S-shaped, overconfident-at-the-extremes miscalibration. Fixable with isotonic regression or Platt scaling via <code>CalibratedClassifierCV</code>.</p>
+</section>
+<section id="the-business-metric-gap" class="level3" data-number="16.2.6">
+<h3 data-number="16.2.6" class="anchored" data-anchor-id="the-business-metric-gap"><span class="header-section-number">16.2.6</span> The Business Metric Gap</h3>
+<p>An ML metric and a business metric are different things. Minimising RMSE on a demand forecast doesn’t maximise profit, because the costs of over-stocking and under-stocking are rarely symmetric. The right question is “what does a unit improvement in this ML metric actually get us in business terms.” Not “is this ML metric improving.”</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="16.3">
+<h2 data-number="16.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">16.3</span> Trade-offs and Limits</h2>
+<p>Accuracy is acceptable with balanced classes, symmetric error costs, and a rough model-to-model comparison in mind. It misleads under class imbalance: prefer F1 or PR-AUC there. It misleads when error costs differ: choose precision or recall based on which error is expensive. And it misleads whenever probabilistic output itself matters: prefer log loss plus calibration checking there instead.</p>
+</section>
+<section id="procedures" class="level2" data-number="16.4">
+<h2 data-number="16.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">16.4</span> Procedures</h2>
+<p id="proc-16-1"><strong>Procedure 16.1 (Compute All Classification Metrics at Once).</strong> <em>When to use:</em> immediately after getting predictions from any classifier.</p>
+<div id="lst-classification-report" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-classification-report-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;16.1: Full metric suite from one set of predictions
+</figcaption>
+<div aria-describedby="lst-classification-report-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">from</span> sklearn.metrics <span class="im">import</span> classification_report, confusion_matrix</span>
+<span id="cb1-2"></span>
+<span id="cb1-3">y_pred <span class="op">=</span> model.predict(X_test)</span>
+<span id="cb1-4">y_proba <span class="op">=</span> model.predict_proba(X_test)[:, <span class="dv">1</span>]</span>
+<span id="cb1-5"></span>
+<span id="cb1-6"><span class="bu">print</span>(classification_report(y_test, y_pred))</span>
+<span id="cb1-7">cm <span class="op">=</span> confusion_matrix(y_test, y_pred)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-16-2"><strong>Procedure 16.2 (Plot the ROC and Precision-Recall Curves).</strong> <em>When to use:</em> comparing models’ discrimination ability, or picking a threshold.</p>
+<div id="lst-roc-pr" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-roc-pr-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;16.2: ROC and PR curves from predicted probabilities
+</figcaption>
+<div aria-describedby="lst-roc-pr-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb2-2"><span class="im">from</span> sklearn.metrics <span class="im">import</span> (</span>
+<span id="cb2-3">    roc_curve,</span>
+<span id="cb2-4">    roc_auc_score,</span>
+<span id="cb2-5">    precision_recall_curve,</span>
+<span id="cb2-6">    average_precision_score,</span>
+<span id="cb2-7">)</span>
+<span id="cb2-8"></span>
+<span id="cb2-9">fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">5</span>))</span>
+<span id="cb2-10"></span>
+<span id="cb2-11">fpr, tpr, _ <span class="op">=</span> roc_curve(y_test, y_proba)</span>
+<span id="cb2-12">auc <span class="op">=</span> roc_auc_score(y_test, y_proba)</span>
+<span id="cb2-13">axes[<span class="dv">0</span>].plot(fpr, tpr, color<span class="op">=</span><span class="st">'#4E79A7'</span>, label<span class="op">=</span><span class="ss">f'Logistic Regression (AUC = </span><span class="sc">{</span>auc<span class="sc">:.3f}</span><span class="ss">)'</span>)</span>
+<span id="cb2-14">axes[<span class="dv">0</span>].plot(</span>
+<span id="cb2-15">    [<span class="dv">0</span>, <span class="dv">1</span>], [<span class="dv">0</span>, <span class="dv">1</span>], color<span class="op">=</span><span class="st">'#999999'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, linewidth<span class="op">=</span><span class="fl">1.5</span>,</span>
+<span id="cb2-16">    label<span class="op">=</span><span class="st">'Random classifier (AUC = 0.5)'</span>,</span>
+<span id="cb2-17">)</span>
+<span id="cb2-18">axes[<span class="dv">0</span>].set_xlabel(<span class="st">'False Positive Rate'</span>)</span>
+<span id="cb2-19">axes[<span class="dv">0</span>].set_ylabel(<span class="st">'True Positive Rate (Recall)'</span>)</span>
+<span id="cb2-20">axes[<span class="dv">0</span>].set_title(<span class="st">'ROC Curve'</span>)</span>
+<span id="cb2-21">axes[<span class="dv">0</span>].legend()</span>
+<span id="cb2-22"></span>
+<span id="cb2-23">precision, recall, _ <span class="op">=</span> precision_recall_curve(y_test, y_proba)</span>
+<span id="cb2-24">ap <span class="op">=</span> average_precision_score(y_test, y_proba)</span>
+<span id="cb2-25">axes[<span class="dv">1</span>].plot(recall, precision, color<span class="op">=</span><span class="st">'#E15759'</span>, label<span class="op">=</span><span class="ss">f'Logistic Regression (AP = </span><span class="sc">{</span>ap<span class="sc">:.3f}</span><span class="ss">)'</span>)</span>
+<span id="cb2-26">axes[<span class="dv">1</span>].axhline(</span>
+<span id="cb2-27">    y_test.mean(), color<span class="op">=</span><span class="st">'#999999'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, linewidth<span class="op">=</span><span class="fl">1.5</span>,</span>
+<span id="cb2-28">    label<span class="op">=</span><span class="ss">f'No-skill baseline (</span><span class="sc">{</span>y_test<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">)'</span>,</span>
+<span id="cb2-29">)</span>
+<span id="cb2-30">axes[<span class="dv">1</span>].set_xlabel(<span class="st">'Recall'</span>)</span>
+<span id="cb2-31">axes[<span class="dv">1</span>].set_ylabel(<span class="st">'Precision'</span>)</span>
+<span id="cb2-32">axes[<span class="dv">1</span>].set_title(<span class="st">'Precision-Recall Curve'</span>)</span>
+<span id="cb2-33">axes[<span class="dv">1</span>].legend()</span>
+<span id="cb2-34"></span>
+<span id="cb2-35">plt.tight_layout()</span>
+<span id="cb2-36">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-16-3"><strong>Procedure 16.3 (Adjust the Decision Threshold).</strong> <em>When to use:</em> when FP and FN costs genuinely differ, or the default 0.5 threshold isn’t optimal.</p>
+<div id="lst-threshold-tune" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-threshold-tune-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;16.3: Sweeping thresholds to maximise F1
+</figcaption>
+<div aria-describedby="lst-threshold-tune-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb3-2"><span class="im">from</span> sklearn.metrics <span class="im">import</span> precision_recall_curve</span>
+<span id="cb3-3"></span>
+<span id="cb3-4">precision, recall, thresholds <span class="op">=</span> precision_recall_curve(</span>
+<span id="cb3-5">    y_test, y_proba</span>
+<span id="cb3-6">)</span>
+<span id="cb3-7">f1_scores <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> precision <span class="op">*</span> recall <span class="op">/</span> (precision <span class="op">+</span> recall <span class="op">+</span> <span class="fl">1e-8</span>)</span>
+<span id="cb3-8">best_threshold <span class="op">=</span> thresholds[np.argmax(f1_scores[:<span class="op">-</span><span class="dv">1</span>])]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-16-4"><strong>Procedure 16.4 (Compute and Fix a Calibration Curve).</strong> <em>When to use:</em> when predicted probabilities drive a decision directly.</p>
+<div id="lst-calibration" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;16.4: Diagnosing and fixing calibration
+</figcaption>
+<div aria-describedby="lst-calibration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> sklearn.calibration <span class="im">import</span> (</span>
+<span id="cb4-2">    calibration_curve,</span>
+<span id="cb4-3">    CalibratedClassifierCV,</span>
+<span id="cb4-4">)</span>
+<span id="cb4-5"></span>
+<span id="cb4-6">prob_true, prob_pred <span class="op">=</span> calibration_curve(</span>
+<span id="cb4-7">    y_test, y_proba, n_bins<span class="op">=</span><span class="dv">10</span></span>
+<span id="cb4-8">)</span>
+<span id="cb4-9"></span>
+<span id="cb4-10">calibrated <span class="op">=</span> CalibratedClassifierCV(</span>
+<span id="cb4-11">    model, method<span class="op">=</span><span class="st">'isotonic'</span>, cv<span class="op">=</span><span class="dv">5</span></span>
+<span id="cb4-12">)</span>
+<span id="cb4-13">calibrated.fit(X_train, y_train)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> trusting a raw model’s <code>predict_proba</code> output as a real probability without checking calibration first. Tree ensembles in particular are often overconfident at the extremes.</p>
+</section>
+<section id="worked-example" class="level2" data-number="16.5">
+<h2 data-number="16.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">16.5</span> Worked Example</h2>
+<p>On the Breast Cancer Wisconsin dataset (569 examples; logistic regression on standardised features, 80/20 stratified split), the confusion matrix on the 114-example test set comes out as:</p>
+<div id="lst-confusion-numbers" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-confusion-numbers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;16.5: Real confusion matrix and derived metrics
+</figcaption>
+<div aria-describedby="lst-confusion-numbers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">cm <span class="op">=</span> confusion_matrix(y_test, y_pred)</span>
+<span id="cb5-2"><span class="co"># [[41  1]</span></span>
+<span id="cb5-3"><span class="co">#  [ 1 71]]</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>TN=41, FP=1, FN=1, TP=71. That gives accuracy 0.9825, precision 0.9861, recall 0.9861, F1 0.9861, ROC-AUC 0.9954, PR-AUC 0.9971, and log loss 0.0777. On this dataset, roughly balanced (37%/63%) and well-separated by the available features, accuracy and F1 tell essentially the same story. That’s the signal that accuracy is <em>acceptable</em> here specifically because the imbalance is mild and both error types are similarly rare. Running Procedure 16.2 against this same model and test set produces <a href="#fig-roc-pr-curves" class="quarto-xref">Figure&nbsp;<span>16.1</span></a>.</p>
+<div id="fig-roc-pr-curves" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-roc-pr-curves-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch16/roc-pr-curves.png" class="img-fluid figure-img" style="width:90.0%" alt="ROC and precision-recall curves for the logistic regression on the breast-cancer test set. The ROC curve’s AUC (0.995) and the PR curve’s average precision (0.997) both confirm near-perfect ranking; the PR curve’s steep drop at the very end is the one false positive and one false negative this model actually makes." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-roc-pr-curves-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;16.1: ROC and precision-recall curves for the logistic regression on the breast-cancer test set. The ROC curve’s AUC (0.995) and the PR curve’s average precision (0.997) both confirm near-perfect ranking; the PR curve’s steep drop at the very end is the one false positive and one false negative this model actually makes.
+</figcaption>
+</figure>
+</div>
+<p>Both curves stay close to their perfect corner for almost their entire length. The ROC curve hugs the top-left. The PR curve stays near precision 1.0 until the last handful of points, where the model’s two mistakes show up as a sharp drop rather than a gradual slide. That’s the visual signature of a model that is right almost everywhere and wrong on only a couple of genuinely hard cases.</p>
+<p>Sweeping the decision threshold to maximise F1, rather than using the default 0.5, finds a best threshold of 0.366. F1 rises slightly, from 0.9861 to 0.9931: a small but real improvement, and a reminder that even on an easy, well-separated dataset, the default threshold isn’t automatically optimal.</p>
+<p>Contrast this with a hypothetical, deliberately harder case: a fraud dataset where only 0.1% of transactions are fraudulent. A model that predicts “not fraud” every time scores <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.999</mn></mrow><annotation encoding="application/x-tex">0.999</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.999</span></span></span></span> accuracy, literally 99.9% correct, while catching exactly zero fraud (recall <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">=0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.3669em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>, precision undefined since <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>T</mi><mi>P</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">TP=0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">T</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>). This isn’t a contrived edge case. It’s the direct arithmetic consequence of accuracy rewarding the majority class, regardless of what the minority class needed the model to do. The breast-cancer dataset’s near-balanced classes are exactly why accuracy behaved reasonably there, and exactly why the same metric would be a lie on a genuinely imbalanced problem.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker.model_monitor <span class="im">import</span> ModelQualityMonitor</span>
+<span id="cb6-2"></span>
+<span id="cb6-3">monitor <span class="op">=</span> ModelQualityMonitor(</span>
+<span id="cb6-4">    role<span class="op">=</span>role, instance_count<span class="op">=</span><span class="dv">1</span>, instance_type<span class="op">=</span><span class="st">"ml.m5.xlarge"</span></span>
+<span id="cb6-5">)</span>
+<span id="cb6-6">monitor.suggest_baseline(</span>
+<span id="cb6-7">    baseline_dataset<span class="op">=</span>(</span>
+<span id="cb6-8">        <span class="st">"s3://my-bucket/validation-with-predictions.csv"</span></span>
+<span id="cb6-9">    ),</span>
+<span id="cb6-10">    dataset_format<span class="op">=</span>DatasetFormat.csv(header<span class="op">=</span><span class="va">True</span>),</span>
+<span id="cb6-11">    output_s3_uri<span class="op">=</span><span class="st">"s3://my-bucket/baseline/"</span>,</span>
+<span id="cb6-12">    problem_type<span class="op">=</span><span class="st">"BinaryClassification"</span>,</span>
+<span id="cb6-13">    inference_attribute<span class="op">=</span><span class="st">"prediction"</span>,</span>
+<span id="cb6-14">    probability_attribute<span class="op">=</span><span class="st">"probability"</span>,</span>
+<span id="cb6-15">)</span>
+<span id="cb6-16">monitor.create_monitoring_schedule(</span>
+<span id="cb6-17">    endpoint_input<span class="op">=</span>endpoint_name,</span>
+<span id="cb6-18">    schedule_cron_expression<span class="op">=</span><span class="st">"cron(0 * ? * * *)"</span>,</span>
+<span id="cb6-19">)</span></code></pre></div>
+<p><strong>When to prefer SageMaker Model Monitor:</strong> when the metric needs to be tracked continuously against live production traffic, not just computed once on a static test set: it flags metric degradation (e.g.&nbsp;a drop in precision) automatically as the input distribution drifts, rather than waiting for someone to notice.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="16.6">
+<h2 data-number="16.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">16.6</span> History and Further Reading</h2>
+<p>Thakur, Ch. 6, gives practical metric selection with code examples <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Géron’s <em>Hands-On Machine Learning</em>, Ch. 3, works through the confusion matrix, precision, recall, and ROC curves on a single running example, a good practical companion to this chapter’s metrics <span class="citation" data-cites="geron2019hands">(<a href="#ref-geron2019hands" role="doc-biblioref">Géron 2019</a>)</span>. Murphy’s Introduction, Ch. 5, gives the formal statistical treatment of evaluation <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Davis and Goadrich’s paper on the relationship between precision-recall and ROC curves explains why PR-AUC matters specifically under imbalance <span class="citation" data-cites="davis2006relationship">(<a href="#ref-davis2006relationship" role="doc-biblioref">Davis and Goadrich 2006</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="16.7">
+<h2 data-number="16.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">16.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 11 (a model is needed before it can be evaluated) and enables Chapter 13’s cross-validation, since proper evaluation requires the right split strategy applied consistently. It’s often confused with the loss function used during training. The loss is what’s minimised while fitting (often cross-entropy). The evaluation metric is what’s measured afterward (often F1 or a business-specific number). They are usually different things, measuring related but distinct properties of the same model.</p>
+</section>
+<section id="exercises" class="level2" data-number="16.8">
+<h2 data-number="16.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">16.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-16-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Using the confusion matrix definitions, explain in one sentence each what a false positive and a false negative mean for a spam filter, and state which one is more costly there.</p></li>
+<li id="ex-16-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State which metric (precision, recall, or F1) is most appropriate for: (a) a disease-screening test; (b) a spam filter; (c) a general-purpose classifier comparison with no stated cost asymmetry.</p></li>
+<li id="ex-16-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-confusion-numbers" class="quarto-xref">Listing&nbsp;<span>16.5</span></a>, compute precision and recall by hand from TN=41, FP=1, FN=1, TP=71, and confirm they match the reported 0.9861 figures.</p></li>
+<li id="ex-16-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using this chapter’s hypothetical 0.1%-fraud scenario, compute the accuracy of a model that predicts “fraud” for every transaction instead (the opposite extreme), and state its precision and recall.</p></li>
+<li id="ex-16-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer reports “our fraud model has 99.9% accuracy” as evidence it’s ready to ship. Using this chapter’s Worked Example, write the two or three sentences you’d say before agreeing.</p></li>
+<li id="ex-16-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A Random Forest’s <code>predict_proba</code> output is being used directly to set insurance premiums. Using this chapter’s Calibration section, explain what could go wrong and what you’d check before trusting those numbers.</p></li>
+<li id="ex-16-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Davis and Goadrich (2006) paper’s abstract. Identify the specific claim it makes about ROC curves under class imbalance, and explain how it relates to this chapter’s PR-AUC recommendation for rare-event detection.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="16.9">
+<h2 data-number="16.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">16.9</span> Mental Model</h2>
+<p>The confusion matrix is the ground truth. Every metric is just a different question asked of that table. Before choosing one, write down what a false positive and a false negative cost in the specific business context. The right metric usually becomes obvious once those costs are made visible.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-davis2006relationship" class="csl-entry" role="listitem">
+Davis, Jesse, and Mark Goadrich. 2006. <span>“The Relationship Between Precision-Recall and ROC Curves.”</span> <em>Proceedings of the 23rd International Conference on Machine Learning</em> (Pittsburgh, PA), 233–40.
+</div>
+<div id="ref-geron2019hands" class="csl-entry" role="listitem">
+Géron, Aurélien. 2019. <em>Hands-on Machine Learning with Scikit-Learn, Keras, and TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

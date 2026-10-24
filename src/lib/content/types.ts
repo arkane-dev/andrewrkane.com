@@ -56,6 +56,8 @@ export interface Book {
 	readHref?: string; // web edition
 	pdfHref?: string; // PDF download
 	buyHref?: string; // store page, e.g. Amazon
+	payHref?: string; // pay what you want: the book is free to read, this is for readers who want to pay
+	quizHref?: string; // chapter quizzes
 	tone: 'magenta' | 'cyan' | 'violet' | 'gold';
 }
 

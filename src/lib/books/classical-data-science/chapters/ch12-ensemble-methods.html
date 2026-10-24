@@ -1,0 +1,349 @@
+<p>A tree standing alone is easily blown down in a storm, where a forest continues to stand. A single decision tree is weak in the same way. Train it on slightly different data, and the result is a completely different tree. Train it deep enough to capture real complexity, and it overfits. Keep it shallow enough to generalise, and it underfits. Yet tree-based algorithms, combined into ensembles, produce the most accurate models for tabular data that exist. This chapter is about why combining many mediocre models consistently beats any single good one, and how that principle plays out differently in bagging, boosting, and stacking.</p>
+<section id="motivation" class="level2" data-number="12.1">
+<h2 data-number="12.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">12.1</span> Motivation</h2>
+<p>The underlying intuition is old: wisdom of crowds. In 1906, statistician Francis Galton observed that the median guess of 800 county fair attendees estimating an ox’s weight was more accurate than any individual guess, including the experts’. Individual errors cancelled out when averaged. Ensemble methods apply the same principle to machine learning models. But it only works if the individual models make <em>different</em> errors. If every model in the ensemble fails on the same examples, averaging doesn’t help. The diversity of errors is what produces the advantage. There are two main strategies for creating that diversity: bagging and boosting.</p>
+</section>
+<section id="exposition" class="level2" data-number="12.2">
+<h2 data-number="12.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">12.2</span> Exposition</h2>
+<section id="bagging-reducing-variance" class="level3" data-number="12.2.1">
+<h3 data-number="12.2.1" class="anchored" data-anchor-id="bagging-reducing-variance"><span class="header-section-number">12.2.1</span> Bagging — Reducing Variance</h3>
+<p>Bagging stands for Bootstrap AGGregating. Sample <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> examples with replacement (each example goes back into the pool before the next draw, so some appear multiple times and some not at all) from the training set, train a model on this bootstrap sample, repeat <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi></mrow><annotation encoding="application/x-tex">B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span></span></span></span> times, then average the regression outputs (or majority-vote the classification outputs). Each model sees a slightly different dataset and makes slightly different errors. Averaging cancels the errors and amplifies the signal. If <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi></mrow><annotation encoding="application/x-tex">B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span></span></span></span> models each have variance <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>σ</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">\sigma^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span> and their errors are uncorrelated, the average has variance <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>σ</mi><mn>2</mn></msup><mi mathvariant="normal">/</mi><mi>B</mi></mrow><annotation encoding="application/x-tex">\sigma^2/B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span></span></span></span>: more models, lower variance, with no increase in bias.</p>
+</section>
+<section id="random-forests-bagging-plus-feature-randomness" class="level3" data-number="12.2.2">
+<h3 data-number="12.2.2" class="anchored" data-anchor-id="random-forests-bagging-plus-feature-randomness"><span class="header-section-number">12.2.2</span> Random Forests — Bagging Plus Feature Randomness</h3>
+<p>Random Forests add a second source of diversity on top of bagging: at each split in each tree, only a random subset of roughly <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msqrt><mi>p</mi></msqrt></mrow><annotation encoding="application/x-tex">\sqrt{p}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.04em;vertical-align:-0.3369em;"></span><span class="mord sqrt"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.7031em;"><span class="svg-align" style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord" style="padding-left:0.833em;"><span class="mord mathnormal">p</span></span></span><span style="top:-2.6631em;"><span class="pstrut" style="height:3em;"></span><span class="hide-tail" style="min-width:0.853em;height:1.08em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.08em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3369em;"><span></span></span></span></span></span></span></span></span> features (of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi></mrow><annotation encoding="application/x-tex">p</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span></span></span></span> total) is considered. This sounds like a bad idea. Why limit the information available to each split? Because without feature randomness, every tree in a bagged ensemble tends to pick the same dominant feature at the root, producing correlated trees whose errors don’t cancel. Feature randomness decorrelates the trees. Decorrelated trees produce more diverse errors. More diverse errors cancel better when averaged. That’s why Random Forests are consistently more accurate than vanilla bagging. Random Forests are especially strong on tabular data with mixed feature types, when feature importance scores are wanted, and when there’s little appetite for hyperparameter tuning.</p>
+</section>
+<section id="boosting-reducing-bias" class="level3" data-number="12.2.3">
+<h3 data-number="12.2.3" class="anchored" data-anchor-id="boosting-reducing-bias"><span class="header-section-number">12.2.3</span> Boosting — Reducing Bias</h3>
+<p>Boosting trains models sequentially rather than in parallel, with each new model focused on the previous ensemble’s mistakes. The original recipe, AdaBoost: train a weak learner (typically a shallow “stump”), increase the weight of misclassified examples, train the next learner on the reweighted data so it focuses on the hard cases, repeat, and combine as a weighted sum. Boosting reduces bias, systematic error, rather than variance. It’s especially effective when a model is wrong in a <em>correctable</em> way.</p>
+</section>
+<section id="gradient-boosting-boosting-as-gradient-descent" class="level3" data-number="12.2.4">
+<h3 data-number="12.2.4" class="anchored" data-anchor-id="gradient-boosting-boosting-as-gradient-descent"><span class="header-section-number">12.2.4</span> Gradient Boosting — Boosting as Gradient Descent</h3>
+<p>Modern gradient boosting (Friedman, 1999) reframes boosting as gradient descent in function space. Ordinary gradient descent (Chapter 4) nudges a set of numbers, the weights, in the direction that most reduces the loss. Gradient boosting nudges a whole function instead: each new tree is the “step,” added to the ensemble because it points the current prediction function in the direction that reduces error the most. Instead of reweighting examples, each new tree is trained to predict the residual errors of the current ensemble: fit tree<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mrow></mrow><mn>1</mn></msub></mrow><annotation encoding="application/x-tex">_1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4511em;vertical-align:-0.15em;"></span><span class="mord"><span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> to predict <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi></mrow><annotation encoding="application/x-tex">y</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span></span></span>, compute residuals<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mrow></mrow><mn>1</mn></msub><mo>=</mo><mi>y</mi><mo>−</mo><msub><mtext>tree</mtext><mn>1</mn></msub><mo stretchy="false">(</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">_1 = y - \text{tree}_1(X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5169em;vertical-align:-0.15em;"></span><span class="mord"><span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7778em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord text"><span class="mord">tree</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span>, fit tree<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mrow></mrow><mn>2</mn></msub></mrow><annotation encoding="application/x-tex">_2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4511em;vertical-align:-0.15em;"></span><span class="mord"><span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> to predict residuals<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mrow></mrow><mn>1</mn></msub></mrow><annotation encoding="application/x-tex">_1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4511em;vertical-align:-0.15em;"></span><span class="mord"><span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>, and continue. Each tree corrects what the ensemble currently gets wrong. The ensemble converges toward the true function. The learning rate (shrinkage) controls how aggressively each tree corrects: small learning rates need more trees but generalise better.</p>
+</section>
+<section id="xgboost-and-lightgbm" class="level3" data-number="12.2.5">
+<h3 data-number="12.2.5" class="anchored" data-anchor-id="xgboost-and-lightgbm"><span class="header-section-number">12.2.5</span> XGBoost and LightGBM</h3>
+<p>XGBoost (2016, Chen &amp; Guestrin) is an engineered gradient boosting implementation adding built-in L1/L2 regularisation on leaf weights, pruning (grows trees then prunes back, rather than greedy early stopping), native handling of missing values, row/column subsampling, and parallelised split-finding. It won or placed in nearly every Kaggle tabular competition for three years after release.</p>
+<p>LightGBM (2017, Microsoft) improves training speed by growing trees leaf-wise instead of level-wise (finding whichever split reduces loss most, regardless of resulting depth), Gradient-based One-Side Sampling (keeping high-gradient examples, sampling low-gradient ones), and Exclusive Feature Bundling (merging mutually exclusive sparse features). It commonly trains 10-100x faster than XGBoost on large datasets.</p>
+<p>The key insight for a Solutions Architect: on tabular data (the vast majority of enterprise ML), gradient boosting (XGBoost or LightGBM) tends to outperform neural networks in accuracy while training faster, being easier to interpret via SHAP, and costing less to run. Benchmark against LightGBM before reaching for a deep learning solution on structured data.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>What Is SHAP?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>SHAP (SHapley Additive exPlanations) breaks a single prediction down into each feature’s contribution, in a way that’s mathematically guaranteed to add up to the actual prediction, for any model type. For a rejected loan application, SHAP can say exactly how many percentage points “low credit score” or “short employment history” each contributed, not just that the model used those features somewhere. What isn’t guaranteed everywhere is exactness of the individual numbers. Computing the true Shapley value means checking every possible subset of features, exponential in general. Tree-based ensembles are the exception: <code>TreeExplainer</code> computes exact values in polynomial time, by exploiting the tree structure directly. That’s a real part of why they’re easier to interpret in practice than a neural network of comparable accuracy, whose SHAP values come from a slower approximation instead. Book 2, Chapter 21 covers SHAP properly, including how to compute and read it.</p>
+</div>
+</div>
+</section>
+<section id="stacking-learning-how-to-combine" class="level3" data-number="12.2.6">
+<h3 data-number="12.2.6" class="anchored" data-anchor-id="stacking-learning-how-to-combine"><span class="header-section-number">12.2.6</span> Stacking — Learning How to Combine</h3>
+<p>Stacking (Wolpert, 1992) trains a meta-learner to decide how to weight the base models’ predictions, rather than averaging or majority-voting them. Train <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> base models using cross-validation, use their out-of-fold predictions as features for a meta-learner (typically logistic or ridge regression), train the meta-learner on those features against the true labels, then for new data generate base predictions and pass them to the meta-learner. Stacking is most valuable in competition settings. The complexity it adds is often not worth it in production, and, as this chapter’s Worked Example shows directly, it is not automatically better than the best individual model.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="12.3">
+<h2 data-number="12.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">12.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Reduces</th>
+<th>Risk</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Bagging</td>
+<td>Variance</td>
+<td>None inherent</td>
+<td>High-variance base learners (deep trees)</td>
+</tr>
+<tr class="even">
+<td>Random Forest</td>
+<td>Variance</td>
+<td>Slow on very wide data</td>
+<td>Robust tabular baseline</td>
+</tr>
+<tr class="odd">
+<td>Gradient Boosting</td>
+<td>Bias + Variance</td>
+<td>Overfitting if trees too deep / learning rate too high</td>
+<td>Most tabular tasks</td>
+</tr>
+<tr class="even">
+<td>Stacking</td>
+<td>Both, in principle</td>
+<td>Complexity, leakage if done wrong, no guarantee of improvement</td>
+<td>Squeezing the last percent in competitions</td>
+</tr>
+</tbody>
+</table>
+<p>Random Forests and boosted trees both work well on tabular data. But they are not interchangeable defaults. Random Forests are more forgiving of minimal tuning. Gradient boosting variants need more care, learning rate, tree depth, number of estimators, to reach their best accuracy. That same sensitivity is what lets them beat Random Forests once tuned.</p>
+</section>
+<section id="procedures" class="level2" data-number="12.4">
+<h2 data-number="12.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">12.4</span> Procedures</h2>
+<p id="proc-12-1"><strong>Procedure 12.1 (Tune <code>n_estimators</code> and <code>max_depth</code>).</strong> <em>When to use:</em> after choosing an ensemble method, to improve its accuracy.</p>
+<div id="lst-tune-sweep" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-tune-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;12.1: Sweeping n_estimators with cross-validation
+</figcaption>
+<div aria-describedby="lst-tune-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">from</span> sklearn.ensemble <span class="im">import</span> RandomForestRegressor</span>
+<span id="cb1-2"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> cross_val_score</span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="cf">for</span> n <span class="kw">in</span> [<span class="dv">50</span>, <span class="dv">100</span>, <span class="dv">200</span>, <span class="dv">300</span>]:</span>
+<span id="cb1-5">    scores <span class="op">=</span> cross_val_score(</span>
+<span id="cb1-6">        RandomForestRegressor(</span>
+<span id="cb1-7">            n_estimators<span class="op">=</span>n, random_state<span class="op">=</span><span class="dv">42</span>, n_jobs<span class="op">=-</span><span class="dv">1</span></span>
+<span id="cb1-8">        ),</span>
+<span id="cb1-9">        X_train,</span>
+<span id="cb1-10">        y_train,</span>
+<span id="cb1-11">        cv<span class="op">=</span><span class="dv">5</span>,</span>
+<span id="cb1-12">        scoring<span class="op">=</span><span class="st">'neg_root_mean_squared_error'</span>,</span>
+<span id="cb1-13">    )</span>
+<span id="cb1-14">    rmse <span class="op">=</span> <span class="op">-</span>scores.mean()</span>
+<span id="cb1-15">    <span class="bu">print</span>(<span class="ss">f'n=</span><span class="sc">{</span>n<span class="sc">:&gt;3}</span><span class="ss">  RMSE=</span><span class="sc">{</span>rmse<span class="sc">:.0f}</span><span class="ss"> ± </span><span class="sc">{</span>scores<span class="sc">.</span>std()<span class="sc">:.0f}</span><span class="ss">'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Guidance:</strong> for Random Forest, <code>n_estimators=100</code> is a safe default, and going beyond 300 rarely helps. For XGBoost/LightGBM, use more trees (500-1000) with a smaller learning rate (0.05). <code>max_depth=4</code> is a reasonable starting point for gradient boosting. Random Forest typically uses unlimited depth (<code>None</code>).</p>
+<p id="proc-12-2"><strong>Procedure 12.2 (Plot Feature Importance).</strong> <em>When to use:</em> to explain which features drive a model’s predictions.</p>
+<div id="lst-feat-importance" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-feat-importance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;12.2: Impurity-based and permutation-based feature importance
+</figcaption>
+<div aria-describedby="lst-feat-importance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="co"># Impurity-based, all sklearn ensembles</span></span>
+<span id="cb2-2">importances <span class="op">=</span> model.feature_importances_</span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="im">from</span> sklearn.inspection <span class="im">import</span> permutation_importance</span>
+<span id="cb2-5">result <span class="op">=</span> permutation_importance(</span>
+<span id="cb2-6">    model, X_test, y_test, n_repeats<span class="op">=</span><span class="dv">10</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb2-7">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> trusting impurity-based <code>.feature_importances_</code> alone. It’s biased toward high-cardinality features. Permutation importance (recomputing performance with a feature shuffled) is slower but unbiased, and should be the tiebreaker whenever the two disagree.</p>
+<p id="proc-12-3"><strong>Procedure 12.3 (Choose Between Random Forest and XGBoost/LightGBM).</strong> <em>When to use:</em> starting a new tabular modelling task.</p>
+<div id="lst-rf-vs-xgb" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rf-vs-xgb-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;12.3: Decision path for a first ensemble choice
+</figcaption>
+<div aria-describedby="lst-rf-vs-xgb-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># No time to tune?</span></span>
+<span id="cb3-2"><span class="co">#   -&gt; Random Forest (n_estimators=100, defaults work well)</span></span>
+<span id="cb3-3"><span class="co"># Training speed critical on a large dataset? -&gt; LightGBM</span></span>
+<span id="cb3-4"><span class="co"># Missing values present?</span></span>
+<span id="cb3-5"><span class="co">#   -&gt; XGBoost or LightGBM (handle natively)</span></span>
+<span id="cb3-6"><span class="co"># Need native categorical support?</span></span>
+<span id="cb3-7"><span class="co">#   -&gt; LightGBM (categorical_feature=...) or CatBoost</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-12-4"><strong>Procedure 12.4 (Build a Simple Stacking Ensemble).</strong> <em>When to use:</em> squeezing the last 0.5-1% accuracy out of a set of already-good models, not as a default choice.</p>
+<div id="lst-stacking" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-stacking-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;12.4: Stacking with out-of-fold predictions to avoid leakage
+</figcaption>
+<div aria-describedby="lst-stacking-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> cross_val_predict, KFold</span>
+<span id="cb4-2"><span class="im">from</span> sklearn.linear_model <span class="im">import</span> Ridge</span>
+<span id="cb4-3"></span>
+<span id="cb4-4">kf <span class="op">=</span> KFold(n_splits<span class="op">=</span><span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb4-5">base_models <span class="op">=</span> {</span>
+<span id="cb4-6">    <span class="st">'rf'</span>: RandomForestRegressor(</span>
+<span id="cb4-7">        n_estimators<span class="op">=</span><span class="dv">100</span>, random_state<span class="op">=</span><span class="dv">42</span>, n_jobs<span class="op">=-</span><span class="dv">1</span></span>
+<span id="cb4-8">    ),</span>
+<span id="cb4-9">    <span class="st">'lgb'</span>: lgb.LGBMRegressor(</span>
+<span id="cb4-10">        n_estimators<span class="op">=</span><span class="dv">100</span>, learning_rate<span class="op">=</span><span class="fl">0.1</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb4-11">    ),</span>
+<span id="cb4-12">}</span>
+<span id="cb4-13"></span>
+<span id="cb4-14">oof, test_preds <span class="op">=</span> {}, {}</span>
+<span id="cb4-15"><span class="cf">for</span> name, model <span class="kw">in</span> base_models.items():</span>
+<span id="cb4-16">    oof[name] <span class="op">=</span> cross_val_predict(model, X_train, y_train, cv<span class="op">=</span>kf)</span>
+<span id="cb4-17">    model.fit(X_train, y_train)</span>
+<span id="cb4-18">    test_preds[name] <span class="op">=</span> model.predict(X_test)</span>
+<span id="cb4-19"></span>
+<span id="cb4-20">meta <span class="op">=</span> Ridge(alpha<span class="op">=</span><span class="fl">1.0</span>).fit(</span>
+<span id="cb4-21">    np.column_stack(<span class="bu">list</span>(oof.values())), y_train</span>
+<span id="cb4-22">)</span>
+<span id="cb4-23">y_pred <span class="op">=</span> meta.predict(</span>
+<span id="cb4-24">    np.column_stack(<span class="bu">list</span>(test_preds.values()))</span>
+<span id="cb4-25">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> training the meta-learner on the base models’ predictions from the <em>same</em> data the base models were trained on. That causes leakage: always use out-of-fold predictions (<code>cross_val_predict</code>), never <code>.predict()</code> on the training set.</p>
+</section>
+<section id="worked-example" class="level2" data-number="12.5">
+<h2 data-number="12.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">12.5</span> Worked Example</h2>
+<p>Racing four ensemble methods on a synthetic house-price dataset (2,000 houses, 14 features spanning square footage, room and bathroom counts, lot size, age, garage, pool, floors, distance to school, local crime rate, neighbourhood, condition, style, and heating type; an 80/20 train/test split) gives a direct, measured comparison rather than a textbook ranking:</p>
+<div id="lst-ensemble-race" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-ensemble-race-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;12.5: Training and benchmarking four ensemble methods
+</figcaption>
+<div aria-describedby="lst-ensemble-race-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">models <span class="op">=</span> {</span>
+<span id="cb5-2">    <span class="st">'Random Forest'</span>: RandomForestRegressor(</span>
+<span id="cb5-3">        n_estimators<span class="op">=</span><span class="dv">200</span>, random_state<span class="op">=</span><span class="dv">42</span>, n_jobs<span class="op">=-</span><span class="dv">1</span></span>
+<span id="cb5-4">    ),</span>
+<span id="cb5-5">    <span class="st">'Gradient Boosting'</span>: GradientBoostingRegressor(</span>
+<span id="cb5-6">        n_estimators<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb5-7">        learning_rate<span class="op">=</span><span class="fl">0.1</span>,</span>
+<span id="cb5-8">        max_depth<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb5-9">        random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb5-10">    ),</span>
+<span id="cb5-11">    <span class="st">'XGBoost'</span>: xgb.XGBRegressor(</span>
+<span id="cb5-12">        n_estimators<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb5-13">        learning_rate<span class="op">=</span><span class="fl">0.1</span>,</span>
+<span id="cb5-14">        max_depth<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb5-15">        random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb5-16">    ),</span>
+<span id="cb5-17">    <span class="st">'LightGBM'</span>: lgb.LGBMRegressor(</span>
+<span id="cb5-18">        n_estimators<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb5-19">        learning_rate<span class="op">=</span><span class="fl">0.1</span>,</span>
+<span id="cb5-20">        max_depth<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb5-21">        random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb5-22">    ),</span>
+<span id="cb5-23">}</span>
+<span id="cb5-24"><span class="cf">for</span> name, model <span class="kw">in</span> models.items():</span>
+<span id="cb5-25">    model.fit(X_train, y_train)</span>
+<span id="cb5-26">    <span class="co"># time and score each model</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Measured results:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>RMSE</th>
+<th>R²</th>
+<th>Train time</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Random Forest</td>
+<td>$45,502</td>
+<td>0.8451</td>
+<td>0.15s</td>
+</tr>
+<tr class="even">
+<td>Gradient Boosting</td>
+<td>$28,595</td>
+<td>0.9388</td>
+<td>0.47s</td>
+</tr>
+<tr class="odd">
+<td>XGBoost</td>
+<td>$28,873</td>
+<td>0.9376</td>
+<td>0.68s</td>
+</tr>
+<tr class="even">
+<td>LightGBM</td>
+<td>$28,323</td>
+<td>0.9400</td>
+<td><strong>0.06s</strong></td>
+</tr>
+</tbody>
+</table>
+<p>LightGBM is both the fastest to train (0.06s, roughly 2.5x faster than Random Forest and 8-11x faster than the other two boosted methods) and the most accurate here, edging out XGBoost’s $28,873 and Gradient Boosting’s $28,595. The “start with LightGBM” guidance earns its keep on both counts in this run, not just speed. Random Forest, with no boosting at all, is roughly $17,000 RMSE behind the boosted methods, a direct illustration of boosting’s bias-reduction advantage over bagging on a task like this.</p>
+<p>Feature importance (Random Forest) confirms <code>sqft</code> dominates as designed (0.551), with <code>neighborhood</code> a clear second (0.160). Below that the picture is less tidy than a designed dataset might suggest: <code>n_rooms</code> (0.065) and <code>school_dist</code> (0.060) both edge out <code>condition</code> (0.036), and <code>lot_size</code> (0.033) isn’t negligible either, even though the price formula weights it far more lightly than square footage. That’s a useful reminder that a feature’s importance to the model and its weight in the underlying formula aren’t the same thing: which features a tree-based model finds useful depends on how much separable signal they carry in this specific sample, not just how heavily they’re weighted in the process that generated the data.</p>
+<p>Sweeping <code>n_estimators</code> from 5 to 500 shows the two algorithms converging differently. LightGBM’s RMSE drops sharply from $87,831 at 5 trees to $28,323 at 200 trees before flattening. Random Forest is already within a few thousand dollars of its final RMSE at 25 trees ($47,511 vs.&nbsp;$45,502 at 200). Bagging’s variance reduction saturates fast, while boosting needs enough rounds to substantially reduce bias.</p>
+<p>Finally, stacking a Random Forest and a LightGBM model with a Ridge meta-learner produced RMSE $29,535 (R² 0.9347). That’s <em>worse</em> than solo LightGBM ($28,323), despite LightGBM being one of the two base models feeding the stack. The meta-learner’s own weights explain why: Ridge assigns LightGBM a weight of 1.209 and Random Forest a weight of <em>-0.184</em>, meaning it learned to partly subtract Random Forest’s much weaker predictions rather than blend them in. Even with that correction, including a clearly weaker model cost more than it gave back. This is a real, measured result, not a contrived counterexample. Stacking a strong model together with a much weaker one has no guarantee of beating the strong model alone. Procedure 12.4’s “not a default choice” framing is exactly this finding in practice, not a hedge.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># XGBoost is a SageMaker built-in algorithm - no custom</span></span>
+<span id="cb6-2"><span class="co"># training script needed</span></span>
+<span id="cb6-3"><span class="im">import</span> sagemaker</span>
+<span id="cb6-4"><span class="im">from</span> sagemaker.estimator <span class="im">import</span> Estimator</span>
+<span id="cb6-5"></span>
+<span id="cb6-6">xgb_estimator <span class="op">=</span> Estimator(</span>
+<span id="cb6-7">    image_uri<span class="op">=</span>sagemaker.image_uris.retrieve(</span>
+<span id="cb6-8">        <span class="st">"xgboost"</span>, region, version<span class="op">=</span><span class="st">"1.7-1"</span></span>
+<span id="cb6-9">    ),</span>
+<span id="cb6-10">    instance_type<span class="op">=</span><span class="st">"ml.m5.xlarge"</span>,</span>
+<span id="cb6-11">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb6-12">    hyperparameters<span class="op">=</span>{</span>
+<span id="cb6-13">        <span class="st">"num_round"</span>: <span class="dv">200</span>, <span class="st">"max_depth"</span>: <span class="dv">4</span>, <span class="st">"eta"</span>: <span class="fl">0.1</span></span>
+<span id="cb6-14">    },</span>
+<span id="cb6-15">)</span>
+<span id="cb6-16">xgb_estimator.fit({</span>
+<span id="cb6-17">    <span class="st">"train"</span>: train_s3_uri, <span class="st">"validation"</span>: val_s3_uri</span>
+<span id="cb6-18">})</span></code></pre></div>
+<p><strong>When to prefer the built-in SageMaker XGBoost algorithm:</strong> when the team wants managed infrastructure, built-in distributed training for large datasets, and hyperparameter tuning jobs, without maintaining a custom training container. The trade-off is less flexibility than a hand-written <code>xgb.XGBRegressor</code> script for unusual preprocessing or custom objectives.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="12.6">
+<h2 data-number="12.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">12.6</span> History and Further Reading</h2>
+<p>Murphy’s Introduction, sections 18.1-18.4, gives the formal treatment of bagging, random forests, and boosting <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Thakur, Ch. 6, covers practical gradient boosting with code <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Burkov, Ch. 7, gives a crisp ensemble overview <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Géron’s <em>Hands-On Machine Learning</em>, Ch. 7, covers bagging, random forests, and boosting (AdaBoost and gradient boosting) together with the Scikit-Learn code for each <span class="citation" data-cites="geron2019hands">(<a href="#ref-geron2019hands" role="doc-biblioref">Géron 2019</a>)</span>. The XGBoost paper is worth reading for the engineering behind its speed <span class="citation" data-cites="chen2016xgboost">(<a href="#ref-chen2016xgboost" role="doc-biblioref">Chen and Guestrin 2016</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="12.7">
+<h2 data-number="12.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">12.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 11’s decision trees as base learners, and on Chapter 13’s cross-validation, which is critical for stacking done correctly. It enables Chapter 14’s feature importance work and Chapter 16’s evaluation of ensemble models. It’s often confused with neural networks as competing options for tabular data. Gradient boosting usually wins on tabular data. Neural networks win on images, text, and audio, a distinction this book returns to from Chapter 27 onward.</p>
+</section>
+<section id="exercises" class="level2" data-number="12.8">
+<h2 data-number="12.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">12.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-12-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in your own words why bagging reduces variance without increasing bias, using the <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>σ</mi><mn>2</mn></msup><mi mathvariant="normal">/</mi><mi>B</mi></mrow><annotation encoding="application/x-tex">\sigma^2/B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span></span></span></span> relationship from this chapter’s Exposition.</p></li>
+<li id="ex-12-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State which of bagging or boosting each of the following targets: (a) a model that is systematically wrong on a specific subgroup of examples; (b) a model whose predictions change wildly with small changes to the training data.</p></li>
+<li id="ex-12-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-ensemble-race" class="quarto-xref">Listing&nbsp;<span>12.5</span></a>’s setup, explain why Random Forest’s RMSE barely changes between <code>n_estimators=200</code> and <code>n_estimators=500</code> ($45,502 vs.&nbsp;$45,514) while LightGBM’s RMSE at the same two settings keeps improving slightly, from $28,323 to $28,159. What does this suggest about each method’s sensitivity to over-provisioning trees?</p></li>
+<li id="ex-12-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-stacking" class="quarto-xref">Listing&nbsp;<span>12.4</span></a> as a base, add XGBoost as a third base model to the stack. State, from this chapter’s own measured numbers, whether you’d expect the resulting stack to beat solo XGBoost’s $28,873 RMSE.</p></li>
+<li id="ex-12-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer’s data science team reports “we stacked five models and it’s more accurate than any of them individually.” Using this chapter’s Worked Example, write the two or three sentences you’d say before accepting that claim.</p></li>
+<li id="ex-12-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague argues Random Forest should always be tried before XGBoost “because it’s simpler.” Using Procedure 12.3 and this chapter’s measured accuracy gap (Random Forest’s RMSE roughly 58% higher than XGBoost’s), write the case for when that advice is right and when it isn’t.</p></li>
+<li id="ex-12-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the XGBoost paper’s (Chen &amp; Guestrin, 2016) abstract and introduction. Identify one engineering optimisation it describes that this chapter’s Trade-offs section does not mention. Explain what problem it solves.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="12.9">
+<h2 data-number="12.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">12.9</span> Mental Model</h2>
+<p>A Random Forest asks: what do a hundred independent experts, each seeing a slightly different version of the data, collectively think? Gradient boosting asks: what’s the smallest correction I can make to my current best guess? Stacking asks: which expert is right in which situation? But it still has to live with whichever experts were invited into the room. That’s why including a much weaker expert, as this chapter’s Worked Example did, can make stacking lose to its own best individual member.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-chen2016xgboost" class="csl-entry" role="listitem">
+Chen, Tianqi, and Carlos Guestrin. 2016. <span>“XGBoost: A Scalable Tree Boosting System.”</span> <em>Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</em> (San Francisco, CA), 785–94.
+</div>
+<div id="ref-geron2019hands" class="csl-entry" role="listitem">
+Géron, Aurélien. 2019. <em>Hands-on Machine Learning with Scikit-Learn, Keras, and TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

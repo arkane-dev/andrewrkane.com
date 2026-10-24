@@ -1,0 +1,280 @@
+<p>Every machine learning algorithm has knobs, levers, and dials that must be set before training starts. How many trees. How deep. How fast the model should learn. These hyperparameters aren’t learned from data. They’re chosen. Choose poorly and a potentially excellent algorithm underperforms. Choose wisely and a merely adequate algorithm will beat a badly-tuned state-of-the-art one. This chapter is about searching that space systematically, since there’s no derivative of “validation accuracy with respect to number of trees” to follow.</p>
+<section id="motivation" class="level2" data-number="17.1">
+<h2 data-number="17.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">17.1</span> Motivation</h2>
+<p>Hyperparameter optimisation is a search problem. There’s a function that can be evaluated (train a model, measure validation performance) but not differentiated, in a space that’s high-dimensional and expensive to explore. Each candidate configuration means training and validating a full model. In practice, random search beats grid search for the same compute budget. That’s counterintuitive until you understand the reason: hello again, dimensionality. In high-dimensional spaces most hyperparameters barely matter and a few dominate, so grid search wastes trials on exhaustive coverage of irrelevant dimensions. Random search samples the important ones more densely by not being tied to a fixed grid at all.</p>
+</section>
+<section id="exposition" class="level2" data-number="17.2">
+<h2 data-number="17.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">17.2</span> Exposition</h2>
+<section id="parameters-vs.-hyperparameters" class="level3" data-number="17.2.1">
+<h3 data-number="17.2.1" class="anchored" data-anchor-id="parameters-vs.-hyperparameters"><span class="header-section-number">17.2.1</span> Parameters vs.&nbsp;Hyperparameters</h3>
+<p>Parameters (model weights, tree split thresholds) are learned during training via optimisation. Hyperparameters (learning rate, <code>n_estimators</code>, <code>max_depth</code>) are set before training begins and aren’t differentiable with respect to the training process. They have to be searched, not solved for.</p>
+</section>
+<section id="search-strategies" class="level3" data-number="17.2.2">
+<h3 data-number="17.2.2" class="anchored" data-anchor-id="search-strategies"><span class="header-section-number">17.2.2</span> Search Strategies</h3>
+<p><strong>Grid search</strong> enumerates every combination in a defined grid. Five values across four hyperparameters is <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>5</mn><mn>4</mn></msup><mo>=</mo><mn>625</mn></mrow><annotation encoding="application/x-tex">5^4 = 625</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">5</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">4</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">625</span></span></span></span> training runs. Adding a fifth hyperparameter with five values pushes that to 3,125. This is the curse of dimensionality applied to hyperparameter search. It’s only practical with three or fewer hyperparameters and small grids.</p>
+<p><strong>Random search</strong> <span class="citation" data-cites="bergstra2012randomsearch">(<a href="#ref-bergstra2012randomsearch" role="doc-biblioref">Bergstra and Bengio 2012</a>)</span> samples random combinations from the search space instead of iterating through a fixed grid. With the same budget as grid search, it covers more of the dimensions that matter. If most hyperparameters are unimportant, then grid search wastes most of its budget holding the few important ones fixed. Random search doesn’t have that structural weakness. That paper is one of the most influential practical ML papers of the last fifteen years. It’s about 23 pages, and dense. For a Solutions Architect, understanding the impact is much more important than reading the paper.</p>
+<p><strong>Bayesian optimisation</strong> builds a probabilistic surrogate model of the objective function. That surrogate is a cheap stand-in for “validation score as a function of hyperparameters,” fast to query, unlike the real thing: training and validating an actual model. It uses that surrogate to decide where to sample next. It trades off exploitation (sample near the best known point) against exploration (sample where uncertainty is high). Two surrogate choices are common. A Gaussian Process models the objective directly, and grows more confident near points already tried. A Tree-structured Parzen Estimator (TPE) instead models which hyperparameter values tend to produce good results versus bad ones. TPE is the default surrogate used by <strong>Optuna</strong>, the hyperparameter-search library this chapter’s procedures build on. The surrogate updates after every evaluation. This is more efficient than random search when each evaluation is expensive. Optuna also gives automatic pruning (stopping bad trials early using intermediate results). Pruning is orthogonal to the search strategy. It can be layered onto random search or Bayesian optimisation.</p>
+</section>
+<section id="the-validation-set-is-sacred" class="level3" data-number="17.2.3">
+<h3 data-number="17.2.3" class="anchored" data-anchor-id="the-validation-set-is-sacred"><span class="header-section-number">17.2.3</span> The Validation Set Is Sacred</h3>
+<p>During hyperparameter search, the validation set scores every candidate configuration and becomes part of the optimisation process. That means the reported validation score after tuning is biased upward. Many configurations have been tried and the best-scoring one on that validation set was chosen. This is a selection process, not a neutral estimate. A held-out test set that never touches any part of the search is required to get an honest final estimate of performance.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="17.3">
+<h2 data-number="17.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">17.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>Pros</th>
+<th>Cons</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Grid Search</td>
+<td>Exhaustive over the grid, reproducible</td>
+<td>Exponential in hyperparameter count</td>
+<td>≤3 hyperparameters, fast model</td>
+</tr>
+<tr class="even">
+<td>Random Search</td>
+<td>Simple, parallelisable, surprisingly effective</td>
+<td>No guidance from past trials</td>
+<td>Most situations, good default</td>
+</tr>
+<tr class="odd">
+<td>Bayesian (Optuna)</td>
+<td>Most sample-efficient, prunes bad trials</td>
+<td>Overhead maintaining the surrogate</td>
+<td>Expensive-to-evaluate models</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="procedures" class="level2" data-number="17.4">
+<h2 data-number="17.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">17.4</span> Procedures</h2>
+<p id="proc-17-1"><strong>Procedure 17.1 (Define a Search Space).</strong> <em>When to use:</em> before running any search strategy.</p>
+<div id="lst-search-space" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-search-space-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;17.1: Grid, distribution, and Optuna search-space definitions
+</figcaption>
+<div aria-describedby="lst-search-space-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="co"># Grid: discrete lists</span></span>
+<span id="cb1-2">param_grid <span class="op">=</span> {</span>
+<span id="cb1-3">    <span class="st">'n_estimators'</span>: [<span class="dv">100</span>, <span class="dv">200</span>, <span class="dv">300</span>],</span>
+<span id="cb1-4">    <span class="st">'max_depth'</span>: [<span class="dv">3</span>, <span class="dv">5</span>, <span class="dv">7</span>],</span>
+<span id="cb1-5">}</span>
+<span id="cb1-6"></span>
+<span id="cb1-7"><span class="co"># Random: distributions</span></span>
+<span id="cb1-8"><span class="im">from</span> scipy.stats <span class="im">import</span> uniform, randint</span>
+<span id="cb1-9">param_distributions <span class="op">=</span> {</span>
+<span id="cb1-10">    <span class="st">'n_estimators'</span>: randint(<span class="dv">50</span>, <span class="dv">500</span>),</span>
+<span id="cb1-11">    <span class="st">'learning_rate'</span>: uniform(<span class="fl">0.01</span>, <span class="fl">0.29</span>),</span>
+<span id="cb1-12">}</span>
+<span id="cb1-13"></span>
+<span id="cb1-14"><span class="co"># Optuna: suggest_* calls inside the objective function</span></span>
+<span id="cb1-15"><span class="kw">def</span> objective(trial):</span>
+<span id="cb1-16">    n_estimators <span class="op">=</span> trial.suggest_int(<span class="st">'n_estimators'</span>, <span class="dv">50</span>, <span class="dv">500</span>)</span>
+<span id="cb1-17">    lr <span class="op">=</span> trial.suggest_float(<span class="st">'learning_rate'</span>, <span class="fl">0.01</span>, <span class="fl">0.3</span>, log<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-18">    <span class="co"># ... train and return the metric</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-17-2"><strong>Procedure 17.2 (Run <code>GridSearchCV</code>).</strong> <em>When to use:</em> three or fewer hyperparameters, fast model, small grid.</p>
+<div id="lst-grid-search" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-grid-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;17.2: Exhaustive grid search
+</figcaption>
+<div aria-describedby="lst-grid-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> GridSearchCV</span>
+<span id="cb2-2"></span>
+<span id="cb2-3">gs <span class="op">=</span> GridSearchCV(</span>
+<span id="cb2-4">    estimator<span class="op">=</span>model,</span>
+<span id="cb2-5">    param_grid<span class="op">=</span>param_grid,</span>
+<span id="cb2-6">    cv<span class="op">=</span><span class="dv">5</span>,</span>
+<span id="cb2-7">    scoring<span class="op">=</span><span class="st">'roc_auc'</span>,</span>
+<span id="cb2-8">    n_jobs<span class="op">=-</span><span class="dv">1</span>,</span>
+<span id="cb2-9">)</span>
+<span id="cb2-10">gs.fit(X_train, y_train)</span>
+<span id="cb2-11">best_model <span class="op">=</span> gs.best_estimator_</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-17-3"><strong>Procedure 17.3 (Run <code>RandomizedSearchCV</code>).</strong> <em>When to use:</em> the default for most situations: same API, wider coverage for the same budget.</p>
+<div id="lst-random-search" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-random-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;17.3: Random search over distributions
+</figcaption>
+<div aria-describedby="lst-random-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> RandomizedSearchCV</span>
+<span id="cb3-2"></span>
+<span id="cb3-3">rs <span class="op">=</span> RandomizedSearchCV(</span>
+<span id="cb3-4">    model,</span>
+<span id="cb3-5">    param_distributions,</span>
+<span id="cb3-6">    n_iter<span class="op">=</span><span class="dv">50</span>,</span>
+<span id="cb3-7">    cv<span class="op">=</span><span class="dv">5</span>,</span>
+<span id="cb3-8">    scoring<span class="op">=</span><span class="st">'roc_auc'</span>,</span>
+<span id="cb3-9">    n_jobs<span class="op">=-</span><span class="dv">1</span>,</span>
+<span id="cb3-10">    random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb3-11">)</span>
+<span id="cb3-12">rs.fit(X_train, y_train)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-17-4"><strong>Procedure 17.4 (Set Up an Optuna Study).</strong> <em>When to use:</em> expensive models where each evaluation costs real time.</p>
+<div id="lst-optuna-study" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-optuna-study-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;17.4: TPE-based Bayesian search with Optuna
+</figcaption>
+<div aria-describedby="lst-optuna-study-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> optuna</span>
+<span id="cb4-2">optuna.logging.set_verbosity(optuna.logging.WARNING)</span>
+<span id="cb4-3"></span>
+<span id="cb4-4">study <span class="op">=</span> optuna.create_study(</span>
+<span id="cb4-5">    direction<span class="op">=</span><span class="st">'maximize'</span>,</span>
+<span id="cb4-6">    sampler<span class="op">=</span>optuna.samplers.TPESampler(seed<span class="op">=</span><span class="dv">42</span>),</span>
+<span id="cb4-7">)</span>
+<span id="cb4-8">study.optimize(objective, n_trials<span class="op">=</span><span class="dv">100</span>)</span>
+<span id="cb4-9"></span>
+<span id="cb4-10"><span class="bu">print</span>(study.best_params, study.best_value)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> evaluating the final model on the same validation folds used during the search and reporting that number as “the” performance. Always hold out an untouched test set and evaluate on it exactly once, after the search concludes.</p>
+</section>
+<section id="worked-example" class="level2" data-number="17.5">
+<h2 data-number="17.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">17.5</span> Worked Example</h2>
+<p>Running grid search, random search, and Optuna’s TPE sampler head-to-head on a synthetic, harder binary classification problem: 3,000 samples, 40 features, with label noise and overlapping classes, built so overfitting is a real risk. All three tune the same six XGBoost hyperparameters: <code>n_estimators</code>, <code>max_depth</code>, <code>learning_rate</code>, <code>subsample</code>, <code>colsample_bytree</code>, and <code>min_child_weight</code>. Grid search only has room for two values at the edge of each range. That’s <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>2</mn><mn>6</mn></msup><mo>=</mo><mn>64</mn></mrow><annotation encoding="application/x-tex">2^6 = 64</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">2</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">6</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">64</span></span></span></span> corner combinations. Random search and Optuna get the same 64-evaluation budget. But they sample continuously across the same six ranges, including the interior grid search can never reach:</p>
+<div id="lst-search-comparison" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-search-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;17.5: Grid, random, and Optuna search under a matched 64-evaluation budget across six hyperparameters
+</figcaption>
+<div aria-describedby="lst-search-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">param_grid <span class="op">=</span> {</span>
+<span id="cb5-2">    <span class="st">'n_estimators'</span>: [<span class="dv">100</span>, <span class="dv">1000</span>], <span class="st">'max_depth'</span>: [<span class="dv">2</span>, <span class="dv">12</span>],</span>
+<span id="cb5-3">    <span class="st">'learning_rate'</span>: [<span class="fl">0.01</span>, <span class="fl">0.3</span>], <span class="st">'subsample'</span>: [<span class="fl">0.5</span>, <span class="fl">1.0</span>],</span>
+<span id="cb5-4">    <span class="st">'colsample_bytree'</span>: [<span class="fl">0.5</span>, <span class="fl">1.0</span>], <span class="st">'min_child_weight'</span>: [<span class="dv">1</span>, <span class="dv">10</span>],</span>
+<span id="cb5-5">}  <span class="co"># two values per dimension: 2**6 = 64 corner combinations</span></span>
+<span id="cb5-6">gs <span class="op">=</span> GridSearchCV(model, param_grid, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'roc_auc'</span>, n_jobs<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="cb5-7"></span>
+<span id="cb5-8">param_dist <span class="op">=</span> {</span>
+<span id="cb5-9">    <span class="st">'n_estimators'</span>: randint(<span class="dv">100</span>, <span class="dv">1001</span>), <span class="st">'max_depth'</span>: randint(<span class="dv">2</span>, <span class="dv">13</span>),</span>
+<span id="cb5-10">    <span class="st">'learning_rate'</span>: uniform(<span class="fl">0.01</span>, <span class="fl">0.29</span>), <span class="st">'subsample'</span>: uniform(<span class="fl">0.5</span>, <span class="fl">0.5</span>),</span>
+<span id="cb5-11">    <span class="st">'colsample_bytree'</span>: uniform(<span class="fl">0.5</span>, <span class="fl">0.5</span>), <span class="st">'min_child_weight'</span>: randint(<span class="dv">1</span>, <span class="dv">11</span>),</span>
+<span id="cb5-12">}</span>
+<span id="cb5-13">rs <span class="op">=</span> RandomizedSearchCV(</span>
+<span id="cb5-14">    model, param_dist, n_iter<span class="op">=</span><span class="dv">64</span>, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'roc_auc'</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb5-15">)</span>
+<span id="cb5-16"></span>
+<span id="cb5-17">study.optimize(objective, n_trials<span class="op">=</span><span class="dv">64</span>)  <span class="co"># objective samples the same six ranges</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Measured results:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>Best CV AUC</th>
+<th>Test AUC</th>
+<th>Wall time</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Grid search</td>
+<td>0.9185</td>
+<td>0.8933</td>
+<td>55.5s</td>
+</tr>
+<tr class="even">
+<td>Random search</td>
+<td>0.9198</td>
+<td>0.8942</td>
+<td>18.5s</td>
+</tr>
+<tr class="odd">
+<td>Optuna (TPE)</td>
+<td><strong>0.9225</strong></td>
+<td><strong>0.8949</strong></td>
+<td>171.5s</td>
+</tr>
+</tbody>
+</table>
+<p>This time the measurement matches the theory it’s testing. Random search beats grid search on both CV AUC (0.9198 vs.&nbsp;0.9185) and test AUC (0.8942 vs.&nbsp;0.8933). It’s a modest edge, but a consistent one. It comes from a real structural weakness in the grid. With only two values per dimension, every one of grid search’s 64 combinations sits at a corner of the search space: max or min <code>subsample</code>, max or min <code>max_depth</code>, and so on, in every combination. It can never place a trial in the interior, where the best setting for a hyperparameter often sits. Random search and Optuna sample continuously. They can reach the interior. Optuna’s TPE sampler does best of the three on both metrics: CV AUC 0.9225, test AUC 0.8949. That’s what the Trade-offs table predicts for the one strategy that uses past trials to guide the next one, instead of sampling blind.</p>
+<p>Optuna’s full 64-trial run also took the longest: 171.5 seconds, against random search’s 18.5 and grid’s 55.5. Judged on that number alone, Optuna looks like the expensive choice. But its real advantage isn’t wall time at a matched budget. It’s needing fewer evaluations to reach a given quality. Tracked trial by trial, Optuna reached random search’s final CV AUC (0.9198) after just 5 trials, in 5.7 seconds. That’s faster than random search’s full run, and more than ten times faster than grid’s. This is the sample efficiency the Trade-offs table promises for expensive-to-evaluate models. Stop Optuna once it’s caught up, and it wins on accuracy and time both. Run it to a budget sized for a cruder strategy instead, and its overhead sits there with nothing to show for it.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker.tuner <span class="im">import</span> (</span>
+<span id="cb6-2">    HyperparameterTuner,</span>
+<span id="cb6-3">    IntegerParameter,</span>
+<span id="cb6-4">    ContinuousParameter,</span>
+<span id="cb6-5">)</span>
+<span id="cb6-6"></span>
+<span id="cb6-7">tuner <span class="op">=</span> HyperparameterTuner(</span>
+<span id="cb6-8">    estimator<span class="op">=</span>estimator,</span>
+<span id="cb6-9">    objective_metric_name<span class="op">=</span><span class="st">'validation:auc'</span>,</span>
+<span id="cb6-10">    hyperparameter_ranges<span class="op">=</span>{</span>
+<span id="cb6-11">        <span class="st">'n_estimators'</span>: IntegerParameter(<span class="dv">50</span>, <span class="dv">500</span>),</span>
+<span id="cb6-12">        <span class="st">'max_depth'</span>: IntegerParameter(<span class="dv">2</span>, <span class="dv">10</span>),</span>
+<span id="cb6-13">        <span class="st">'learning_rate'</span>: ContinuousParameter(<span class="fl">0.01</span>, <span class="fl">0.3</span>),</span>
+<span id="cb6-14">    },</span>
+<span id="cb6-15">    max_jobs<span class="op">=</span><span class="dv">50</span>, max_parallel_jobs<span class="op">=</span><span class="dv">5</span>, strategy<span class="op">=</span><span class="st">'Bayesian'</span>,</span>
+<span id="cb6-16">)</span>
+<span id="cb6-17">tuner.fit({<span class="st">'train'</span>: train_data_s3})</span></code></pre></div>
+<p><strong>When to prefer SageMaker Hyperparameter Tuning:</strong> when the model takes hours to train and the search needs to parallelise across managed instances. For models that train in seconds to minutes (like this chapter’s Worked Example), Optuna running locally is faster and cheaper than provisioning a fleet of training jobs.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="17.6">
+<h2 data-number="17.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">17.6</span> History and Further Reading</h2>
+<p>Bergstra and Bengio’s “Random Search for Hyper-Parameter Optimization” is the paper that established random search as the strong practical default <span class="citation" data-cites="bergstra2012randomsearch">(<a href="#ref-bergstra2012randomsearch" role="doc-biblioref">Bergstra and Bengio 2012</a>)</span>. Thakur, Ch. 7, covers practical hyperparameter tuning with code <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Géron’s <em>Hands-On Machine Learning</em>, Ch. 2, shows GridSearchCV and RandomizedSearchCV directly on a full pipeline. It shows the mechanics behind the random-search argument above <span class="citation" data-cites="geron2019hands">(<a href="#ref-geron2019hands" role="doc-biblioref">Géron 2019</a>)</span>. Murphy’s Introduction, Ch. 5.3, gives the Bayesian optimisation formalism <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="17.7">
+<h2 data-number="17.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">17.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 13’s cross-validation: proper validation is what scores each candidate. It also builds on Chapter 16’s model evaluation: the metric being optimised during search matters as much as the search strategy. It enables the ensemble hyperparameters from Chapter 12 (<code>n_estimators</code>, <code>max_depth</code>) to be tuned rather than guessed. It’s often confused with feature selection: hyperparameter search asks what settings make an algorithm perform best. Feature selection asks what inputs make it perform best. Different questions about different things.</p>
+</section>
+<section id="exercises" class="level2" data-number="17.8">
+<h2 data-number="17.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">17.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-17-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain why grid search over 5 hyperparameters with 5 values each needs <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>5</mn><mn>5</mn></msup><mo>=</mo><mn>3,125</mn></mrow><annotation encoding="application/x-tex">5^5 = 3{,}125</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">5</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">5</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">3</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">125</span></span></span></span> training runs. Explain why that number would not shrink even if only 2 of the 5 hyperparameters mattered.</p></li>
+<li id="ex-17-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State which search strategy is the reasonable default for: (a) tuning 2 hyperparameters on a model that trains in under a second; (b) tuning 8 hyperparameters on a neural network that takes 20 minutes per training run.</p></li>
+<li id="ex-17-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-search-comparison" class="quarto-xref">Listing&nbsp;<span>17.5</span></a>’s measured results, compute the percentage-point gap between grid search’s and random search’s test AUC (0.8933 vs.&nbsp;0.8942), and explain what about the grid’s construction accounts for it.</p></li>
+<li id="ex-17-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 17.4, sketch how you would add pruning to the Optuna study from this chapter’s Worked Example if XGBoost’s training reported intermediate validation AUC after every 10 boosting rounds, using <code>optuna.pruners.MedianPruner</code>.</p></li>
+<li id="ex-17-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague argues Optuna should always be used “because it’s the most sample-efficient.” Using this chapter’s measured trial counts and times (Optuna matched random search’s final score in 5 trials and 5.7 seconds, but its full 64-trial run took 171.5 seconds against random search’s 18.5), write the two or three sentences you’d say back about when that advice is right and when it isn’t.</p></li>
+<li id="ex-17-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team reports “we tuned hyperparameters and our validation AUC went from 0.91 to 0.97” as the headline result. Using this chapter’s Validation Set Is Sacred section, write the question you’d ask before accepting that 0.97 figure.</p></li>
+<li id="ex-17-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Bergstra and Bengio (2012) abstract. Identify the specific dimensionality condition under which they show random search’s advantage over grid search, and relate it to why this chapter’s own six-hyperparameter, corners-only grid comparison showed the predicted gap.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="17.9">
+<h2 data-number="17.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">17.9</span> Mental Model</h2>
+<p>Hyperparameter optimisation is like wine tasting: searching a space of configurations for the ones that perform well on a validation set, without being able to taste every bottle. Grid search tries every wine on the menu, in a fixed order. That’s exactly its problem: a long menu takes forever to get through. Random search grabs bottles at random. Bayesian optimisation asks the sommelier to suggest the next bottle, based on which ones were liked before. That’s an advantage when there are a lot of bottles and tasting each one is expensive. It doesn’t matter at all when the menu is short.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-bergstra2012randomsearch" class="csl-entry" role="listitem">
+Bergstra, James, and Yoshua Bengio. 2012. <span>“Random Search for Hyper-Parameter Optimization.”</span> <em>Journal of Machine Learning Research</em> 13: 281–305.
+</div>
+<div id="ref-geron2019hands" class="csl-entry" role="listitem">
+Géron, Aurélien. 2019. <em>Hands-on Machine Learning with Scikit-Learn, Keras, and TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

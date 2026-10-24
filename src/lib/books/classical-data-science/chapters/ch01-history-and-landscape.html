@@ -1,0 +1,282 @@
+<p>For most of the 20th century, making predictions from data required a domain expert with intuition built over decades, or a statistician with a specific model already in mind. Neither scaled. The question the last 80 years of AI and data science have been trying to answer is: can machines learn patterns from data on their own, without being told the rules? Before we start to answer that question, we need to orient ourselves. This chapter is our map. It spans time and space: where the field came from, what it looks like today, and how the roles in it fit together. It’s the grounding the rest of this book relies on.</p>
+<p>This chapter has no AWS SageMaker Notes sidebar. We’re making a map, not doing the work. The cloud-specific material begins at <a href="/books/classical-data-science/ch02-business-problem-framing" class="quarto-xref"><span>Chapter 2</span></a>, once there’s something concrete to deploy.</p>
+<section id="motivation" class="level2" data-number="1.1">
+<h2 data-number="1.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">1.1</span> Motivation</h2>
+<p>Data science isn’t a single discipline. It’s the intersection of three older fields: <strong>statistics</strong> (making inferences from data under uncertainty), <strong>computer science</strong> (building systems that process information efficiently), and <strong>domain expertise</strong> (knowing enough about a problem to ask the right questions). None of these are new. Statistics has been around since at least 1662, when John Graunt and Sir William Petty analysed London’s mortality rolls. Computer science arrived in 1936, when Alan Turing introduced the concept of the Turing machine. Domain expertise is as old as humanity. What is new is having all three at scale, at the same time, with cheap compute. Almost every technique in this book has a simpler ancestor. The “new” ideas in deep learning and large language models are extensions of ideas that are decades old.</p>
+</section>
+<section id="exposition" class="level2" data-number="1.2">
+<h2 data-number="1.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">1.2</span> Exposition</h2>
+<section id="the-three-eras" class="level3" data-number="1.2.1">
+<h3 data-number="1.2.1" class="anchored" data-anchor-id="the-three-eras"><span class="header-section-number">1.2.1</span> The Three Eras</h3>
+<p><strong>Era 1 — Rules and Expert Systems (1950s-1980s).</strong> The first AI systems tried to encode human knowledge as rules: <em>if symptom A and symptom B, then diagnosis C</em>. The research focus of the era matched that structure. Engineers spent their time writing the rules themselves, one <code>if/then</code> at a time. They didn’t train a system to find the rules. These worked in narrow domains: chess, medical diagnosis, theorem proving. But they failed to scale. Writing rules for everything a domain expert knows takes longer than training that expert. The insight that ended this era: the bottleneck isn’t compute or algorithms. It’s <strong>knowledge acquisition</strong>. Complex real-world domains can’t be hand-coded. They have to be learned from data. Two names got fixed in place during this era. John McCarthy coined the term “artificial intelligence” for the 1956 Dartmouth Conference. That workshop is usually credited with founding AI as a research field. “Data science” arrived later in the same era. Danish computer scientist Peter Naur used it in his 1974 book <em>Concise Survey of Computer Methods</em>, as a synonym for “datalogy,” a name he had proposed in the 1960s as a replacement for “computer science.” This doesn’t mean deep technical work wasn’t happening. The world wasn’t ready yet. The first neural networks were built during this era. Warren McCulloch and Walter Pitts proposed the first mathematical model of a neuron in 1943. Pure theory, no hardware. Frank Rosenblatt turned that idea into something real: the perceptron. He first simulated it in software in 1957, then built it as dedicated hardware, the Mark I Perceptron, in 1958. It read images through a 20x20 grid of photocells, making it one of the earliest computer vision systems. It was a single-layer network, not the multi-layer perceptron architecture used today. Stacking layers and training them with backpropagation didn’t arrive until the 1980s. But it’s still part of the architecture inside Large Language Models.</p>
+<p><strong>Era 2 — Statistical Machine Learning (1980s-2010s).</strong> Instead of encoding rules, the field pivoted to learning patterns from labelled examples. That pivot produced the algorithms that still dominate production ML today. Paul Werbos first described backpropagation in 1974. Rumelhart, Hinton, and Williams rediscovered it in 1986, and that made neural networks trainable. Support Vector Machines arrived in 1995. LSTMs came in 1997, the first viable approach to sequence learning. Random Forests and AdaBoost both arrived in 2001; AdaBoost is the direct ancestor of XGBoost and LightGBM. The research focus moved with these tools, from writing logic to crafting features. That meant deciding which measurements, a pixel intensity, a transaction amount, a word count, predict the outcome, then feeding those into one of the algorithms above. Most practitioners at the time called this work “data mining”: finding patterns already sitting in large databases rather than encoding them by hand. The field’s own name caught up with the work late in this era. Statistician C. F. Jeff Wu argued for renaming statistics to data science in a 1997 lecture. William S. Cleveland made the case formally in a 2001 paper, proposing it as an expanded, independent field built on statistics’ technical core. This era had self-driving cars before most people realise. Carnegie Mellon’s NavLab 1 drove itself down the road in 1986, steering by camera and onboard computer. A few years later, the same lab’s ALVINN system went further. It threw out hand-written steering rules. In their place it used a neural network, trained by backpropagation, that learned to steer straight from camera images. The limitation of this era was data and compute. Neural networks existed. Training them on anything interesting took too long.</p>
+<p><strong>Era 3 — Deep Learning and Foundation Models (2012-now).</strong> In 2012, a deep convolutional neural network called AlexNet won the ImageNet competition. It won by a margin that shocked the computer vision community. The ingredients had been assembling quietly for years: large labelled datasets, GPU compute, better training techniques. What followed was fast. GANs arrived in 2014. The Transformer architecture arrived in 2017 (“Attention Is All You Need”), replacing recurrence with attention and enabling massive training parallelism. BERT followed in 2018. GPT-3 landed in 2020 at 175 billion parameters, with emergent few-shot learning. ChatGPT arrived in 2022, combining instruction fine-tuning with RLHF. From 2023 onward came multimodal models, long context windows, agentic systems, and open-source models competitive with proprietary ones. The research focus shifted again. Instead of hand-crafting features, the model learns its own internal representations end-to-end, straight from raw pixels or tokens. What’s left for a human to do is prepare and curate the data it learns from at scale. Feature engineering moved up, from the individual column to the whole dataset. The key insight of this era: <strong>If in doubt, do as Texas does, and make it bigger</strong>. Models trained on enough data with enough compute develop capabilities nobody explicitly trained them for. Nobody fully understands why.</p>
+</section>
+<section id="the-landscape-today" class="level3" data-number="1.2.2">
+<h3 data-number="1.2.2" class="anchored" data-anchor-id="the-landscape-today"><span class="header-section-number">1.2.2</span> The Landscape Today</h3>
+<p>Data science today is not a bunch of data scientists sitting around doing research. It’s a cluster of specialisations with a shared toolbox:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Role</th>
+<th>Core focus</th>
+<th>Where they live</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Data Analyst</td>
+<td>Understanding what the data says now</td>
+<td>BI tools, SQL, visualisation</td>
+</tr>
+<tr class="even">
+<td>Data Engineer</td>
+<td>Building pipelines that move and store data</td>
+<td>Spark, Kafka, dbt, cloud warehouses</td>
+</tr>
+<tr class="odd">
+<td>Data Scientist</td>
+<td>Building models that predict or explain</td>
+<td>sklearn, XGBoost, PyTorch</td>
+</tr>
+<tr class="even">
+<td>ML Engineer</td>
+<td>Making models work reliably in production</td>
+<td>MLOps, serving, monitoring</td>
+</tr>
+<tr class="odd">
+<td>Research Scientist</td>
+<td>Advancing the state of the art</td>
+<td>Papers, novel architectures</td>
+</tr>
+<tr class="even">
+<td>AI/ML Solutions Architect</td>
+<td>Designing systems that use all of the above</td>
+<td>You, after this book</td>
+</tr>
+</tbody>
+</table>
+<p>As a Solutions Architect, your goal isn’t to be the best at any one of these. You’re a generalist. Your goal is to understand each area well enough to design systems that connect them. You also need to hold a credible conversation with each type of specialist. The AI stack most enterprise projects sit inside runs, roughly bottom to top: raw, cleaned, labelled, and embedded data; then data engineering (pipelines, warehouses); then classical ML (XGBoost, sklearn, forecasting); then foundation models (GPT-4, Claude, Llama); then fine-tuned or prompted foundation models; then applications (chatbots, copilots, agents). Foundation models are increasingly a commodity. The differentiation is in data quality, fine-tuning, and the operational layer around the model. That operational layer is most of this book.</p>
+<p>The table above is the technical side of the landscape. Every project also has a business side: account teams, strategists, product managers, and executive sponsors. They’re the people asking what problem is worth solving and whether it’s worth the budget, regardless of which company or industry it happens in. As a Solutions Architect, that’s part of your job description too. You translate between the technical roles above and this business side, in both directions. You own the feasibility conversation when the two disagree. A data scientist’s responsibility usually stops at translating a business ask into a measurable modelling problem. The ongoing relationship with the business side, the trade-offs, the expectation-setting, is not typically theirs to own. It is yours.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="1.3">
+<h2 data-number="1.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">1.3</span> Trade-offs and Limits</h2>
+<p>Deep learning is better at unstructured data: images, text, audio, video. It’s also better for tasks where the relevant features aren’t known in advance, and for tasks with massive amounts of training data. Classical ML still wins on tabular data with clear features, most enterprise datasets. It wins in low-data regimes too, hundreds or thousands of examples rather than millions. It wins in situations requiring interpretability: regulated industries, medical, financial. And it wins on speed and cost. A gradient-boosted tree runs on a laptop. Kimi K3 does not.</p>
+<p>Each approach has its own ceiling, not just a preference. Deep learning’s limit is compute and data. Without enough of both, a large network won’t beat a simpler model. It often won’t even train stably. Classical ML’s limit is the human doing the feature engineering. It can only be as good as the features fed into it. And hand-crafting those features doesn’t scale to raw images, audio, or free text the way deep learning does. Foundation models’ limit is their own generality. Trained to do everything reasonably well, they need fine-tuning, prompting, or retrieval on top before they do one specific enterprise task well. That adaptation step carries its own cost.</p>
+<p>One of the most common mistakes in enterprise AI today: reaching for the biggest, most complex solution when a simpler one works. A foundation model, when a well-tuned XGBoost model would be cheaper, faster, more accurate, and more explainable. A multi-agent, LLM-orchestrated mess, when a static, deterministic pipeline is all that’s needed. Developing the judgment for which situation you’re in is a running thread through this entire book.</p>
+</section>
+<section id="procedures" class="level2" data-number="1.4">
+<h2 data-number="1.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">1.4</span> Procedures</h2>
+<p>Before any of the ideas above become useful, we need to add tools to our toolbox. The procedures below are the first-steps recipes this book returns to constantly. Every later chapter’s Worked Example assumes them.</p>
+<p id="proc-1-1"><strong>Procedure 1.1 (Load a Dataset and Do a First Inspection).</strong> <em>When to use:</em> every time a new dataset is encountered. Never skip this.</p>
+<div id="lst-first-inspection" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-first-inspection-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;1.1: The four inspection commands to run on any new dataset, every time
+</figcaption>
+<div aria-describedby="lst-first-inspection-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb1-2"></span>
+<span id="cb1-3">df <span class="op">=</span> pd.read_csv(<span class="st">'data.csv'</span>)</span>
+<span id="cb1-4"></span>
+<span id="cb1-5"><span class="bu">print</span>(df.shape)        <span class="co"># (rows, columns)</span></span>
+<span id="cb1-6">df.head()               <span class="co"># first 5 rows</span></span>
+<span id="cb1-7">df.info()                <span class="co"># column names, types, non-null counts</span></span>
+<span id="cb1-8">df.describe()            <span class="co"># summary stats for numeric columns</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>What to look for:</strong> column types that don’t match expectations, like a date column loaded as <code>object</code>. Missing values (<code>df.isnull().sum()</code>). Numeric ranges that don’t look sensible. Wildly large or small values often mean an encoding error, not a real observation. Investigate a person with a negative age, or someone born in 1792.</p>
+<p id="proc-1-2"><strong>Procedure 1.2 (Select and Filter Rows and Columns).</strong> <em>When to use:</em> narrowing data down to the subset being analysed.</p>
+<div id="lst-select-filter" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-select-filter-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;1.2: Selecting columns and filtering rows by one or more conditions
+</figcaption>
+<div aria-describedby="lst-select-filter-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="co"># one column, as a Series</span></span>
+<span id="cb2-2">df[<span class="st">'column_name'</span>]</span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="co"># multiple columns</span></span>
+<span id="cb2-5">df[[<span class="st">'col_a'</span>, <span class="st">'col_b'</span>]]</span>
+<span id="cb2-6"></span>
+<span id="cb2-7"><span class="co"># filter by condition</span></span>
+<span id="cb2-8">df[df[<span class="st">'year'</span>] <span class="op">&gt;</span> <span class="dv">2010</span>]</span>
+<span id="cb2-9"></span>
+<span id="cb2-10"><span class="co"># AND — use &amp; and |</span></span>
+<span id="cb2-11">df[(df[<span class="st">'year'</span>] <span class="op">&gt;</span> <span class="dv">2010</span>) <span class="op">&amp;</span> (df[<span class="st">'subfield'</span>] <span class="op">==</span> <span class="st">'deep_learning'</span>)]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-1-3"><strong>Procedure 1.3 (Compute Grouped Summary Statistics).</strong> <em>When to use:</em> comparing a metric across categories.</p>
+<div id="lst-groupby" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-groupby-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;1.3: Grouped aggregation, the workhorse of exploratory analysis
+</figcaption>
+<div aria-describedby="lst-groupby-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">df.groupby(<span class="st">'category'</span>)[<span class="st">'value'</span>].mean()</span>
+<span id="cb3-2"></span>
+<span id="cb3-3">df.groupby(<span class="st">'year'</span>).agg(</span>
+<span id="cb3-4">    total<span class="op">=</span>(<span class="st">'papers'</span>, <span class="st">'sum'</span>),</span>
+<span id="cb3-5">    average<span class="op">=</span>(<span class="st">'papers'</span>, <span class="st">'mean'</span>),</span>
+<span id="cb3-6">    count<span class="op">=</span>(<span class="st">'papers'</span>, <span class="st">'count'</span>),</span>
+<span id="cb3-7">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-1-4"><strong>Procedure 1.4 (Create a Derived Column).</strong> <em>When to use:</em> feature engineering, or calculating a derived metric for a chart.</p>
+<div id="lst-derived-column" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-derived-column-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;1.4: Common derived-column patterns: arithmetic, year-on-year change, mapping
+</figcaption>
+<div aria-describedby="lst-derived-column-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">df[<span class="st">'ratio'</span>] <span class="op">=</span> df[<span class="st">'col_a'</span>] <span class="op">/</span> df[<span class="st">'col_b'</span>]</span>
+<span id="cb4-2">df[<span class="st">'yoy_change'</span>] <span class="op">=</span> df[<span class="st">'value'</span>].pct_change() <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb4-3">df[<span class="st">'label'</span>] <span class="op">=</span> df[<span class="st">'value'</span>].<span class="bu">apply</span>(</span>
+<span id="cb4-4">    <span class="kw">lambda</span> x: <span class="st">'high'</span> <span class="cf">if</span> x <span class="op">&gt;</span> <span class="dv">100</span> <span class="cf">else</span> <span class="st">'low'</span></span>
+<span id="cb4-5">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> <code>pct_change()</code> returns <code>NaN</code> for the first row (there’s no prior value to compare against). That’s expected, not a bug. Drop it with <code>.dropna()</code> or fill with <code>.fillna(0)</code>, depending on what the chart needs.</p>
+<p id="proc-1-5"><strong>Procedure 1.5 (Plot and Annotate a Line Chart).</strong> <em>When to use:</em> showing how a value changes over an ordered variable, usually time, and marking a specific event on it.</p>
+<div id="lst-line-chart" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-line-chart-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;1.5: A minimal annotated line chart, saved before it is shown
+</figcaption>
+<div aria-describedby="lst-line-chart-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb5-2"></span>
+<span id="cb5-3">plt.figure(figsize<span class="op">=</span>(<span class="dv">10</span>, <span class="dv">5</span>))</span>
+<span id="cb5-4">plt.plot(</span>
+<span id="cb5-5">    df[<span class="st">'year'</span>], df[<span class="st">'value'</span>],</span>
+<span id="cb5-6">    label<span class="op">=</span><span class="st">'My Series'</span>, color<span class="op">=</span><span class="st">'#4E79A7'</span>, linewidth<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb5-7">)</span>
+<span id="cb5-8">plt.axvline(x<span class="op">=</span><span class="dv">2017</span>, color<span class="op">=</span><span class="st">'grey'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, linewidth<span class="op">=</span><span class="fl">1.5</span>)</span>
+<span id="cb5-9">plt.text(</span>
+<span id="cb5-10">    <span class="fl">2017.2</span>, plt.ylim()[<span class="dv">1</span>] <span class="op">*</span> <span class="fl">0.9</span>,</span>
+<span id="cb5-11">    <span class="st">'Key event'</span>, fontsize<span class="op">=</span><span class="dv">9</span>, color<span class="op">=</span><span class="st">'grey'</span>,</span>
+<span id="cb5-12">)</span>
+<span id="cb5-13">plt.xlabel(<span class="st">'Year'</span>)</span>
+<span id="cb5-14">plt.ylabel(<span class="st">'Value'</span>)</span>
+<span id="cb5-15">plt.legend()</span>
+<span id="cb5-16">plt.tight_layout()</span>
+<span id="cb5-17"><span class="co"># savefig BEFORE show()</span></span>
+<span id="cb5-18">plt.savefig(</span>
+<span id="cb5-19">    <span class="st">'output.png'</span>, dpi<span class="op">=</span><span class="dv">150</span>, bbox_inches<span class="op">=</span><span class="st">'tight'</span>,</span>
+<span id="cb5-20">)</span>
+<span id="cb5-21">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="1.5">
+<h2 data-number="1.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">1.5</span> Worked Example</h2>
+<p>The tutorial notebook behind this chapter builds two things: a visual timeline of the milestones above, and a real trend analysis of machine learning research growth. Both use nothing but Procedures 1.1-1.5.</p>
+<p>The timeline starts as data the reader defines by hand. That’s practice building structured records in Python before loading anything external:</p>
+<div id="lst-milestones" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-milestones-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;1.6: Milestones as structured data before they become a chart
+</figcaption>
+<div aria-describedby="lst-milestones-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">RULES <span class="op">=</span> <span class="st">"Rules &amp; Expert Systems"</span></span>
+<span id="cb6-2">STATS_ML <span class="op">=</span> <span class="st">"Statistical ML"</span></span>
+<span id="cb6-3">DEEP_LEARNING <span class="op">=</span> <span class="st">"Deep Learning &amp; Foundation Models"</span></span>
+<span id="cb6-4"></span>
+<span id="cb6-5">milestones <span class="op">=</span> [</span>
+<span id="cb6-6">    {<span class="st">"year"</span>: <span class="dv">1950</span>, <span class="st">"label"</span>: <span class="st">"Turing Test proposed"</span>, <span class="st">"era"</span>: RULES},</span>
+<span id="cb6-7">    {<span class="st">"year"</span>: <span class="dv">1956</span>, <span class="st">"label"</span>: <span class="st">"Dartmouth Conference"</span>, <span class="st">"era"</span>: RULES},</span>
+<span id="cb6-8">    {<span class="st">"year"</span>: <span class="dv">1986</span>, <span class="st">"label"</span>: <span class="st">"Backpropagation rediscovered"</span>, <span class="st">"era"</span>: STATS_ML},</span>
+<span id="cb6-9">    {<span class="st">"year"</span>: <span class="dv">2001</span>, <span class="st">"label"</span>: <span class="st">"Random Forests"</span>, <span class="st">"era"</span>: STATS_ML},</span>
+<span id="cb6-10">    {<span class="st">"year"</span>: <span class="dv">2012</span>, <span class="st">"label"</span>: <span class="st">"AlexNet wins ImageNet"</span>, <span class="st">"era"</span>: DEEP_LEARNING},</span>
+<span id="cb6-11">    {</span>
+<span id="cb6-12">        <span class="st">"year"</span>: <span class="dv">2017</span>,</span>
+<span id="cb6-13">        <span class="st">"label"</span>: <span class="st">"Transformer architecture ('Attention Is All You Need')"</span>,</span>
+<span id="cb6-14">        <span class="st">"era"</span>: DEEP_LEARNING,</span>
+<span id="cb6-15">    },</span>
+<span id="cb6-16">    {<span class="st">"year"</span>: <span class="dv">2022</span>, <span class="st">"label"</span>: <span class="st">"ChatGPT"</span>, <span class="st">"era"</span>: DEEP_LEARNING},</span>
+<span id="cb6-17">]</span>
+<span id="cb6-18"></span>
+<span id="cb6-19">df_milestones <span class="op">=</span> pd.DataFrame(milestones)</span>
+<span id="cb6-20">n_eras <span class="op">=</span> df_milestones[<span class="st">'era'</span>].nunique()</span>
+<span id="cb6-21"><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="bu">len</span>(df_milestones)<span class="sc">}</span><span class="ss"> milestones across </span><span class="sc">{</span>n_eras<span class="sc">}</span><span class="ss"> eras"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Procedure 1.5 plots this as points on a timeline, with era-coloured backgrounds and per-point annotation. It becomes a single figure spanning the same three eras this chapter opened with. It’s the same structured-data-then-visualise pattern used for feature engineering and distribution plots throughout the book.</p>
+<p>The second half loads a curated dataset of arXiv machine learning paper counts by subfield and year. Then it asks a question instead of plotting it: <strong>what year did deep learning paper volume first exceed classical ML?</strong></p>
+<div id="lst-crossover" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-crossover-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;1.7: Answering a specific question from data, not just plotting it
+</figcaption>
+<div aria-describedby="lst-crossover-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">df[<span class="st">'dl_vs_classical'</span>] <span class="op">=</span> df[<span class="st">'deep_learning'</span>] <span class="op">-</span> df[<span class="st">'classical_ml'</span>]</span>
+<span id="cb7-2">crossover <span class="op">=</span> df[df[<span class="st">'dl_vs_classical'</span>] <span class="op">&gt;</span> <span class="dv">0</span>].iloc[<span class="dv">0</span>]</span>
+<span id="cb7-3"></span>
+<span id="cb7-4">year <span class="op">=</span> <span class="bu">int</span>(crossover[<span class="st">'year'</span>])</span>
+<span id="cb7-5">classical <span class="op">=</span> crossover[<span class="st">'classical_ml'</span>]</span>
+<span id="cb7-6">deep <span class="op">=</span> crossover[<span class="st">'deep_learning'</span>]</span>
+<span id="cb7-7"></span>
+<span id="cb7-8"><span class="bu">print</span>(<span class="ss">f"Deep learning overtook classical ML in: </span><span class="sc">{</span>year<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb7-9"><span class="bu">print</span>(<span class="ss">f"  Classical ML papers that year: </span><span class="sc">{</span>classical<span class="sc">:.1f}</span><span class="ss">k"</span>)</span>
+<span id="cb7-10"><span class="bu">print</span>(<span class="ss">f"  Deep learning papers that year: </span><span class="sc">{</span>deep<span class="sc">:.1f}</span><span class="ss">k"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>On the curated dataset, the crossover falls in <strong>2010</strong> (classical ML at 5.8k papers, deep learning at 12.0k). Two years before AlexNet. Paper volume on the underlying techniques was already accelerating before the ImageNet result made headlines. By 2024, deep learning outnumbers classical ML roughly 50 to 1 in paper volume. Classical ML kept growing too, at a roughly constant rate. Deep learning grew exponentially around it.</p>
+<p>One gotcha worth keeping: computing year-on-year growth with <code>pct_change()</code> (Procedure 1.4) can blow up. If a series starts at exactly zero, the first nonzero value produces an infinite percentage. That’s a real <code>inf</code> in the output. Not a bug. It’s the kind of artifact <code>nlargest()</code> will happily rank first if it isn’t excluded by hand. Once that artifact is excluded, 1998 turns out to be the single largest legitimate growth year (100%, still an early, low-base effect on tiny paper counts), followed by a real cluster at 2009-2011 (56-71%) and another at 2016 (60%). These clusters sit immediately before the two inflection points (ImageNet, the Transformer paper) this chapter’s timeline already marks.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="1.6">
+<h2 data-number="1.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">1.6</span> History and Further Reading</h2>
+<p>Burkov, Ch. 1, gives a crisp introduction to what machine learning is and isn’t <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Murphy’s Introduction, Ch. 1, gives the formal framing of supervised, unsupervised, and reinforcement learning <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. “Attention Is All You Need” started the transformer era. It’s worth skimming even on a first read of this book <span class="citation" data-cites="vaswani2017attention">(<a href="#ref-vaswani2017attention" role="doc-biblioref">Vaswani et al. 2017</a>)</span>. Domingos’ “A Few Useful Things to Know About Machine Learning” is a classic essay. It’s still one of the best single pieces on ML intuition <span class="citation" data-cites="domingos2012few">(<a href="#ref-domingos2012few" role="doc-biblioref">Domingos 2012</a>)</span>. For a broader frame around everything in this book, look at Sayama’s <em>Introduction to the Modeling and Analysis of Complex Systems</em>. It situates machine learning within the wider study of complex systems, rather than treating it as a standalone discipline. That’s a framing worth having before the field-specific chapters that follow narrow the focus <span class="citation" data-cites="sayama2024introduction">(<a href="#ref-sayama2024introduction" role="doc-biblioref">Sayama 2024</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="1.7">
+<h2 data-number="1.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">1.7</span> How This Connects</h2>
+<p>This chapter builds on the systems thinking a Solutions Architect already has. It enables everything that follows. We’ve created the map the rest of the book explores. One common mistake: treating AI, machine learning, and deep learning as synonyms. They’re nested subsets. AI is the broadest term. Machine learning is a subset of it. Deep learning is a subset of machine learning that specifically uses neural networks.</p>
+</section>
+<section id="exercises" class="level2" data-number="1.8">
+<h2 data-number="1.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">1.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-1-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the era (Rules &amp; Expert Systems / Statistical ML / Deep Learning &amp; Foundation Models) each of the following belongs to, and give one reason it belongs there: (a) Random Forests; (b) BERT; (c) MYCIN.</p></li>
+<li id="ex-1-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in one or two sentences why “AI,” “machine learning,” and “deep learning” are not synonyms, using the nesting relationship from this chapter.</p></li>
+<li id="ex-1-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-milestones" class="quarto-xref">Listing&nbsp;<span>1.6</span></a> as a starting point, add three milestones of your choosing from outside this chapter’s list (they can be from any era). Then, using Procedure 1.2, determine how many of the resulting milestones fall after the year 2017.</p></li>
+<li id="ex-1-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Reproduce <a href="#lst-crossover" class="quarto-xref">Listing&nbsp;<span>1.7</span></a>’s logic to find the year deep learning paper volume first exceeded reinforcement learning paper volume in the arXiv dataset. Report the ratio between them by 2024.</p></li>
+<li id="ex-1-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer’s data science team has 3,000 labelled examples of a tabular fraud-detection problem and is proposing to fine-tune a foundation model for it. Using this chapter’s Trade-offs section, write the two or three sentences you’d say to them. Include what you’d suggest they try first.</p></li>
+<li id="ex-1-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The chapter notes that <code>pct_change()</code> on a zero-to-nonzero transition produces an infinite percentage. Propose two different ways to handle this before ranking growth years with <code>nlargest()</code>. State a situation where each would be the wrong choice.</p></li>
+<li id="ex-1-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Domingos essay cited above. Pick one “useful thing” from it that this chapter did not mention. Explain how it would have changed the way <a href="#lst-crossover" class="quarto-xref">Listing&nbsp;<span>1.7</span></a>’s finding was interpreted if applied to it.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="1.9">
+<h2 data-number="1.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">1.9</span> Mental Model</h2>
+<p>Data science is applied statistics with better compute and worse theory. Machine learning is a way of fitting functions to data. Deep learning is what happens when those functions get very large and are trained on huge amounts of data. A foundation model is deep learning at a further extreme: even bigger networks, trained on even more data. It’s general enough to be pointed at many different tasks instead of one. That’s also why it sometimes does things nobody explicitly trained it to do. The rest is engineering. Keep this deflationary framing. It prevents being intimidated by complexity that is just implementation detail dressed up in jargon.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-domingos2012few" class="csl-entry" role="listitem">
+Domingos, Pedro. 2012. <span>“A Few Useful Things to Know about Machine Learning.”</span> <em>Communications of the ACM</em> 55 (10): 78–87.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+<div id="ref-sayama2024introduction" class="csl-entry" role="listitem">
+Sayama, Hiroki. 2024. <em>Introduction to the Modeling and Analysis of Complex Systems</em>. LibreTexts.
+</div>
+<div id="ref-vaswani2017attention" class="csl-entry" role="listitem">
+Vaswani, Ashish, Noam Shazeer, Niki Parmar, et al. 2017. <span>“Attention Is All You Need.”</span> <em>Advances in Neural Information Processing Systems</em>.
+</div>
+</div>
+</section>

@@ -22,6 +22,7 @@
 		"@sveltejs/adapter-static": "^4.0.0",
 		"@sveltejs/kit": "^3.0.0",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
+		"cheerio": "1.2.0",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^4.1.0",
 		"svelte": "^5.57.1",
@@ -36,6 +37,7 @@
 	"dependencies": {
 		"@cyberpunk-apps/neondeck": "file:../sharable_assets/neondeck",
 		"gray-matter": "^4.0.3",
+		"katex": "0.18.11",
 		"marked": "^18.0.14",
 		"shiki": "^4.5.0"
 	}

@@ -1,0 +1,366 @@
+<p>Cross-validation is set up correctly. A bunch of algorithms have been tried. Accuracy is stuck. Nothing gets past a mediocre ceiling. The bottleneck isn’t the model. It’s the features. A model can only work with the signal it’s given. Say the information needed to make a good prediction is buried in the raw data, in a form the model can’t see. No amount of algorithmic cleverness closes that gap. This chapter is about making that hidden information visible.</p>
+<section id="motivation" class="level2" data-number="14.1">
+<h2 data-number="14.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">14.1</span> Motivation</h2>
+<p>A feature is a measurable property of an observation that a model uses to predict. Feature engineering transforms raw data into features that make patterns easier to learn. The question to ask of every column: what information is latent in this data that the model currently can’t see? A datetime column contains day-of-week, time-of-day, holiday status, and recency, all at once. An address contains a city, a region, a distance to a point of interest. A text description contains sentiment, keywords, length. Feature engineering extracts these hidden signals and presents them explicitly. It doesn’t leave the model to guess at them from a single opaque column.</p>
+</section>
+<section id="exposition" class="level2" data-number="14.2">
+<h2 data-number="14.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">14.2</span> Exposition</h2>
+<section id="numeric-feature-transformations" class="level3" data-number="14.2.1">
+<h3 data-number="14.2.1" class="anchored" data-anchor-id="numeric-feature-transformations"><span class="header-section-number">14.2.1</span> Numeric Feature Transformations</h3>
+<p><strong>Scaling</strong> matters for linear and distance-based models (KNN, SVM), which are sensitive to feature magnitude. A feature measured in thousands (income) will dominate one measured in single digits (age) unless scaled. <code>StandardScaler</code> (subtract mean, divide by std) is the default choice. <code>MinMaxScaler</code> (scale to <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">[</mo><mn>0</mn><mo separator="true">,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[0,1]</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mclose">]</span></span></span></span>) suits bounded-input needs like neural networks. <code>RobustScaler</code> (median and IQR instead of mean and std) suits data with real outliers. Tree-based models (Random Forest, XGBoost) split on thresholds, not magnitudes. They need no scaling at all.</p>
+<p><strong>Log transforms</strong> compress the right tail of right-skewed distributions (income, price, population), where a few very large values drag the mean far from the median. <code>np.log1p</code> (which handles zeros safely) gives the model a more balanced signal, and is worth reaching for whenever a histogram of the feature looks like an exponential curve.</p>
+<div id="lst-log-transform" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-log-transform-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;14.1: Right-skewed income data, before and after a log transform
+</figcaption>
+<div aria-describedby="lst-log-transform-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb1-3"></span>
+<span id="cb1-4">rng <span class="op">=</span> np.random.RandomState(<span class="dv">42</span>)</span>
+<span id="cb1-5">income <span class="op">=</span> rng.lognormal(mean<span class="op">=</span><span class="fl">10.5</span>, sigma<span class="op">=</span><span class="fl">0.6</span>, size<span class="op">=</span><span class="dv">2000</span>)</span>
+<span id="cb1-6"></span>
+<span id="cb1-7">fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">4</span>))</span>
+<span id="cb1-8"></span>
+<span id="cb1-9">axes[<span class="dv">0</span>].hist(income, bins<span class="op">=</span><span class="dv">40</span>, color<span class="op">=</span><span class="st">'#4E79A7'</span>)</span>
+<span id="cb1-10">axes[<span class="dv">0</span>].axvline(income.mean(), color<span class="op">=</span><span class="st">'#999999'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, label<span class="op">=</span><span class="st">'mean'</span>)</span>
+<span id="cb1-11">axes[<span class="dv">0</span>].axvline(np.median(income), color<span class="op">=</span><span class="st">'#4E79A7'</span>, linestyle<span class="op">=</span><span class="st">':'</span>, linewidth<span class="op">=</span><span class="fl">2.5</span>, label<span class="op">=</span><span class="st">'median'</span>)</span>
+<span id="cb1-12">axes[<span class="dv">0</span>].set_title(<span class="st">'Raw income: mean pulled right of the median'</span>)</span>
+<span id="cb1-13">axes[<span class="dv">0</span>].legend()</span>
+<span id="cb1-14"></span>
+<span id="cb1-15">log_income <span class="op">=</span> np.log1p(income)</span>
+<span id="cb1-16">axes[<span class="dv">1</span>].hist(log_income, bins<span class="op">=</span><span class="dv">40</span>, color<span class="op">=</span><span class="st">'#59A14F'</span>)</span>
+<span id="cb1-17">axes[<span class="dv">1</span>].axvline(log_income.mean(), color<span class="op">=</span><span class="st">'#999999'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, label<span class="op">=</span><span class="st">'mean'</span>)</span>
+<span id="cb1-18">axes[<span class="dv">1</span>].axvline(np.median(log_income), color<span class="op">=</span><span class="st">'#4E79A7'</span>, linestyle<span class="op">=</span><span class="st">':'</span>, linewidth<span class="op">=</span><span class="fl">2.5</span>, label<span class="op">=</span><span class="st">'median'</span>)</span>
+<span id="cb1-19">axes[<span class="dv">1</span>].set_title(<span class="st">'log1p(income): mean and median nearly coincide'</span>)</span>
+<span id="cb1-20">axes[<span class="dv">1</span>].legend()</span>
+<span id="cb1-21">plt.tight_layout()</span>
+<span id="cb1-22">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<div id="fig-log-transform" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-log-transform-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch14/log-transform.png" class="img-fluid figure-img" style="width:90.0%" alt="Synthetic lognormal income data (n=2,000), before and after a log1p transform." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-log-transform-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;14.1: Synthetic lognormal income data (n=2,000), before and after a log1p transform.
+</figcaption>
+</figure>
+</div>
+<p><a href="#fig-log-transform" class="quarto-xref">Figure&nbsp;<span>14.1</span></a> shows exactly the pattern the maths predicts. Raw income has mean 44,543 sitting well above median 37,302, the long right tail pulling the average away from where most of the mass actually is. The log-transformed version has mean 10.5271 against median 10.5268, close enough to call the same number. That’s the visual signature of a distribution the model can now treat as roughly symmetric.</p>
+<p><strong>Polynomial features</strong> let linear models capture non-linear relationships they otherwise can’t represent: if <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi></mrow><annotation encoding="application/x-tex">y</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span></span></span> depends on <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi></mrow><annotation encoding="application/x-tex">X</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span></span></span></span> quadratically (a sweet spot where too little or too much of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi></mrow><annotation encoding="application/x-tex">X</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span></span></span></span> is bad), adding <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>X</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">X^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span> explicitly via <code>PolynomialFeatures</code> is what lets a linear model see that curvature.</p>
+<div id="lst-polynomial-features" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-polynomial-features-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;14.2: A quadratic relationship: unfit by a line on X, fit by a line on (X-1)-squared
+</figcaption>
+<div aria-describedby="lst-polynomial-features-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">X <span class="op">=</span> rng.uniform(<span class="op">-</span><span class="dv">5</span>, <span class="dv">5</span>, <span class="dv">300</span>)</span>
+<span id="cb2-2">y <span class="op">=</span> <span class="op">-</span>(X <span class="op">-</span> <span class="dv">1</span>) <span class="op">**</span> <span class="dv">2</span> <span class="op">+</span> <span class="dv">10</span> <span class="op">+</span> rng.normal(<span class="dv">0</span>, <span class="fl">1.5</span>, <span class="dv">300</span>)</span>
+<span id="cb2-3"></span>
+<span id="cb2-4">fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">4</span>))</span>
+<span id="cb2-5"></span>
+<span id="cb2-6">axes[<span class="dv">0</span>].scatter(X, y, alpha<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'#4E79A7'</span>)</span>
+<span id="cb2-7">axes[<span class="dv">0</span>].set_xlabel(<span class="st">'X'</span>)</span>
+<span id="cb2-8">axes[<span class="dv">0</span>].set_ylabel(<span class="st">'y'</span>)</span>
+<span id="cb2-9">axes[<span class="dv">0</span>].set_title(<span class="st">'y vs. X: a straight line can</span><span class="ch">\'</span><span class="st">t follow this curve'</span>)</span>
+<span id="cb2-10"></span>
+<span id="cb2-11">axes[<span class="dv">1</span>].scatter((X <span class="op">-</span> <span class="dv">1</span>) <span class="op">**</span> <span class="dv">2</span>, y, alpha<span class="op">=</span><span class="fl">0.5</span>, color<span class="op">=</span><span class="st">'#59A14F'</span>)</span>
+<span id="cb2-12">axes[<span class="dv">1</span>].set_xlabel(<span class="st">'(X-1)²'</span>)</span>
+<span id="cb2-13">axes[<span class="dv">1</span>].set_ylabel(<span class="st">'y'</span>)</span>
+<span id="cb2-14">axes[<span class="dv">1</span>].set_title(<span class="st">'y vs. (X-1)²: now a straight line fits'</span>)</span>
+<span id="cb2-15">plt.tight_layout()</span>
+<span id="cb2-16">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<div id="fig-polynomial-features" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-polynomial-features-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch14/polynomial-features.png" class="img-fluid figure-img" style="width:90.0%" alt="y depends on X quadratically, with a sweet spot near X=1. A straight line can’t follow the left panel; the same data, re-expressed on (X-1)², is nearly linear." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-polynomial-features-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;14.2: y depends on X quadratically, with a sweet spot near X=1. A straight line can’t follow the left panel; the same data, re-expressed on (X-1)², is nearly linear.
+</figcaption>
+</figure>
+</div>
+<p><a href="#fig-polynomial-features" class="quarto-xref">Figure&nbsp;<span>14.2</span></a> is the same curvature a linear model sees when it’s only given <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi></mrow><annotation encoding="application/x-tex">X</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span></span></span></span>. Whatever line it draws, it’s wrong at both ends or wrong in the middle. The correlation between <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi></mrow><annotation encoding="application/x-tex">X</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span></span></span></span> and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi></mrow><annotation encoding="application/x-tex">y</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span></span></span> measures a modest 0.62. The right panel is the identical data, re-expressed on <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mi>X</mi><mo>−</mo><mn>1</mn><msup><mo stretchy="false">)</mo><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">(X-1)^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mclose"><span class="mclose">)</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span>. The curve has been straightened out entirely by the feature, not by the model: correlation jumps to -0.99, close to the -1 of a genuinely linear relationship (negative, since further from the sweet spot at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi><mo>=</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">X=1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> means lower <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi></mrow><annotation encoding="application/x-tex">y</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span></span></span>). That’s the whole point of adding the feature explicitly, rather than hoping a linear model discovers the relationship on its own.</p>
+<p><strong>Binning</strong> converts a continuous variable into discrete categories, useful when the true relationship is non-linear but step-like (age groups in marketing, income brackets in insurance) via <code>pd.cut</code> or <code>KBinsDiscretizer</code>.</p>
+</section>
+<section id="categorical-feature-encoding" class="level3" data-number="14.2.2">
+<h3 data-number="14.2.2" class="anchored" data-anchor-id="categorical-feature-encoding"><span class="header-section-number">14.2.2</span> Categorical Feature Encoding</h3>
+<p>Models need numbers, so categorical variables must be converted. <strong>One-hot encoding</strong> creates a binary column per category. It’s best for nominal categories (no natural order) with low cardinality (under roughly 20 unique values). <strong>Label/ordinal encoding</strong> assigns an integer per category. This is only safe when the categories have a genuine order (poor &lt; fair &lt; good &lt; excellent), or when the downstream model is tree-based and won’t be misled by a false ordering. A linear model fed label-encoded nominal categories will treat category 2 as “twice” category 1, an ordering that doesn’t exist. <strong>Target encoding</strong> replaces each category with the mean of the target for that category. It handles high cardinality (postal codes, product IDs, user IDs) where one-hot would explode into thousands of columns. But it leaks label information if done naively. It must always be computed with fold-holdout cross-validation, never a single global mean. <strong>Frequency encoding</strong> replaces each category with how often it appears. It carries no leakage risk at all, and captures the idea that rare categories may behave differently from common ones.</p>
+</section>
+<section id="datetime-feature-extraction" class="level3" data-number="14.2.3">
+<h3 data-number="14.2.3" class="anchored" data-anchor-id="datetime-feature-extraction"><span class="header-section-number">14.2.3</span> Datetime Feature Extraction</h3>
+<p>A single datetime column hides hour, day-of-week, month, year, weekend/holiday status, and days-since-a-reference-point. All extractable directly via <code>.dt</code> accessors. For cyclical features (hour, day of week, month), the raw integer gets the distance wrong: hour 23 and hour 0 are one hour apart in reality but 23 apart numerically. Cyclical (sin/cos) encoding fixes this by mapping the cycle onto a circle, so adjacent-in-time values stay numerically adjacent.</p>
+<div id="lst-cyclical-encoding" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cyclical-encoding-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;14.3: 24 hours mapped onto a circle via sin/cos: hour 23 sits next to hour 0
+</figcaption>
+<div aria-describedby="lst-cyclical-encoding-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">11</span>, <span class="dv">5</span>))</span>
+<span id="cb3-2"></span>
+<span id="cb3-3">hours <span class="op">=</span> np.arange(<span class="dv">24</span>)</span>
+<span id="cb3-4">axes[<span class="dv">0</span>].scatter(hours, np.zeros_like(hours), c<span class="op">=</span>hours, cmap<span class="op">=</span><span class="st">'twilight'</span>, s<span class="op">=</span><span class="dv">60</span>)</span>
+<span id="cb3-5"><span class="cf">for</span> h <span class="kw">in</span> [<span class="dv">0</span>, <span class="dv">6</span>, <span class="dv">12</span>, <span class="dv">18</span>, <span class="dv">23</span>]:</span>
+<span id="cb3-6">    axes[<span class="dv">0</span>].annotate(<span class="bu">str</span>(h), (h, <span class="dv">0</span>), textcoords<span class="op">=</span><span class="st">'offset points'</span>, xytext<span class="op">=</span>(<span class="dv">0</span>, <span class="dv">10</span>))</span>
+<span id="cb3-7">axes[<span class="dv">0</span>].set_yticks([])</span>
+<span id="cb3-8">axes[<span class="dv">0</span>].set_xlabel(<span class="st">'raw hour'</span>)</span>
+<span id="cb3-9">axes[<span class="dv">0</span>].set_title(<span class="st">'Raw hour: 23 and 0 sit at opposite ends'</span>)</span>
+<span id="cb3-10">axes[<span class="dv">0</span>].spines[<span class="st">'left'</span>].set_visible(<span class="va">False</span>)</span>
+<span id="cb3-11"></span>
+<span id="cb3-12">hour_frac <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.pi <span class="op">*</span> hours <span class="op">/</span> <span class="dv">24</span></span>
+<span id="cb3-13">hour_sin, hour_cos <span class="op">=</span> np.sin(hour_frac), np.cos(hour_frac)</span>
+<span id="cb3-14">axes[<span class="dv">1</span>].scatter(hour_cos, hour_sin, c<span class="op">=</span>hours, cmap<span class="op">=</span><span class="st">'twilight'</span>, s<span class="op">=</span><span class="dv">60</span>)</span>
+<span id="cb3-15"><span class="cf">for</span> h <span class="kw">in</span> [<span class="dv">0</span>, <span class="dv">6</span>, <span class="dv">12</span>, <span class="dv">18</span>, <span class="dv">23</span>]:</span>
+<span id="cb3-16">    axes[<span class="dv">1</span>].annotate(<span class="bu">str</span>(h), (hour_cos[h], hour_sin[h]), textcoords<span class="op">=</span><span class="st">'offset points'</span>, xytext<span class="op">=</span>(<span class="dv">5</span>, <span class="dv">5</span>))</span>
+<span id="cb3-17">axes[<span class="dv">1</span>].set_xlabel(<span class="st">'hour_cos'</span>)</span>
+<span id="cb3-18">axes[<span class="dv">1</span>].set_ylabel(<span class="st">'hour_sin'</span>)</span>
+<span id="cb3-19">axes[<span class="dv">1</span>].set_title(<span class="st">'sin/cos hour: 23 sits right next to 0'</span>)</span>
+<span id="cb3-20">axes[<span class="dv">1</span>].set_aspect(<span class="st">'equal'</span>)</span>
+<span id="cb3-21">plt.tight_layout()</span>
+<span id="cb3-22">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<div id="fig-cyclical-encoding" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-cyclical-encoding-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch14/cyclical-encoding.png" class="img-fluid figure-img" style="width:90.0%" alt="All 24 hours, plotted by raw value (left) and by (hour_cos, hour_sin) coordinates (right)." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-cyclical-encoding-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;14.3: All 24 hours, plotted by raw value (left) and by (hour_cos, hour_sin) coordinates (right).
+</figcaption>
+</figure>
+</div>
+<p>On the left of <a href="#fig-cyclical-encoding" class="quarto-xref">Figure&nbsp;<span>14.3</span></a>, the raw hour axis puts 23 and 0 as far apart as two numbers can be, even though midnight to 11pm is one hour. On the right, the same 24 hours plotted as <code>(hour_cos, hour_sin)</code> coordinates fall on a circle. 23 lands right beside 0, exactly the adjacency the raw integer got wrong.</p>
+</section>
+<section id="interaction-features" class="level3" data-number="14.2.4">
+<h3 data-number="14.2.4" class="anchored" data-anchor-id="interaction-features"><span class="header-section-number">14.2.4</span> Interaction Features</h3>
+<p>An interaction feature is the product or ratio of two features. It captures a joint effect neither captures alone. Square metres and neighbourhood are each important for house price, but their <em>interaction</em> is what matters. A large house in an expensive neighbourhood is worth far more than the sum of a generic “large house” premium and a generic “good neighbourhood” premium. Tree-based models implicitly build interactions through their splits, so explicit interaction features matter less for them. For linear models, they’re often essential to capture non-additive effects at all.</p>
+</section>
+<section id="domain-specific-features" class="level3" data-number="14.2.5">
+<h3 data-number="14.2.5" class="anchored" data-anchor-id="domain-specific-features"><span class="header-section-number">14.2.5</span> Domain-Specific Features</h3>
+<p>The highest-leverage features usually come from domain knowledge, not generic transformations. For churn prediction, Recency (days since last purchase), Frequency (purchases in the last 90 days), and Monetary value (RFM, a 30-year-old direct-marketing framework) often outperform raw transaction data. They capture what actually drives churn, rather than a generic statistical summary of it. The best feature engineers spend the time talking to domain experts before writing code.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>What Is RFM?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>RFM scores every customer on three numbers, each computed straight from transaction history: <strong>Recency</strong>, days since their last purchase; <strong>Frequency</strong>, how many purchases they’ve made in a fixed window; and <strong>Monetary</strong>, how much they’ve spent in that window. The framework predates machine learning by decades. Direct-mail marketers used it by hand, ranking customers into quintiles on each dimension and mailing only to the highest-scoring segments. Postage cost money, and a badly-targeted catalogue was a real loss, not just a wasted API call <span class="citation" data-cites="hughes1994strategicdatabase">(<a href="#ref-hughes1994strategicdatabase" role="doc-biblioref">Hughes 1994</a>)</span>. As three engineered features, RFM works for the same reason it worked on paper: a customer who bought recently, buys often, and spends a lot is a very different prospect from one who did all three once, years ago. Each of the three numbers on its own is a weaker signal than the combination. Recency alone doesn’t distinguish a big spender from a one-off. Frequency alone doesn’t distinguish someone buying small items constantly from someone who checked in twice with two large orders. It’s a domain-knowledge feature in the purest sense. Nothing about the transaction table forces this particular three-number summary to be the useful one. It took thirty years of direct-marketing practice to establish that it is.</p>
+</div>
+</div>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="14.3">
+<h2 data-number="14.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">14.3</span> Trade-offs and Limits</h2>
+<p>More features raise overfitting risk. Each addition should be validated with cross-validation. Feature engineering is also a leakage risk. Any feature using information from the future, or from the test set, produces optimistic training results that fail in production. Target encoding is the pointiest version of this trap. It’s easy to compute correct-looking statistics on the wrong data. Scaling is part of the preprocessing pipeline, fit on training data only, then applied (never re-fit) to test data.</p>
+</section>
+<section id="procedures" class="level2" data-number="14.4">
+<h2 data-number="14.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">14.4</span> Procedures</h2>
+<p id="proc-14-1"><strong>Procedure 14.1 (Choose Between One-Hot, Ordinal, and Target Encoding).</strong> <em>When to use:</em> deciding how to encode any categorical column.</p>
+<div id="lst-encoding-choice" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-encoding-choice-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;14.4: Encoder choice by cardinality and order
+</figcaption>
+<div aria-describedby="lst-encoding-choice-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># One-hot: nominal, low cardinality (&lt; ~20)</span></span>
+<span id="cb4-2"><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> OneHotEncoder</span>
+<span id="cb4-3">encoder <span class="op">=</span> OneHotEncoder(</span>
+<span id="cb4-4">    handle_unknown<span class="op">=</span><span class="st">'ignore'</span>, sparse_output<span class="op">=</span><span class="va">False</span></span>
+<span id="cb4-5">)</span>
+<span id="cb4-6"></span>
+<span id="cb4-7"><span class="co"># Ordinal: genuine order (poor &lt; fair &lt; good &lt; excellent)</span></span>
+<span id="cb4-8"><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> OrdinalEncoder</span>
+<span id="cb4-9">encoder <span class="op">=</span> OrdinalEncoder(</span>
+<span id="cb4-10">    categories<span class="op">=</span>[[<span class="st">'poor'</span>, <span class="st">'fair'</span>, <span class="st">'good'</span>, <span class="st">'excellent'</span>]]</span>
+<span id="cb4-11">)</span>
+<span id="cb4-12"></span>
+<span id="cb4-13"><span class="co"># Target/mean encoding for high cardinality: ALWAYS via</span></span>
+<span id="cb4-14"><span class="co"># CV-encoding, never a single global mean</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> using integer label encoding for a nominal column feeding a linear model. The model will read category 2 as “twice” category 1.</p>
+<p id="proc-14-2"><strong>Procedure 14.2 (Target-Encode Without Leaking the Label).</strong> <em>When to use:</em> a high-cardinality categorical where frequency encoding isn’t informative enough.</p>
+<div id="lst-target-encode" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-target-encode-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;14.5: Leakage-safe target encoding via fold-holdout
+</figcaption>
+<div aria-describedby="lst-target-encode-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="kw">def</span> cv_target_encode(</span>
+<span id="cb5-2">    X_train, y_train, X_test, column, n_splits<span class="op">=</span><span class="dv">5</span>, smoothing<span class="op">=</span><span class="dv">10</span></span>
+<span id="cb5-3">):</span>
+<span id="cb5-4">    global_mean <span class="op">=</span> y_train.mean()</span>
+<span id="cb5-5">    train_encoded <span class="op">=</span> pd.Series(index<span class="op">=</span>X_train.index, dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb5-6">    kf <span class="op">=</span> KFold(n_splits<span class="op">=</span>n_splits, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb5-7">    <span class="cf">for</span> tr_idx, val_idx <span class="kw">in</span> kf.split(X_train):</span>
+<span id="cb5-8">        fold_train <span class="op">=</span> X_train.iloc[tr_idx]</span>
+<span id="cb5-9">        fold_y <span class="op">=</span> y_train.iloc[tr_idx]</span>
+<span id="cb5-10">        stats <span class="op">=</span> fold_y.groupby(fold_train[column]).agg(</span>
+<span id="cb5-11">            [<span class="st">'mean'</span>, <span class="st">'count'</span>]</span>
+<span id="cb5-12">        )</span>
+<span id="cb5-13">        smoothed <span class="op">=</span> (</span>
+<span id="cb5-14">            stats[<span class="st">'mean'</span>] <span class="op">*</span> stats[<span class="st">'count'</span>]</span>
+<span id="cb5-15">            <span class="op">+</span> global_mean <span class="op">*</span> smoothing</span>
+<span id="cb5-16">        ) <span class="op">/</span> (stats[<span class="st">'count'</span>] <span class="op">+</span> smoothing)</span>
+<span id="cb5-17">        val_rows <span class="op">=</span> X_train.iloc[val_idx][column]</span>
+<span id="cb5-18">        train_encoded.iloc[val_idx] <span class="op">=</span> (</span>
+<span id="cb5-19">            val_rows.<span class="bu">map</span>(smoothed).fillna(global_mean).values</span>
+<span id="cb5-20">        )</span>
+<span id="cb5-21">    full_stats <span class="op">=</span> y_train.groupby(X_train[column]).agg(</span>
+<span id="cb5-22">        [<span class="st">'mean'</span>, <span class="st">'count'</span>]</span>
+<span id="cb5-23">    )</span>
+<span id="cb5-24">    full_smoothed <span class="op">=</span> (</span>
+<span id="cb5-25">        full_stats[<span class="st">'mean'</span>] <span class="op">*</span> full_stats[<span class="st">'count'</span>]</span>
+<span id="cb5-26">        <span class="op">+</span> global_mean <span class="op">*</span> smoothing</span>
+<span id="cb5-27">    ) <span class="op">/</span> (full_stats[<span class="st">'count'</span>] <span class="op">+</span> smoothing)</span>
+<span id="cb5-28">    test_encoded <span class="op">=</span> X_test[column].<span class="bu">map</span>(full_smoothed).fillna(</span>
+<span id="cb5-29">        global_mean</span>
+<span id="cb5-30">    )</span>
+<span id="cb5-31">    <span class="cf">return</span> train_encoded, test_encoded</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> computing <code>df.groupby(column)[target].mean()</code> on the full dataset before splitting, then mapping it onto both train and test. This bakes test-set target information into every training row.</p>
+<p id="proc-14-3"><strong>Procedure 14.3 (Extract Features from a Datetime Column).</strong> <em>When to use:</em> any timestamp column.</p>
+<div id="lst-datetime-features" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-datetime-features-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;14.6: Datetime extraction with cyclical encoding
+</figcaption>
+<div aria-describedby="lst-datetime-features-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="kw">def</span> add_datetime_features(df, col):</span>
+<span id="cb6-2">    df <span class="op">=</span> df.copy()</span>
+<span id="cb6-3">    df[<span class="ss">f'</span><span class="sc">{</span>col<span class="sc">}</span><span class="ss">_hour'</span>] <span class="op">=</span> df[col].dt.hour</span>
+<span id="cb6-4">    df[<span class="ss">f'</span><span class="sc">{</span>col<span class="sc">}</span><span class="ss">_dow'</span>] <span class="op">=</span> df[col].dt.dayofweek</span>
+<span id="cb6-5">    is_weekend <span class="op">=</span> df[col].dt.dayofweek.isin([<span class="dv">5</span>, <span class="dv">6</span>])</span>
+<span id="cb6-6">    df[<span class="ss">f'</span><span class="sc">{</span>col<span class="sc">}</span><span class="ss">_is_weekend'</span>] <span class="op">=</span> is_weekend.astype(<span class="bu">int</span>)</span>
+<span id="cb6-7">    hour_frac <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> np.pi <span class="op">*</span> df[<span class="ss">f'</span><span class="sc">{</span>col<span class="sc">}</span><span class="ss">_hour'</span>] <span class="op">/</span> <span class="dv">24</span></span>
+<span id="cb6-8">    df[<span class="ss">f'</span><span class="sc">{</span>col<span class="sc">}</span><span class="ss">_hour_sin'</span>] <span class="op">=</span> np.sin(hour_frac)</span>
+<span id="cb6-9">    df[<span class="ss">f'</span><span class="sc">{</span>col<span class="sc">}</span><span class="ss">_hour_cos'</span>] <span class="op">=</span> np.cos(hour_frac)</span>
+<span id="cb6-10">    <span class="cf">return</span> df</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-14-4"><strong>Procedure 14.4 (Build a Leakage-Safe <code>ColumnTransformer</code> Pipeline).</strong> <em>When to use:</em> a mix of numeric and categorical columns that need to be cross-validated safely as one unit.</p>
+<div id="lst-column-transformer" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-column-transformer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;14.7: ColumnTransformer wrapping numeric and categorical preprocessing
+</figcaption>
+<div aria-describedby="lst-column-transformer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">numeric_pipe <span class="op">=</span> Pipeline([</span>
+<span id="cb7-2">    (<span class="st">'impute'</span>, SimpleImputer(strategy<span class="op">=</span><span class="st">'median'</span>)),</span>
+<span id="cb7-3">    (<span class="st">'scale'</span>, StandardScaler()),</span>
+<span id="cb7-4">])</span>
+<span id="cb7-5">categorical_pipe <span class="op">=</span> Pipeline([</span>
+<span id="cb7-6">    (<span class="st">'impute'</span>, SimpleImputer(strategy<span class="op">=</span><span class="st">'most_frequent'</span>)),</span>
+<span id="cb7-7">    (<span class="st">'onehot'</span>, OneHotEncoder(handle_unknown<span class="op">=</span><span class="st">'ignore'</span>)),</span>
+<span id="cb7-8">])</span>
+<span id="cb7-9">preprocessor <span class="op">=</span> ColumnTransformer(transformers<span class="op">=</span>[</span>
+<span id="cb7-10">    (<span class="st">'num'</span>, numeric_pipe, numeric_features),</span>
+<span id="cb7-11">    (<span class="st">'cat'</span>, categorical_pipe, categorical_features),</span>
+<span id="cb7-12">])</span>
+<span id="cb7-13">full_pipeline <span class="op">=</span> Pipeline([</span>
+<span id="cb7-14">    (<span class="st">'preprocess'</span>, preprocessor),</span>
+<span id="cb7-15">    (<span class="st">'model'</span>, your_model),</span>
+<span id="cb7-16">])</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> calling <code>scaler.fit_transform(X)</code> on the whole dataset before <code>train_test_split</code>. Split first, <code>.fit()</code> on train only, <code>.transform()</code> (never <code>.fit_transform()</code>) on test.</p>
+</section>
+<section id="worked-example" class="level2" data-number="14.5">
+<h2 data-number="14.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">14.5</span> Worked Example</h2>
+<p>A synthetic e-commerce order dataset (4,000 orders; features include customer ID, region, payment method, age, items in cart, and an order timestamp; 3,200/800 train/test split) makes the leakage question concrete rather than abstract. Encode the high-cardinality <code>customer_id</code> column two ways: a naive global mean computed across the <em>whole</em> dataset before splitting, versus Procedure 14.2’s fold-holdout CV encoding. Then compare cross-validated <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>R</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">R^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span> on the training set alone:</p>
+<div id="lst-leak-compare" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-leak-compare-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;14.8: Leaky vs.&nbsp;CV-safe target encoding, measured
+</figcaption>
+<div aria-describedby="lst-leak-compare-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1">scores_leaky <span class="op">=</span> cross_val_score(</span>
+<span id="cb8-2">    ridge, X_train_leaky[feat_cols], y_train, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'r2'</span></span>
+<span id="cb8-3">)</span>
+<span id="cb8-4">scores_safe <span class="op">=</span> cross_val_score(</span>
+<span id="cb8-5">    ridge, X_train_safe[feat_cols], y_train, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'r2'</span></span>
+<span id="cb8-6">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Measured: leaky encoding reports CV <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>R</mi><mn>2</mn></msup><mo>=</mo><mn>0.872</mn><mo>±</mo><mn>0.009</mn></mrow><annotation encoding="application/x-tex">R^2 = 0.872 \pm 0.009</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">0.872</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">±</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.009</span></span></span></span>. Safe encoding reports <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0.870</mn><mo>±</mo><mn>0.010</mn></mrow><annotation encoding="application/x-tex">0.870 \pm 0.010</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">0.870</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">±</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.010</span></span></span></span>. Leaky encoding looks very slightly better, exactly the direction the leakage warning predicts, even though the gap here is modest. Checking the <em>true</em> held-out test <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>R</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">R^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span> for both confirms the honest picture: leaky encoding scores 0.870 on test, safe encoding scores 0.867, nearly identical to their respective CV numbers. Why so close? In this particular synthetic dataset, <code>customer_id</code> isn’t a strongly predictive column on its own. Order value is driven mostly by region, items in cart, and weekend timing, not by which customer placed the order. The lesson this measurement teaches is more precise than “leakage always inflates your score dramatically.” Leakage’s damage scales with how much the leaking column <em>actually</em> correlates with the target once leaked. A weakly-predictive ID column leaks only a little. A strongly-predictive one (e.g.&nbsp;a column that indirectly encodes the label) can produce the dramatic, disqualifying gap the warnings describe. Measuring the gap, rather than assuming its size, is the only way to know which situation is in play.</p>
+<p>The full pipeline (cyclical datetime features, one-hot encoded region and payment method, no customer ID at all) reaches CV <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>R</mi><mn>2</mn></msup><mo>=</mo><mn>0.870</mn><mo>±</mo><mn>0.010</mn></mrow><annotation encoding="application/x-tex">R^2 = 0.870 \pm 0.010</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">0.870</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">±</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.010</span></span></span></span> and true test <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>R</mi><mn>2</mn></msup><mo>=</mo><mn>0.867</mn></mrow><annotation encoding="application/x-tex">R^2 = 0.867</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.867</span></span></span></span>. That’s identical to the safely-encoded variant above, and only a hair behind the leaky one. That tie is the real finding. Honestly encoding <code>customer_id</code> costs nothing next to dropping it outright, because the column carries no signal a fold-holdout encoding can safely pull out. The leaky version’s tiny edge comes entirely from peeking at the label, not from <code>customer_id</code> actually mattering.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><span class="co"># SageMaker Data Wrangler: no-code equivalent for scaling,</span></span>
+<span id="cb9-2"><span class="co"># encoding, and datetime extraction via a visual flow,</span></span>
+<span id="cb9-3"><span class="co"># exportable as a Processing job.</span></span>
+<span id="cb9-4"></span>
+<span id="cb9-5"><span class="im">import</span> sagemaker</span>
+<span id="cb9-6"><span class="im">from</span> sagemaker.feature_store.feature_group <span class="im">import</span> FeatureGroup</span>
+<span id="cb9-7"></span>
+<span id="cb9-8">feature_group <span class="op">=</span> FeatureGroup(</span>
+<span id="cb9-9">    name<span class="op">=</span><span class="st">'orders-features'</span>,</span>
+<span id="cb9-10">    sagemaker_session<span class="op">=</span>sagemaker.Session(),</span>
+<span id="cb9-11">)</span>
+<span id="cb9-12"><span class="co"># feature_group.create(</span></span>
+<span id="cb9-13"><span class="co">#     s3_uri='s3://my-bucket/feature-store/orders/',</span></span>
+<span id="cb9-14"><span class="co">#     record_identifier_name='order_id',</span></span>
+<span id="cb9-15"><span class="co">#     event_time_feature_name='event_time',</span></span>
+<span id="cb9-16"><span class="co">#     role_arn=role, enable_online_store=True)</span></span></code></pre></div>
+<p><strong>When to prefer SageMaker Feature Store:</strong> when the same engineered feature (e.g.&nbsp;a customer’s frequency encoding) needs to be computed once and served consistently to both a training job and a real-time inference endpoint, preventing training/serving skew.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="14.6">
+<h2 data-number="14.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">14.6</span> History and Further Reading</h2>
+<p>Thakur, Ch. 4 and 5, cover categorical encoding and feature engineering for various data types with code <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Murphy’s Introduction, Ch. 9, gives the formal treatment of linear models and feature maps <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Zheng and Casari’s <em>Feature Engineering for Machine Learning</em> is a full book on the topic <span class="citation" data-cites="zheng2018featureengineering">(<a href="#ref-zheng2018featureengineering" role="doc-biblioref">Zheng and Casari 2018</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="14.7">
+<h2 data-number="14.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">14.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 7 (clean data before engineering features) and Chapter 9 (EDA is usually where the need for a given transformation is discovered). It enables Chapter 15’s feature selection, which needs features to exist before choosing among them. It also enables Chapter 16’s model evaluation, which is what any feature engineering decision gets judged against in the end. It’s often confused with feature <em>selection</em>: engineering <em>creates</em> new features, while selection <em>chooses</em> which existing features to keep.</p>
+</section>
+<section id="exercises" class="level2" data-number="14.8">
+<h2 data-number="14.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">14.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-14-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain why tree-based models don’t need feature scaling while linear and distance-based models do, using the “splits on thresholds, not magnitudes” framing from this chapter.</p></li>
+<li id="ex-14-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> For each, name the correct encoding from this chapter: (a) a <code>size</code> column with values <code>small</code>/<code>medium</code>/<code>large</code>; (b) a <code>product_sku</code> column with 50,000 unique values feeding a linear model; (c) a <code>country</code> column with 15 unique values, no natural order.</p></li>
+<li id="ex-14-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-datetime-features" class="quarto-xref">Listing&nbsp;<span>14.6</span></a>, compute <code>hour_sin</code>/<code>hour_cos</code> for hour 23 and hour 0 by hand, and show numerically that their Euclidean distance is small, in contrast to the raw hour values, which differ by 23.</p></li>
+<li id="ex-14-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-leak-compare" class="quarto-xref">Listing&nbsp;<span>14.8</span></a>’s pattern, explain what result you would expect if <code>customer_id</code> were replaced with a column that directly encoded a noisy version of the label (e.g.&nbsp;<code>last_order_value_rounded</code>), would the leaky-vs-safe CV <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mi>R</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">R^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span> gap this chapter measured (0.872 vs.&nbsp;0.870) likely grow, shrink, or stay about the same?</p></li>
+<li id="ex-14-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate wants to one-hot encode a <code>product_id</code> column with 8,000 unique values “to keep things simple.” Using this chapter’s cardinality guidance, write the two or three sentences you’d say instead.</p></li>
+<li id="ex-14-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s measured leaky-vs-safe gap was small (0.872 vs.&nbsp;0.870). Using the Worked Example’s explanation for why, describe a realistic feature (not <code>customer_id</code>) in the same order dataset that would very likely produce a much larger leakage gap if encoded naively.</p></li>
+<li id="ex-14-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the scikit-learn <code>TargetEncoder</code> documentation (or <code>category_encoders.TargetEncoder</code>). Identify one detail of its built-in cross-fitting behaviour that differs from Procedure 14.2’s hand-written version, and explain what problem that difference solves.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="14.9">
+<h2 data-number="14.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">14.9</span> Mental Model</h2>
+<p>Features are the vocabulary a model uses to describe an observation. The richer and more precise that vocabulary, the better the model can describe the pattern it’s trying to learn. Feature engineering is translation work. Taking data in one language (raw measurements) and translating it into the language the model speaks. The numbers that carry signal.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-hughes1994strategicdatabase" class="csl-entry" role="listitem">
+Hughes, Arthur Middleton. 1994. <em>Strategic Database Marketing: The Masterplan for Starting and Managing a Profitable, Customer-Based Marketing Program</em>. Probus Publishing.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+<div id="ref-zheng2018featureengineering" class="csl-entry" role="listitem">
+Zheng, Alice, and Amanda Casari. 2018. <em>Feature Engineering for Machine Learning: Principles and Techniques for Data Scientists</em>. O’Reilly Media.
+</div>
+</div>
+</section>

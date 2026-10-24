@@ -1,0 +1,292 @@
+<p>A model trained and evaluated on a single 80/20 split reports one number. Let’s say 94% accuracy. That number is less trustworthy than it looks. A different random split could easily give 91% or 97%. There’s no way to tell from a single split which one you got. Now say twenty candidate models are compared on the same test set, and the best one is reported. That number is optimistic by construction. The best of twenty random-ish outcomes is not a neutral estimate. This chapter covers the systematic fix: cross-validation. It also covers the ways teams still leak information past it, even when they think they’re doing it right.</p>
+<section id="motivation" class="level2" data-number="13.1">
+<h2 data-number="13.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">13.1</span> Motivation</h2>
+<p>The basic rule: any data used to make decisions about a model cannot also be used to evaluate it. Choosing hyperparameters, selecting features, or picking between algorithms based on a test set uses that test set up. It’s no longer a clean estimate of unseen-data performance. Cross-validation solves this. It repeatedly splits the data into different train/validation partitions and averages the results. No single split is “the answer”. There is no best. There is only the distribution of performance across many splits.</p>
+</section>
+<section id="exposition" class="level2" data-number="13.2">
+<h2 data-number="13.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">13.2</span> Exposition</h2>
+<section id="the-problem-with-a-single-traintest-split" class="level3" data-number="13.2.1">
+<h3 data-number="13.2.1" class="anchored" data-anchor-id="the-problem-with-a-single-traintest-split"><span class="header-section-number">13.2.1</span> The Problem With a Single Train/Test Split</h3>
+<p>An 80/20 split on a 569-example dataset leaves only 113 examples to test on. That’s enough for the estimate to swing a lot, depending on which 113 happened to land in the test set. With a small-to-moderate dataset, the standard error of a single accuracy estimate is large. A model can look like the best or worst result purely by chance.</p>
+</section>
+<section id="k-fold-cross-validation" class="level3" data-number="13.2.2">
+<h3 data-number="13.2.2" class="anchored" data-anchor-id="k-fold-cross-validation"><span class="header-section-number">13.2.2</span> k-Fold Cross-Validation</h3>
+<p>Split the data into <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span></span></span></span> equal-sized folds. Train on <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">k-1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> folds. Validate on the remaining fold. Rotate which fold is held out. After <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span></span></span></span> rounds every example has been in the validation set exactly once. Average the <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span></span></span></span> scores. This uses every example for both training and validation. The spread across folds, not just the mean, tells you how stable the model is. A mean with tight fold agreement is a different finding from the same mean with folds bouncing around. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mn>5</mn></mrow><annotation encoding="application/x-tex">k=5</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">5</span></span></span></span> is the standard default. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mn>10</mn></mrow><annotation encoding="application/x-tex">k=10</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">10</span></span></span></span> gives slightly lower bias (more training data per fold) at the cost of more compute. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">k=n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span>, where <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> is the total number of examples in the dataset, is leave-one-out cross-validation (LOOCV). Each fold holds out exactly one example, trains on the remaining <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n-1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span>, and tests on that single point. Repeat <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> times, once per example, and average. LOOCV is unbiased in one sense: every training set is as large as it can possibly be. But it means fitting the model <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> separate times. And each fold’s score is a single right-or-wrong outcome, with no averaging within the fold itself. That’s where the Trade-offs table’s “high variance between folds” comes from. LOOCV is practical for the tiny datasets it’s usually reserved for. Fitting a model 500 times, leaving out one of 500 rows each time, is a very different thing on a larger dataset.</p>
+</section>
+<section id="stratified-k-fold" class="level3" data-number="13.2.3">
+<h3 data-number="13.2.3" class="anchored" data-anchor-id="stratified-k-fold"><span class="header-section-number">13.2.3</span> Stratified k-Fold</h3>
+<p>Regular k-fold can, by chance, produce folds with very different class ratios. If 5% of the data is the positive class, one fold could land at 0% positives, making that fold’s score incomparable to the others. Stratified k-fold preserves the class ratio in every fold, and is the correct default for classification; <code>cross_val_score</code> uses <code>StratifiedKFold</code> automatically when the estimator is a classifier.</p>
+</section>
+<section id="time-series-cross-validation" class="level3" data-number="13.2.4">
+<h3 data-number="13.2.4" class="anchored" data-anchor-id="time-series-cross-validation"><span class="header-section-number">13.2.4</span> Time-Series Cross-Validation</h3>
+<p>Random shuffling is wrong for time-ordered data. Training on next week’s data to predict this week’s leaks future information into the training set. The result is an optimistic estimate that collapses the moment it meets production. <code>TimeSeriesSplit</code> enforces time order. The validation set is always in the future relative to its training set. Training windows grow across folds. Validation windows stay strictly ahead of them. This is a strict requirement for any time-ordered dataset: sales, prices, sensor readings, user behaviour over time.</p>
+</section>
+<section id="the-overfitting-to-test-set-problem" class="level3" data-number="13.2.5">
+<h3 data-number="13.2.5" class="anchored" data-anchor-id="the-overfitting-to-test-set-problem"><span class="header-section-number">13.2.5</span> The Overfitting-to-Test-Set Problem</h3>
+<p>A common, easy-to-fall-into failure mode. Train fifty different models. Measure each on the same test set. Report the best one’s test accuracy as “the” model’s performance. Selecting the maximum over fifty imperfect estimates introduces selection bias. The winning number is optimistic. Not because the winning model is secretly worse, but because the <em>selection process itself</em> systematically favours whichever model got lucky on that specific test set.</p>
+</section>
+<section id="nested-cross-validation" class="level3" data-number="13.2.6">
+<h3 data-number="13.2.6" class="anchored" data-anchor-id="nested-cross-validation"><span class="header-section-number">13.2.6</span> Nested Cross-Validation</h3>
+<p>Nested CV separates model <em>selection</em> from model <em>evaluation</em> using two loops. An outer loop (typically <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mn>5</mn></mrow><annotation encoding="application/x-tex">k=5</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">5</span></span></span></span>) estimates generalisation performance. An inner loop (typically <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi><mo>=</mo><mn>3</mn></mrow><annotation encoding="application/x-tex">k=3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">3</span></span></span></span>, runs within each outer training set) selects the best hyperparameters. For each outer fold, run the inner-loop hyperparameter search on that fold’s training data. Then evaluate the resulting best model on that fold’s held-out test data, a test set the inner search never touched. The hyperparameters chosen may differ across outer folds. That’s expected. The outer loop is estimating expected performance. It is not selecting the model to ship.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="13.3">
+<h2 data-number="13.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">13.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>CV Strategy</th>
+<th>When to use</th>
+<th>Weakness</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Single train/test split</td>
+<td>Quick sanity checks only</td>
+<td>High variance, unreliable</td>
+</tr>
+<tr class="even">
+<td>k-Fold (k=5)</td>
+<td>Standard default for most tasks</td>
+<td>May lose temporal ordering</td>
+</tr>
+<tr class="odd">
+<td>Stratified k-Fold</td>
+<td>Classification with class imbalance</td>
+<td>Same as k-Fold otherwise</td>
+</tr>
+<tr class="even">
+<td>TimeSeriesSplit</td>
+<td>Any time-ordered data</td>
+<td>Training set smaller in early folds</td>
+</tr>
+<tr class="odd">
+<td>Nested CV</td>
+<td>Hyperparameter tuning + honest evaluation</td>
+<td>Computationally expensive</td>
+</tr>
+<tr class="even">
+<td>Leave-One-Out</td>
+<td>Tiny datasets (&lt;50 examples)</td>
+<td>Slow; high variance between folds</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="procedures" class="level2" data-number="13.4">
+<h2 data-number="13.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">13.4</span> Procedures</h2>
+<p id="proc-13-1"><strong>Procedure 13.1 (Run k-Fold CV in One Line).</strong> <em>When to use:</em> estimating generalisation performance of any model.</p>
+<div id="lst-cv-oneline" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cv-oneline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;13.1: Standard k-fold CV inside a Pipeline
+</figcaption>
+<div aria-describedby="lst-cv-oneline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> cross_val_score</span>
+<span id="cb1-2"><span class="im">from</span> sklearn.pipeline <span class="im">import</span> Pipeline</span>
+<span id="cb1-3"><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> StandardScaler</span>
+<span id="cb1-4"><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression</span>
+<span id="cb1-5"></span>
+<span id="cb1-6">pipe <span class="op">=</span> Pipeline([</span>
+<span id="cb1-7">    (<span class="st">'scaler'</span>, StandardScaler()),</span>
+<span id="cb1-8">    (<span class="st">'clf'</span>, LogisticRegression(max_iter<span class="op">=</span><span class="dv">1000</span>)),</span>
+<span id="cb1-9">])</span>
+<span id="cb1-10">scores <span class="op">=</span> cross_val_score(pipe, X, y, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'accuracy'</span>)</span>
+<span id="cb1-11"><span class="bu">print</span>(<span class="ss">f'Accuracy: </span><span class="sc">{</span>scores<span class="sc">.</span>mean()<span class="sc">:.3f}</span><span class="ss"> ± </span><span class="sc">{</span>scores<span class="sc">.</span>std()<span class="sc">:.3f}</span><span class="ss">'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> fitting a scaler (or any preprocessing) on the whole dataset before cross-validating, rather than inside a <code>Pipeline</code>. That leaks validation-fold statistics into training and produces optimistic scores. Always put preprocessing inside the pipeline being cross-validated.</p>
+<p id="proc-13-2"><strong>Procedure 13.2 (Use Stratified k-Fold Explicitly).</strong> <em>When to use:</em> imbalanced classification, or when explicit control over the CV strategy is needed.</p>
+<div id="lst-stratified" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-stratified-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;13.2: Explicit stratified k-fold
+</figcaption>
+<div aria-describedby="lst-stratified-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> (</span>
+<span id="cb2-2">    StratifiedKFold,</span>
+<span id="cb2-3">    cross_val_score,</span>
+<span id="cb2-4">)</span>
+<span id="cb2-5"></span>
+<span id="cb2-6">skf <span class="op">=</span> StratifiedKFold(n_splits<span class="op">=</span><span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb2-7">scores <span class="op">=</span> cross_val_score(</span>
+<span id="cb2-8">    pipe, X, y, cv<span class="op">=</span>skf, scoring<span class="op">=</span><span class="st">'f1_weighted'</span></span>
+<span id="cb2-9">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-13-3"><strong>Procedure 13.3 (Set Up Time-Series CV).</strong> <em>When to use:</em> any dataset where rows are time-ordered.</p>
+<div id="lst-timeseries-cv" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-timeseries-cv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;13.3: TimeSeriesSplit: validation always in the future
+</figcaption>
+<div aria-describedby="lst-timeseries-cv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> (</span>
+<span id="cb3-2">    TimeSeriesSplit,</span>
+<span id="cb3-3">    cross_val_score,</span>
+<span id="cb3-4">)</span>
+<span id="cb3-5"></span>
+<span id="cb3-6"><span class="co"># Verify chronological order first</span></span>
+<span id="cb3-7">df <span class="op">=</span> df.sort_values(<span class="st">'date'</span>).reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-8">tss <span class="op">=</span> TimeSeriesSplit(n_splits<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb3-9">scores <span class="op">=</span> cross_val_score(</span>
+<span id="cb3-10">    pipe, X_ts, y_ts, cv<span class="op">=</span>tss, scoring<span class="op">=</span><span class="st">'accuracy'</span></span>
+<span id="cb3-11">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-13-4"><strong>Procedure 13.4 (Implement Nested CV for Honest Hyperparameter Tuning).</strong> <em>When to use:</em> tuning hyperparameters and reporting a valid performance estimate at the same time.</p>
+<div id="lst-nested-cv" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nested-cv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;13.4: Nested cross-validation: inner search, outer honest evaluation
+</figcaption>
+<div aria-describedby="lst-nested-cv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> (</span>
+<span id="cb4-2">    GridSearchCV,</span>
+<span id="cb4-3">    cross_val_score,</span>
+<span id="cb4-4">    StratifiedKFold,</span>
+<span id="cb4-5">)</span>
+<span id="cb4-6"></span>
+<span id="cb4-7">inner_cv <span class="op">=</span> StratifiedKFold(</span>
+<span id="cb4-8">    n_splits<span class="op">=</span><span class="dv">3</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb4-9">)</span>
+<span id="cb4-10">outer_cv <span class="op">=</span> StratifiedKFold(</span>
+<span id="cb4-11">    n_splits<span class="op">=</span><span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb4-12">)</span>
+<span id="cb4-13"></span>
+<span id="cb4-14">param_grid <span class="op">=</span> {</span>
+<span id="cb4-15">    <span class="st">'clf__n_estimators'</span>: [<span class="dv">50</span>, <span class="dv">100</span>, <span class="dv">200</span>],</span>
+<span id="cb4-16">    <span class="st">'clf__max_depth'</span>: [<span class="dv">3</span>, <span class="dv">5</span>, <span class="va">None</span>],</span>
+<span id="cb4-17">}</span>
+<span id="cb4-18">search <span class="op">=</span> GridSearchCV(</span>
+<span id="cb4-19">    pipe, param_grid, cv<span class="op">=</span>inner_cv, scoring<span class="op">=</span><span class="st">'accuracy'</span>, n_jobs<span class="op">=-</span><span class="dv">1</span></span>
+<span id="cb4-20">)</span>
+<span id="cb4-21"></span>
+<span id="cb4-22">nested_scores <span class="op">=</span> cross_val_score(</span>
+<span id="cb4-23">    search, X, y, cv<span class="op">=</span>outer_cv, scoring<span class="op">=</span><span class="st">'accuracy'</span></span>
+<span id="cb4-24">)</span>
+<span id="cb4-25">mean, std <span class="op">=</span> nested_scores.mean(), nested_scores.std()</span>
+<span id="cb4-26"><span class="bu">print</span>(<span class="ss">f'Nested CV: </span><span class="sc">{</span>mean<span class="sc">:.3f}</span><span class="ss"> ± </span><span class="sc">{</span>std<span class="sc">:.3f}</span><span class="ss">'</span>)</span>
+<span id="cb4-27"></span>
+<span id="cb4-28"><span class="co"># After nested CV establishes the honest estimate, refit</span></span>
+<span id="cb4-29"><span class="co"># on all data for the final model:</span></span>
+<span id="cb4-30">search.fit(X, y)</span>
+<span id="cb4-31">final_model <span class="op">=</span> search.best_estimator_</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-13-5"><strong>Procedure 13.5 (Compare Two Models Properly).</strong> <em>When to use:</em> before claiming “Model A is better than Model B.”</p>
+<div id="lst-compare-models" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-compare-models-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;13.5: Paired t-test on cross-validation fold scores
+</figcaption>
+<div aria-describedby="lst-compare-models-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">from</span> scipy <span class="im">import</span> stats</span>
+<span id="cb5-2"></span>
+<span id="cb5-3">scores_a <span class="op">=</span> cross_val_score(</span>
+<span id="cb5-4">    model_a, X, y, cv<span class="op">=</span><span class="dv">10</span>, scoring<span class="op">=</span><span class="st">'accuracy'</span></span>
+<span id="cb5-5">)</span>
+<span id="cb5-6">scores_b <span class="op">=</span> cross_val_score(</span>
+<span id="cb5-7">    model_b, X, y, cv<span class="op">=</span><span class="dv">10</span>, scoring<span class="op">=</span><span class="st">'accuracy'</span></span>
+<span id="cb5-8">)</span>
+<span id="cb5-9">t_stat, p_val <span class="op">=</span> stats.ttest_rel(scores_a, scores_b)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> comparing two models’ mean CV scores directly without a significance test. A 0.3 percentage-point difference in means can easily be noise. The paired t-test on matched fold scores is what tells you whether the difference is real.</p>
+</section>
+<section id="worked-example" class="level2" data-number="13.5">
+<h2 data-number="13.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">13.5</span> Worked Example</h2>
+<p>Take the Breast Cancer Wisconsin dataset: 569 examples, binary classification. Run the same logistic-regression pipeline through a fresh 80/20 split under ten different random seeds. Accuracy ranges from 0.965 to 1.000, a 3.5 percentage-point spread from nothing but which examples happened to land in the test set:</p>
+<div id="lst-seed-variance" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-seed-variance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;13.6: Ten random splits, same model, same data: different reported accuracy
+</figcaption>
+<div aria-describedby="lst-seed-variance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>):</span>
+<span id="cb6-2">    X_tr, X_te, y_tr, y_te <span class="op">=</span> train_test_split(</span>
+<span id="cb6-3">        X, y, test_size<span class="op">=</span><span class="fl">0.2</span>, random_state<span class="op">=</span>seed, stratify<span class="op">=</span>y</span>
+<span id="cb6-4">    )</span>
+<span id="cb6-5">    pipe.fit(X_tr, y_tr)</span>
+<span id="cb6-6">    acc <span class="op">=</span> accuracy_score(y_te, pipe.predict(X_te))</span>
+<span id="cb6-7">    <span class="bu">print</span>(<span class="ss">f'Seed </span><span class="sc">{</span>seed<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>acc<span class="sc">:.3f}</span><span class="ss">'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Any single one of those ten numbers, reported alone, would have looked like a clean, confident result. Run a 5-fold stratified CV instead, on the same pipeline and data. It reports fold scores of [0.982, 0.982, 0.974, 0.974, 0.991], mean 0.981, std 0.007. That’s a single number with an honest error bar attached, built from the same data used five different ways rather than one lucky (or unlucky) way.</p>
+<p>Nested CV tunes a Random Forest’s <code>n_estimators</code>/<code>max_depth</code> via a 3-fold inner search inside a 5-fold outer loop. The result here is more subtle than the “nested is always dramatically lower” framing sometimes suggests. The non-nested estimate (the search’s own <code>best_score_</code>, from the same folds used to pick the winning hyperparameters) reports 0.9543. The honest nested estimate reports 0.9543 too. That’s a gap too small to separate from rounding on this particular dataset, not the large optimism bias the Overfitting-to-Test-Set Problem describes in the worst case. That’s still a real, useful finding in its own right. The size of the nested-vs-non-nested gap depends on how easy the dataset is to separate and how much hyperparameter search space was explored. The only way to know whether a given case is a small gap or a large one is to run nested CV, not to assume.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="co"># SageMaker Automatic Model Tuning runs the equivalent of a</span></span>
+<span id="cb7-2"><span class="co"># hyperparameter search with built-in objective-metric</span></span>
+<span id="cb7-3"><span class="co"># tracking across training jobs</span></span>
+<span id="cb7-4"><span class="im">import</span> sagemaker</span>
+<span id="cb7-5"><span class="im">from</span> sagemaker.tuner <span class="im">import</span> (</span>
+<span id="cb7-6">    HyperparameterTuner,</span>
+<span id="cb7-7">    IntegerParameter,</span>
+<span id="cb7-8">)</span>
+<span id="cb7-9"></span>
+<span id="cb7-10">tuner <span class="op">=</span> HyperparameterTuner(</span>
+<span id="cb7-11">    estimator<span class="op">=</span>xgb_estimator,</span>
+<span id="cb7-12">    objective_metric_name<span class="op">=</span><span class="st">"validation:accuracy"</span>,</span>
+<span id="cb7-13">    hyperparameter_ranges<span class="op">=</span>{</span>
+<span id="cb7-14">        <span class="st">"max_depth"</span>: IntegerParameter(<span class="dv">3</span>, <span class="dv">10</span>)</span>
+<span id="cb7-15">    },</span>
+<span id="cb7-16">    max_jobs<span class="op">=</span><span class="dv">20</span>,</span>
+<span id="cb7-17">    max_parallel_jobs<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb7-18">)</span>
+<span id="cb7-19">tuner.fit({</span>
+<span id="cb7-20">    <span class="st">"train"</span>: train_s3_uri,</span>
+<span id="cb7-21">    <span class="st">"validation"</span>: val_s3_uri,</span>
+<span id="cb7-22">})</span></code></pre></div>
+<p><strong>When to prefer SageMaker Automatic Model Tuning:</strong> when the search needs to run as many independent, parallel managed training jobs rather than in-process <code>GridSearchCV</code>. Useful once a single search no longer fits comfortably on one machine, or when the team wants tuning history tracked centrally rather than in a notebook.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="13.6">
+<h2 data-number="13.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">13.6</span> History and Further Reading</h2>
+<p>Thakur, Ch. 2, gives practical cross-validation patterns with code <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Murphy’s Introduction, sections 4.5-4.6, covers the statistical foundations of model selection <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Burkov, Ch. 5, covers hyperparameter tuning and model selection <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="13.7">
+<h2 data-number="13.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">13.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 11 (a model is needed before it can be cross-validated) and Chapter 16 (evaluation metrics used within CV). It enables Chapter 17’s hyperparameter optimisation, which is always done via CV. It’s needed for essentially every model-comparison decision in the rest of this book. It’s often confused with test-set evaluation. CV is for model development and selection. The test set is for one final evaluation, after all decisions have already been made. Touch the test set once.</p>
+</section>
+<section id="exercises" class="level2" data-number="13.8">
+<h2 data-number="13.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">13.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-13-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in your own words why choosing hyperparameters based on test-set performance invalidates that test set as an estimate of generalisation.</p></li>
+<li id="ex-13-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State which CV strategy is correct for each: (a) a dataset of 30 rare-disease patient records; (b) daily sales figures for the past three years; (c) a roughly balanced 5,000-row classification dataset.</p></li>
+<li id="ex-13-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-seed-variance" class="quarto-xref">Listing&nbsp;<span>13.6</span></a>’s pattern, compute the standard deviation of the ten seed-accuracy values (0.982, 0.991, 0.982, 0.974, 0.974, 0.982, 0.991, 0.965, 0.974, 1.000) and compare it to this chapter’s 5-fold CV standard deviation (0.007). Which estimate would you trust more, and why?</p></li>
+<li id="ex-13-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-nested-cv" class="quarto-xref">Listing&nbsp;<span>13.4</span></a>, explain what it would mean if the non-nested and nested CV estimates came back nearly identical (as this chapter’s own 0.9543 vs.&nbsp;0.9543 result did) versus if they came back several percentage points apart.</p></li>
+<li id="ex-13-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate says “I ran 5-fold CV and got 94% ± 0.5%, so I’m confident in this number.” Using this chapter’s Trade-offs section, name one thing that CV std alone does not tell you about the estimate’s reliability.</p></li>
+<li id="ex-13-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer has a time-ordered dataset but their data science team used regular <code>StratifiedKFold</code> and reported a strong result. Using this chapter’s Time-Series Cross-Validation section, write the two or three sentences you’d say about why that result should not be trusted as-is.</p></li>
+<li id="ex-13-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the scikit-learn documentation’s page on <code>cross_validate</code> versus <code>cross_val_score</code>. Identify one piece of information <code>cross_validate</code> returns that <code>cross_val_score</code> does not, and describe a situation from this chapter where that extra information would matter.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="13.9">
+<h2 data-number="13.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">13.9</span> Mental Model</h2>
+<p>Cross-validation is not a model selection technique. It’s an estimation technique. It tells you how well your model <em>type</em> generalises. The test set tells you how well <em>this specific fitted model</em> generalises. Use CV during development. Touch the test set once, at the end, to report the final result. Never let it take part in any decision along the way.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

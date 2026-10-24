@@ -31,6 +31,7 @@
 							{#if b.buyHref}<Button size="sm" arrow href={b.buyHref} rel="external noopener">Buy on Amazon</Button>{:else}<Button size="sm" disabled>Buy on Amazon</Button>{/if}
 							{#if b.readHref}<Button size="sm" variant="outline" href={b.readHref}>Read online</Button>{:else}<Button size="sm" variant="outline" disabled>Read online</Button>{/if}
 							{#if b.pdfHref}<Button size="sm" variant="outline" href={b.pdfHref}>PDF</Button>{:else}<Button size="sm" variant="outline" disabled>PDF</Button>{/if}
+							{#if b.quizHref}<Button size="sm" variant="ghost" href={b.quizHref}>Quizzes</Button>{/if}
 						</div>
 					</div>
 				</article>

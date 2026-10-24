@@ -2,6 +2,15 @@ import type { Book } from './types';
 
 // Real titles from the Field Guide source (Quarto). Fill in summaries, page counts and links
 // once the web edition (books project) is live.
+
+/**
+ * Stand-in for a link that doesn't exist yet. It goes to /books/coming-soon, which says so.
+ * TODO before launch: replace every placeholder() with the real link, and drop this helper.
+ *   amazon: a universal link that sends each reader to their local store (BACKLOG.md #4)
+ *   pdf:    the PDF in a release or on the CDN
+ *   pay:    the pay-what-you-want page (Ko-fi, Gumroad, Stripe Payment Link, …)
+ */
+export const placeholder = (what: 'amazon' | 'pdf' | 'pay') => `/books/coming-soon#${what}`;
 export const series = {
 	title: "A Solutions Architect's Field Guide",
 	zh: '架构师手册',
@@ -19,7 +28,11 @@ export const books: Book[] = [
 		chapters: 20,
 		status: 'building',
 		tone: 'magenta',
-		// buyHref: '<universal link>', // ‹store link when published. Use a universal link, not one regional Amazon store (BACKLOG.md #4)›
+		readHref: '/books/classical-data-science',
+		quizHref: '/books/classical-data-science/quiz',
+		pdfHref: placeholder('pdf'),
+		buyHref: placeholder('amazon'), // a universal link, not one regional Amazon store (BACKLOG.md #4)
+		payHref: placeholder('pay')
 	},
 	{
 		slug: 'modern-ai',

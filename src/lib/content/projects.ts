@@ -61,17 +61,28 @@ export const projects: Project[] = [
 		name: 'Zettelkasten',
 		zh: '卡片盒',
 		kind: 'desktop',
-		status: 'building',
+		status: 'live',
 		summary: 'A multi-modal knowledge graph that goes beyond notes.',
 		description: [
 			'Obsidian already does the knowledge graph well. This extends it beyond notes.',
-			'PDFs, Word and Excel files and archived web pages sit in the graph next to your notes. Each one gets an AI summary and a space for your own notes. Notebooks and code blocks run in place.',
-			'GraphRAG groups related ideas into communities, at as many levels as the data needs. Each community gets a summary and a space for notes. It rebuilds on a schedule and keeps your notes.',
-			'Built as an Obsidian plugin with a local Python service. The design is in the Lab.'
+			'PDFs, Word and Excel files and archived web pages sit in the graph next to your notes. Each one is saved whole, gets a summary from your local model, and has a space for your own notes.',
+			'Code blocks marked run execute in place through Jupyter kernels, with plots and tables inline. Notebooks open in their own view.',
+			'Communities group the ideas your sources and notes share, at two levels. Each one gets a note with a report that links to its sources. Rebuilds keep your notes and your links. A graph view drills from the top groups down to the sources.',
+			'Everything runs on your machine. It ships with NEONDECK for Obsidian, a theme that passes WCAG 2.2 AA. The design and the spike results are in the Lab.'
 		],
-		stack: ['Obsidian', 'TypeScript', 'Svelte', 'Python'],
+		stack: ['Obsidian', 'TypeScript', 'Python', 'FastAPI', 'Jupyter', 'GLiNER', 'sigma.js', 'NEONDECK'],
 		featured: true,
-		downloads: []
+		started: '2026-10',
+		repo: 'https://github.com/arkane-dev/zettelkasten',
+		downloads: [],
+		downloadsNote: 'Install from source: the plugin needs its local Python service. The README has the steps. Tested on Linux.',
+		screenshots: [
+			{ src: '/images/zettelkasten/community-graph.webp', alt: 'The community graph: the top-level groups in a vault of 50 papers, books and recipes, linked where their ideas meet.' },
+			{ src: '/images/zettelkasten/community-note.webp', alt: 'A community note on strategic game play: a summary, findings that link to their sources, and sub-communities.' },
+			{ src: '/images/zettelkasten/notebook.webp', alt: 'A Jupyter notebook open in Obsidian, with cells, outputs, an error traceback and a kernel picker.' },
+			{ src: '/images/zettelkasten/theme-note.webp', alt: 'A note in the NEONDECK theme: uppercase headings, cyan links and tags, a checklist and a table.' }
+		],
+		changelog: [{ version: '0.1.0', date: '2026-10-24', notes: 'First public release. Sources with readers and summaries, runnable code and notebooks, communities with a graph view, and the NEONDECK theme.' }]
 	},
 	{
 		slug: 'research-companion',

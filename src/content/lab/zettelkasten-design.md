@@ -2,7 +2,7 @@
 title: "Zettelkasten: Obsidian plugin or ground-up build?"
 zh: 卡片盒
 date: 2026-10-07
-status: building
+status: live
 summary: The plan for a notes system that archives its sources, runs code and builds GraphRAG communities. Build on Obsidian, or start from scratch?
 tags: [design, graphrag, obsidian]
 project: zettelkasten
@@ -167,8 +167,13 @@ GraphRAG's update mode only appends. New documents form their own communities an
 
 Clustering takes 7 seconds on this corpus. Reports take the time. So each rebuild will re-cluster the whole graph and pay the LLM only for what changed. Extract from changed notes only, found by content hash. Match new communities to old ones. Rewrite a report only when its membership moved by roughly 20% or more. Short notes stay whole as one chunk, so an edited note means one chunk to re-read.
 
-One question is still open. Does a small change reshuffle the communities? That's the first test in Phase 4.
+Does a small change reshuffle the communities? Phase 4 tested it. Cluster 45 documents, add 5 more, cluster again. Every top-level community found its match, and 82 to 100% of them kept at least 80% of their phrases. One level down, about 70% held that well. So a new paper on a topic joins its community instead of starting its own.
 
-### Next
+### Built
 
-Phase 1: the plugin and the service, set up for real.
+All five phases shipped on 2026-10-24 as [version 0.1.0](https://github.com/arkane-dev/zettelkasten).
+
+- **Sources:** PDFs, Office files and web pages saved whole, with readers inside the note and a summary from the local model.
+- **Code:** blocks marked `run` run through Jupyter kernels, one per note. Notebooks open in their own view.
+- **Communities:** the hybrid from the spike, in my own code instead of the graphrag library. The library's update mode can't re-cluster, and its install is 7 GB. On the 50 documents a first build takes 14 minutes. A one-note edit takes 35 seconds.
+- **Theme:** NEONDECK for Obsidian, checked against WCAG 2.2 AA.

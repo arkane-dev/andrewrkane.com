@@ -45,6 +45,7 @@ export const books: Book[] = [
 		status: 'building',
 		tone: 'cyan',
 		readHref: '/books/modern-ai',
+		quizHref: '/books/modern-ai/quiz',
 		pdfHref: placeholder('pdf'),
 		buyHref: placeholder('amazon'), // a universal link, not one regional Amazon store (BACKLOG.md #4)
 		payHref: placeholder('pay')
@@ -60,6 +61,7 @@ export const books: Book[] = [
 		status: 'building',
 		tone: 'violet',
 		readHref: '/books/systems-performance',
+		quizHref: '/books/systems-performance/quiz',
 		pdfHref: placeholder('pdf'),
 		buyHref: placeholder('amazon'), // a universal link, not one regional Amazon store (BACKLOG.md #4)
 		payHref: placeholder('pay')
@@ -75,6 +77,7 @@ export const books: Book[] = [
 		status: 'building',
 		tone: 'gold',
 		readHref: '/books/applied-ai-domains',
+		quizHref: '/books/applied-ai-domains/quiz',
 		pdfHref: placeholder('pdf'),
 		buyHref: placeholder('amazon'), // a universal link, not one regional Amazon store (BACKLOG.md #4)
 		payHref: placeholder('pay')

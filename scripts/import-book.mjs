@@ -200,6 +200,8 @@ if (args.quizzes) {
 	for (const f of readdirSync(qdir).filter((f) => /^ch\d+\.json$/.test(f)).sort()) {
 		const quiz = JSON.parse(readFileSync(join(qdir, f), 'utf8'));
 		const ch = String(quiz.chapter);
+		// The quiz folder holds every volume. Keep only this book's chapters.
+		if (!book.chapters.some((c) => c.kind === 'chapter' && c.number === ch)) continue;
 		for (const item of [...quiz.questions, ...quiz.ideas]) {
 			item.refLinks = resolveRef(item.ref ?? '', ch);
 			total++;

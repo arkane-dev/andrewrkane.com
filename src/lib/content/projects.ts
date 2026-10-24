@@ -78,7 +78,7 @@ export const projects: Project[] = [
 		downloadsNote: 'Install from source. The plugin needs its local Python service. Tested on Linux.',
 		downloadsLinks: [
 			{ label: 'Install guide on GitHub', href: 'https://github.com/arkane-dev/zettelkasten#install' },
-			{ label: 'Release 0.1.0: plugin and theme', href: 'https://github.com/arkane-dev/zettelkasten/releases/tag/v0.1.0' }
+			{ label: 'Release 0.1.1: plugin and theme', href: 'https://github.com/arkane-dev/zettelkasten/releases/tag/v0.1.1' }
 		],
 		screenshots: [
 			{ src: '/images/zettelkasten/community-graph.webp', alt: 'The community graph: the top-level groups in a vault of 50 papers, books and recipes, linked where their ideas meet.' },
@@ -86,7 +86,10 @@ export const projects: Project[] = [
 			{ src: '/images/zettelkasten/notebook.webp', alt: 'A Jupyter notebook open in Obsidian, with cells, outputs, an error traceback and a kernel picker.' },
 			{ src: '/images/zettelkasten/theme-note.webp', alt: 'A note in the NEONDECK theme: uppercase headings, cyan links and tags, a checklist and a table.' }
 		],
-		changelog: [{ version: '0.1.0', date: '2026-10-24', notes: 'First public release. Sources with readers and summaries, runnable code and notebooks, communities with a graph view, and the NEONDECK theme.' }]
+		changelog: [
+			{ version: '0.1.1', date: '2026-10-24', notes: 'Summaries are checked against their source: contradicted claims are corrected and unsupported ones dropped. Problem claims fell from 5–7 per run to 2 in an 18-document test. Community reports start with their topic.' },
+			{ version: '0.1.0', date: '2026-10-24', notes: 'First public release. Sources with readers and summaries, runnable code and notebooks, communities with a graph view, and the NEONDECK theme.' }
+		]
 	},
 	{
 		slug: 'research-companion',

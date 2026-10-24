@@ -18,6 +18,7 @@ export interface Project {
 	url?: string; // live URL (web tools)
 	downloads?: Download[]; // desktop builds
 	downloadsNote?: string; // shown when there are no builds yet
+	downloadsLinks?: { label: string; href: string }[]; // shown under the note, e.g. an install guide
 	screenshots?: { src: string; alt: string }[]; // files in static/images/<slug>/, e.g. '/images/neondeck/home.png'
 	changelog?: { version: string; date: string; notes: string }[];
 }

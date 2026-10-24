@@ -54,6 +54,13 @@
 					{:else}
 						<p class="nd-meta">&gt; {p.downloadsNote ?? 'no builds yet'}<span class="nd-cursor"></span></p>
 					{/if}
+					{#if p.downloadsLinks?.length}
+						<ul class="dl-links">
+							{#each p.downloadsLinks as l (l.href)}
+								<li><a href={l.href} target="_blank" rel="noopener">{l.label} ↗</a></li>
+							{/each}
+						</ul>
+					{/if}
 				</Panel>
 				</div>
 			{/if}
@@ -71,6 +78,8 @@
 </div>
 
 <style>
+	.dl-links { list-style: none; margin: var(--nd-space-3) 0 0; padding: 0; display: grid; gap: var(--nd-space-2); font-size: var(--nd-text-sm); }
+	.dl-links a { display: inline-block; min-height: 24px; line-height: 24px; }
 	.content { max-width: var(--nd-content-max); margin: 0 auto; padding: var(--nd-space-12) var(--nd-gutter) 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--nd-space-10); }
 	.back { text-decoration: none; }
 	.head { display: flex; justify-content: space-between; gap: var(--nd-space-8); align-items: flex-start; padding-bottom: var(--nd-space-8); border-bottom: 1px solid var(--nd-line); }

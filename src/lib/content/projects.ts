@@ -75,7 +75,11 @@ export const projects: Project[] = [
 		started: '2026-10',
 		repo: 'https://github.com/arkane-dev/zettelkasten',
 		downloads: [],
-		downloadsNote: 'Install from source: the plugin needs its local Python service. The README has the steps. Tested on Linux.',
+		downloadsNote: 'Install from source. The plugin needs its local Python service. Tested on Linux.',
+		downloadsLinks: [
+			{ label: 'Install guide on GitHub', href: 'https://github.com/arkane-dev/zettelkasten#install' },
+			{ label: 'Release 0.1.0: plugin and theme', href: 'https://github.com/arkane-dev/zettelkasten/releases/tag/v0.1.0' }
+		],
 		screenshots: [
 			{ src: '/images/zettelkasten/community-graph.webp', alt: 'The community graph: the top-level groups in a vault of 50 papers, books and recipes, linked where their ideas meet.' },
 			{ src: '/images/zettelkasten/community-note.webp', alt: 'A community note on strategic game play: a summary, findings that link to their sources, and sub-communities.' },

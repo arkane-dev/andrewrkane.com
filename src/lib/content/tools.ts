@@ -22,5 +22,15 @@ export const tools: Tool[] = [
 		href: '/projects/genai-writer#downloads',
 		status: 'live',
 		project: 'genai-writer'
+	},
+	{
+		slug: 'zettelkasten',
+		name: 'Zettelkasten',
+		zh: '卡片盒',
+		summary: 'An Obsidian plugin that turns files and web pages into notes, runs code in place, and groups the ideas your notes share. Runs on your machine.',
+		kind: 'desktop',
+		href: '/projects/zettelkasten#downloads',
+		status: 'live',
+		project: 'zettelkasten'
 	}
 ];

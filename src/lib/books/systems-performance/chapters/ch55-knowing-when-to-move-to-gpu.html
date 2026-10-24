@@ -1,0 +1,140 @@
+<p>Chapters 48 through 54 exhausted the CPU-side levers this track has to offer: cache locality, profiling discipline, algorithmic and data-structure choice, vectorization, parallelism, memory and I/O. This chapter asks the question those chapters deliberately deferred: when has “make the CPU version faster” stopped being the right lever, and “move this to GPU” become the correct next step? The honest answer is not “always” or “for anything big enough.” It is a specific, computable property of the operation itself, and this chapter measures both a case where GPU offload never helps, at any size tested, and a case where it clearly does, on the same real hardware, so the comparison is not hypothetical.</p>
+<section id="motivation" class="level2" data-number="55.1">
+<h2 data-number="55.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">55.1</span> Motivation</h2>
+<p>Two mechanisms determine the answer, together. First, every GPU offload pays a fixed transfer cost, moving data across PCIe to the GPU’s own memory, and back, that has nothing to do with how fast the GPU itself computes. Second, <strong>arithmetic intensity</strong> (FLOPs performed per byte of data moved) determines whether an operation can ever amortize that transfer cost. Low, size-independent intensity means transfer cost dominates forever, no matter how large the problem gets; intensity that <em>grows</em> with problem size means there is a real crossover point past which the GPU’s much larger raw compute throughput wins decisively. Knowing which regime an operation is in, before writing a single line of GPU code, is the actual skill this chapter teaches.</p>
+</section>
+<section id="exposition" class="level2" data-number="55.2">
+<h2 data-number="55.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">55.2</span> Exposition</h2>
+<section id="transfer-overhead-is-real-and-textbook-mitigations-arent-guaranteed" class="level3" data-number="55.2.1">
+<h3 data-number="55.2.1" class="anchored" data-anchor-id="transfer-overhead-is-real-and-textbook-mitigations-arent-guaranteed"><span class="header-section-number">55.2.1</span> Transfer Overhead Is Real, and Textbook Mitigations Aren’t Guaranteed</h3>
+<p>Moving data across PCIe is a much narrower pipe than either the CPU’s own memory bus or the GPU’s on-board HBM bandwidth. A round-trip host-to-device-to-host transfer implies bandwidth far below either side’s own internal memory bandwidth, because the transfer is specifically limited by the interconnect between them, not by either processor’s own memory subsystem. Small transfers fare worse proportionally still: at the smallest sizes, fixed per-call overhead (driver and API call cost, DMA setup) dominates almost completely over the actual (negligible) data volume being moved, the same fixed-cost-per-operation shape Chapter 54 found for <code>read()</code> calls, now recurring at the PCIe level instead of the filesystem level.</p>
+<p>The standard textbook mitigation for transfer cost is pinned (page-locked) host memory, which is supposed to avoid an intermediate staging copy and speed up DMA transfers meaningfully. Measured directly on this book’s reference rig, pinned memory gave only a modest improvement over ordinary pageable memory, real, but far below the two-to-three-times improvement sometimes quoted in general guidance. This is an honest, measured result, not a failed demo. It is a direct instance of this track’s recurring “verify, don’t assume a textbook effect transfers unchanged to your stack” lesson, applied here to a GPU-specific optimization instead of a CPU one.</p>
+</section>
+<section id="a-memory-bound-operation-gpu-never-wins" class="level3" data-number="55.2.2">
+<h3 data-number="55.2.2" class="anchored" data-anchor-id="a-memory-bound-operation-gpu-never-wins"><span class="header-section-number">55.2.2</span> A Memory-Bound Operation: GPU Never Wins</h3>
+<p>Consider <code>x * 2.0 + 1.0</code>: 2 FLOPs and 2 memory accesses (one read, one write) per element. Timed on CPU versus GPU-including-transfer, across sizes from 1,000 to 100,000,000 elements, GPU’s best result on this hardware was a near-tie at a middle size, falling to a clear loss everywhere else, including the very largest size tested. This operation’s arithmetic intensity is a constant 0.25 FLOPs/byte, completely independent of <code>n</code>. Doubling the array doubles both the compute and the data moved in lockstep, so there is no way to “grow into” a regime where compute dominates transfer. No array size makes this operation worth offloading on this hardware, full stop, not because GPUs are slow, but because this operation’s fundamental shape never lets the GPU’s raw compute advantage show up before the transfer cost has already lost the race.</p>
+</section>
+<section id="a-compute-bound-operation-a-real-computable-crossover" class="level3" data-number="55.2.3">
+<h3 data-number="55.2.3" class="anchored" data-anchor-id="a-compute-bound-operation-a-real-computable-crossover"><span class="header-section-number">55.2.3</span> A Compute-Bound Operation: A Real, Computable Crossover</h3>
+<p>Timing matrix multiplication (<code>A @ B</code>) the same way, across <code>n</code> from 64 to 4096, produces a genuine, hardware-measured crossover. GPU loses at the smaller sizes and wins decisively past a specific size, rising to a peak speedup before settling to a still-substantial win at the largest size tested, not perfectly monotonic (real measurements rarely are) but decisively favoring GPU past the crossover point. The mechanism: matmul’s arithmetic intensity is <code>2n³</code> FLOPs over roughly <code>3n²</code> float32 elements moved, which <strong>grows linearly with problem size</strong>. Computed directly for the sizes in this chapter’s Worked Example, intensity rises by roughly two orders of magnitude from the smallest matrix tested to the largest. Past a certain intensity, the operation is no longer limited by how fast data can be shipped across PCIe. It is limited by how fast the processor can compute, and a GPU’s peak compute throughput vastly exceeds a CPU’s, Chapter 52’s SIMD story, at a much larger scale, so the crossover, once intensity is high enough, tips decisively toward GPU.</p>
+</section>
+<section id="the-roofline-model-why-these-two-cases-diverge" class="level3" data-number="55.2.4">
+<h3 data-number="55.2.4" class="anchored" data-anchor-id="the-roofline-model-why-these-two-cases-diverge"><span class="header-section-number">55.2.4</span> The Roofline Model: Why These Two Cases Diverge</h3>
+<p>The roofline model plots achievable performance against arithmetic intensity: below a hardware-specific “ridge point,” performance is capped by memory bandwidth (more compute doesn’t help, because the processor is waiting on data, not arithmetic); above it, performance is capped by the processor’s peak compute throughput. Elementwise operations sit permanently to the left of the ridge, at a fixed intensity that never changes with <code>n</code>. There is no path to the compute-bound region no matter how big the problem grows, which is exactly why the elementwise result above held across six orders of magnitude. Matmul’s intensity climbs with <code>n</code>, eventually crossing the ridge into the compute-bound region, exactly where the matmul crossover happened. This gives a real, computable answer to “should this move to GPU”: compute the operation’s arithmetic intensity (FLOPs divided by bytes moved) and check whether, and at what size, it crosses this hardware’s ridge point, rather than guessing from how large the array “feels.”</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="55.3">
+<h2 data-number="55.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">55.3</span> Trade-offs and Limits</h2>
+<p>Move an operation to GPU when its arithmetic intensity is high, or grows with problem size (matrix multiplication, convolutions, most dense linear algebra, the operations underlying deep learning, which is exactly why GPUs took over that field) and the problem size is large enough to be past this hardware’s measured crossover point, computed rather than assumed. Keep an operation on CPU when arithmetic intensity is low and size-independent (elementwise operations, simple reductions, most “glue” code in a data pipeline) or when the CPU-side levers of Chapters 48 through 54 haven’t been exhausted yet. GPU offload is a much bigger architectural step than adding vectorization or parallelism, and shouldn’t be reached for before the cheaper options are tried. Watch for transfer overhead swamping a genuine per-call GPU compute win on small or frequent operations. Batch work to amortize transfer cost, exactly like Chapter 53’s pool-reuse lesson and Chapter 54’s chunk-size lesson, and watch for assuming a textbook GPU optimization like pinned memory transfers unchanged to a specific hardware and software stack, when it should be measured instead.</p>
+</section>
+<section id="procedures" class="level2" data-number="55.4">
+<h2 data-number="55.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">55.4</span> Procedures</h2>
+<p id="proc-55-1"><strong>Procedure 55.1 (Compute an Operation’s Arithmetic Intensity).</strong> <em>When to use:</em> before deciding whether an operation is a GPU-offload candidate at all. The first, cheapest step, requiring no benchmarking.</p>
+<div id="lst-arith-intensity" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-arith-intensity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;55.1: Arithmetic intensity as FLOPs per byte moved, for two contrasting operation shapes
+</figcaption>
+<div aria-describedby="lst-arith-intensity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> arithmetic_intensity(flops, bytes_moved):</span>
+<span id="cb1-2">    <span class="cf">return</span> flops <span class="op">/</span> bytes_moved</span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="co"># Elementwise op: 2 FLOPs, 2 memory accesses (read + write), per</span></span>
+<span id="cb1-5"><span class="co"># element</span></span>
+<span id="cb1-6"><span class="co"># ~0.25, constant</span></span>
+<span id="cb1-7">elementwise <span class="op">=</span> arithmetic_intensity(</span>
+<span id="cb1-8">    flops<span class="op">=</span><span class="dv">2</span> <span class="op">*</span> n,</span>
+<span id="cb1-9">    bytes_moved<span class="op">=</span><span class="dv">2</span> <span class="op">*</span> n <span class="op">*</span> <span class="dv">4</span>,</span>
+<span id="cb1-10">)</span>
+<span id="cb1-11"></span>
+<span id="cb1-12"><span class="co"># Matmul: 2n^3 FLOPs, ~3n^2 float32 elements moved (A, B in; C out)</span></span>
+<span id="cb1-13"><span class="co"># grows with n</span></span>
+<span id="cb1-14">matmul <span class="op">=</span> arithmetic_intensity(</span>
+<span id="cb1-15">    flops<span class="op">=</span><span class="dv">2</span> <span class="op">*</span> n<span class="op">**</span><span class="dv">3</span>,</span>
+<span id="cb1-16">    bytes_moved<span class="op">=</span><span class="dv">3</span> <span class="op">*</span> n <span class="op">*</span> n <span class="op">*</span> <span class="dv">4</span>,</span>
+<span id="cb1-17">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> judging GPU-worthiness by total data size alone (“it’s a big array, GPU should help”). This chapter’s Worked Example measured a 100-million-element elementwise operation that was still slower on GPU, including transfer, than on CPU. Size alone doesn’t determine intensity. The <em>ratio</em> of compute to data movement does, and that ratio can stay flat regardless of how large the array gets.</p>
+<p id="proc-55-2"><strong>Procedure 55.2 (Measure a Hardware’s Own CPU/GPU Crossover Point).</strong> <em>When to use:</em> deciding whether a specific operation, at actual production data size, belongs on CPU or GPU. Never assume a crossover point from a different machine.</p>
+<div id="lst-crossover-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-crossover-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;55.2: Benchmarking GPU offload including the full round-trip transfer, not compute alone
+</figcaption>
+<div aria-describedby="lst-crossover-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> torch</span>
+<span id="cb2-2"><span class="im">import</span> time</span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="kw">def</span> bench_gpu_incl_transfer(make_inputs, op, reps<span class="op">=</span><span class="dv">10</span>):</span>
+<span id="cb2-5">    cpu_inputs <span class="op">=</span> make_inputs()</span>
+<span id="cb2-6">    <span class="kw">def</span> full():</span>
+<span id="cb2-7">        gpu_inputs <span class="op">=</span> [x.to(<span class="st">'cuda'</span>) <span class="cf">for</span> x <span class="kw">in</span> cpu_inputs]</span>
+<span id="cb2-8">        result <span class="op">=</span> op(<span class="op">*</span>gpu_inputs)</span>
+<span id="cb2-9">        <span class="cf">return</span> result.to(<span class="st">'cpu'</span>)</span>
+<span id="cb2-10">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">3</span>):</span>
+<span id="cb2-11">        full()</span>
+<span id="cb2-12">    torch.cuda.synchronize()</span>
+<span id="cb2-13">    times <span class="op">=</span> []</span>
+<span id="cb2-14">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(reps):</span>
+<span id="cb2-15">        torch.cuda.synchronize()</span>
+<span id="cb2-16">        t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb2-17">        full()</span>
+<span id="cb2-18">        torch.cuda.synchronize()</span>
+<span id="cb2-19">        times.append(time.perf_counter() <span class="op">-</span> t0)</span>
+<span id="cb2-20">    <span class="cf">return</span> <span class="bu">sorted</span>(times)[<span class="bu">len</span>(times) <span class="op">//</span> <span class="dv">2</span>]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> benchmarking GPU compute time alone, without the transfer, and concluding “GPU is N times faster.” The honest number, the one that determines whether offloading is actually worth it in a real pipeline, must include the round trip. Always call <code>torch.cuda.synchronize()</code> before <em>and</em> after timing; CUDA operations are asynchronous by default, and omitting synchronization will silently under-report GPU time.</p>
+<p id="proc-55-3"><strong>Procedure 55.3 (Decide: Keep This on CPU, or Move It to GPU?).</strong> <em>When to use:</em> a concrete decision checklist for a specific operation and data size, before writing any GPU-specific code.</p>
+<ol type="1">
+<li>Have Chapters 48 through 54’s CPU-side levers already been applied: vectorization, parallelism, cache-friendly layout? If not, try those first; they’re cheaper than a GPU port, and this chapter’s own elementwise result shows a well-vectorized CPU op can beat a naive GPU port outright.</li>
+<li>Compute the operation’s arithmetic intensity (<a href="#lst-arith-intensity" class="quarto-xref">Listing&nbsp;<span>55.1</span></a>). Does it grow with problem size, like matmul, or stay flat, like elementwise ops? Flat-and-low intensity means GPU offload is unlikely to ever pay off, regardless of size.</li>
+<li>If intensity does grow with size, measure the actual crossover point on the target hardware (<a href="#lst-crossover-bench" class="quarto-xref">Listing&nbsp;<span>55.2</span></a>). Don’t assume a number from a different GPU, PyTorch version, or PCIe generation transfers unchanged.</li>
+<li>If moving to GPU, check whether the same data will be reused across multiple GPU operations before transferring back. Amortizing one transfer cost across many GPU-side operations changes the calculus significantly compared to a single transfer-compute-transfer round trip.</li>
+</ol>
+<p><strong>Common mistake:</strong> making this decision once for an operation and never revisiting it. Data sizes, batch sizes, and hardware change. A decision that correctly kept an operation on CPU at last year’s data volume may no longer hold; re-measure rather than assume the old conclusion still applies.</p>
+</section>
+<section id="worked-example" class="level2" data-number="55.5">
+<h2 data-number="55.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">55.5</span> Worked Example</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface. Round-trip host-to-device-to-host transfer, measured at several sizes: a 1,000-element transfer took 0.025 ms<span class="ref-rig-mark">†</span>, implying only 0.32 GB/s, dominated almost entirely by fixed per-call overhead rather than the negligible actual data volume. A 100,000,000-element transfer (800MB total) took 203.23 ms<span class="ref-rig-mark">†</span>, implying roughly 3.94 GB/s, real bandwidth at last, but nowhere near either side’s own internal memory bandwidth, because this is specifically the PCIe interconnect, a much narrower pipe. Testing pinned versus pageable host memory on a 100,000,000-float host-to-device transfer: pageable took 29.79 ms (13.43 GB/s); pinned took 27.65 ms (14.47 GB/s), a 1.08x<span class="ref-rig-mark">†</span> improvement, real but far below textbook expectations on this exact hardware/driver/PyTorch combination.</p>
+<p>The elementwise operation <code>x * 2.0 + 1.0</code>, timed CPU versus GPU-including-transfer from n=1,000 to n=100,000,000: GPU’s best result was 0.98x<span class="ref-rig-mark">†</span> at n=100,000, essentially a tie, still not a genuine win, falling to 0.3-0.6x everywhere else, including the very largest size tested (0.39x at n=100,000,000). GPU never wins for this operation, at any tested size, across six orders of magnitude.</p>
+<p>Matrix multiplication, timed the same way from n=64 to n=4096: GPU lost at n=256 (0.77x) and won starting at n=512 (1.08x, the crossover), rising to a 3.21x peak at n=2048 before settling to 2.52x at n=4096. Computed arithmetic intensity over the same range rises from 10.7 FLOPs/byte at n=64 to 682.7 FLOPs/byte at n=4096, a genuinely computable property that predicts the crossover directly, rather than requiring it to be discovered by trial and error each time.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="55.6">
+<h2 data-number="55.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">55.6</span> History and Further Reading</h2>
+<p>Williams, Waterman, and Patterson’s “Roofline: An Insightful Visual Performance Model” <span class="citation" data-cites="williams2009roofline">(<a href="#ref-williams2009roofline" role="doc-biblioref">Williams et al. 2009</a>)</span> is the original paper behind the roofline model this chapter’s fourth Exposition section applies directly, and is worth reading for the general framework beyond the two specific operations measured here. NVIDIA’s “CUDA C++ Best Practices Guide,” in its section on data transfer, is the authoritative treatment of pinned memory, transfer/compute overlap, and minimizing PCIe cost in more depth than this chapter’s summary. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 6, applies the same arithmetic-intensity ridge-point reasoning one level deeper, to a single GPU kernel’s own memory-bound-versus-compute-bound question rather than the CPU/GPU offload decision this chapter measures, a practical companion once this chapter’s crossover has been computed for the CPU-to-GPU boundary itself.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="55.7">
+<h2 data-number="55.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">55.7</span> How This Connects</h2>
+<p>This chapter builds on every prior chapter in this track. It is explicitly the point where “keep optimizing on CPU” (Chapters 48 through 54) stops being sufficient and a different kind of hardware becomes the right lever. Chapter 52’s GFLOPS measurements are the CPU-side compute numbers this chapter’s GPU comparison is implicitly measured against. It enables Chapter 56, which profiles a genuine mixed CPU/GPU pipeline to find the real bottleneck empirically, building directly on this chapter’s transfer-overhead and arithmetic-intensity framework. It also points toward this book’s own GPU-kernels chapters. Chapter 38 covers the GPU architecture fundamentals underlying why GPU compute throughput is so much higher once an operation is compute-bound, and Chapter 43 covers kernel performance tuning and the compute-bound/memory-bound distinction from inside a single GPU kernel, one level deeper than the CPU/GPU boundary this chapter measures at. Both are the natural next stop once a workload has been shown, by the reasoning in this chapter, to genuinely belong on GPU. This chapter is often confused with “GPUs are just faster” as an unexamined, universal claim. The elementwise-operation result above is a direct, measured counterexample on real hardware, not a hypothetical caveat.</p>
+</section>
+<section id="exercises" class="level2" data-number="55.8">
+<h2 data-number="55.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">55.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-55-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define arithmetic intensity in one sentence, and state which of this chapter’s two measured operations has an intensity that grows with problem size.</p></li>
+<li id="ex-55-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain why the elementwise operation <code>x * 2.0 + 1.0</code> never becomes worth moving to GPU, no matter how large <code>n</code> gets, using this chapter’s roofline framing.</p></li>
+<li id="ex-55-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-arith-intensity" class="quarto-xref">Listing&nbsp;<span>55.1</span></a>, compute the arithmetic intensity of a matrix-vector product (<code>n×n</code> matrix times a length-<code>n</code> vector: <code>2n²</code> FLOPs, roughly <code>n²</code> float32 elements moved) and state whether it grows with <code>n</code> the way matmul’s does.</p></li>
+<li id="ex-55-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter measured a matmul crossover between n=256 and n=512. Using <a href="#lst-crossover-bench" class="quarto-xref">Listing&nbsp;<span>55.2</span></a> as a base, describe how you would locate the crossover to within a single power of two on a different GPU, and what you would need to hold fixed for the comparison to be fair.</p></li>
+<li id="ex-55-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> A pipeline transfers a 50,000-element array to GPU, runs <code>x * 2.0 + 1.0</code>, and transfers it back, once per second, forever. Using this chapter’s measured numbers, estimate whether batching ten such calls into one before transferring would help, and why.</p></li>
+<li id="ex-55-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague wants to move a small “glue” reduction step (summing a 10,000-element array once per pipeline iteration) to GPU because “the rest of the pipeline is already on GPU.” Using this chapter’s Trade-offs section, write the two-sentence case for checking arithmetic intensity before agreeing.</p></li>
+<li id="ex-55-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter reports pinned memory giving only a 1.08x improvement, against a commonly quoted 2-3x. Propose one hardware or software factor specific to this book’s reference rig that might explain the gap, and state what you’d need to test to confirm it.</p></li>
+<li id="ex-55-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Skim the abstract and introduction of Williams, Waterman, and Patterson’s roofline paper. Identify one claim in the paper’s original framing that this chapter’s two-operation comparison directly illustrates, and one aspect of the full roofline model (such as multiple ceilings for different optimization levels) that this chapter did not exercise.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="55.9">
+<h2 data-number="55.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">55.9</span> Mental Model</h2>
+<p>Moving work to a GPU is like sending a job to a distant, extremely fast specialist workshop. The workshop can do far more work per hour than a local shop, but every job has to be physically couriered there and the finished piece couriered back, and that round trip has a real, roughly fixed cost regardless of how small the job is. A quick, simple job, the elementwise operation, never earns back the courier cost, no matter how many times it’s sent. Cheaper to just do it locally. A large, intricate job, a big matmul, easily earns back the courier cost many times over, because the specialist workshop finishes it so much faster than the local shop could.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+<div id="ref-williams2009roofline" class="csl-entry" role="listitem">
+Williams, Samuel, Andrew Waterman, and David Patterson. 2009. <span>“Roofline: An Insightful Visual Performance Model for Multicore Architectures.”</span> <em>Communications of the ACM</em> 52 (4): 65–76.
+</div>
+</div>
+</section>

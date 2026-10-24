@@ -1,0 +1,209 @@
+<p>Chapter 38 built a model of GPU hardware, SMs, warps, the memory hierarchy, without writing a single line of code that runs on it. This chapter closes that gap. CUDA (Compute Unified Device Architecture) is NVIDIA’s set of extensions to C++ that let a function be written once, called a <strong>kernel</strong>, and run unmodified on thousands of threads at once. This is the layer directly beneath every <code>.to('cuda')</code> call in the rest of this series: host code that allocates memory, moves data, and launches kernels; device code that computes. The chapter ends with a real measurement that surprises almost everyone the first time they see it. On a genuine vector-add pipeline, the kernel itself is the <em>smallest</em> part of the total time.</p>
+<section id="motivation" class="level2" data-number="39.1">
+<h2 data-number="39.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">39.1</span> Motivation</h2>
+<p>A CUDA program is two programs glued together. <strong>Host code</strong> is ordinary C++ that runs on the CPU. It allocates GPU memory, copies data across, launches kernels, and copies results back. <strong>Device code</strong> is the kernel itself. It just computes, as fast and as parallel as the hardware allows, on whatever the host handed it. The host is always in charge. The device never decides on its own what to do next. Understanding this split, and specifically the cost of moving data between the two separate memory spaces, is the single most important practical lesson in learning CUDA, more important at first than anything about the kernel body.</p>
+</section>
+<section id="exposition" class="level2" data-number="39.2">
+<h2 data-number="39.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">39.2</span> Exposition</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface.</p>
+<section id="threads-blocks-and-grids" class="level3" data-number="39.2.1">
+<h3 data-number="39.2.1" class="anchored" data-anchor-id="threads-blocks-and-grids"><span class="header-section-number">39.2.1</span> Threads, Blocks, and Grids</h3>
+<p>A kernel launch looks unlike ordinary C++:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb1-1">myKernel<span class="op">&lt;&lt;&lt;</span>grid<span class="op">,</span> block<span class="op">&gt;&gt;&gt;(</span>args<span class="op">...);</span></span></code></pre></div>
+<p>The <code>&lt;&lt;&lt;...&gt;&gt;&gt;</code> syntax specifies <em>how many threads to create and how to organise them</em>, not what they do. That’s the kernel body, shared identically by every thread. CUDA organises threads in a two-level hierarchy. A <strong>block</strong> is a group of up to 1024 threads that run on the same SM, can synchronise with each other via <code>__syncthreads()</code>, and can share fast on-chip shared memory (Chapter 40). A <strong>grid</strong> is the full collection of blocks a launch creates. Blocks run independently, potentially on different SMs, in any order, with no way to synchronise across blocks. That independence is exactly what lets the hardware scheduler spread blocks across all available SMs.</p>
+<p>Inside a kernel, every thread discovers its own identity from four built-in variables: <code>threadIdx</code> (index within its block), <code>blockIdx</code> (its block’s index within the grid), <code>blockDim</code> (threads per block), and <code>gridDim</code> (blocks per grid). The near-universal pattern for turning this into one flat index is:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb2-1"><span class="dt">int</span> global_id <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span></code></pre></div>
+<p>This line is arguably the single most important line of code in CUDA. Nearly every kernel written for the rest of this book starts with some variant of it.</p>
+</section>
+<section id="the-grid-stride-loop" class="level3" data-number="39.2.2">
+<h3 data-number="39.2.2" class="anchored" data-anchor-id="the-grid-stride-loop"><span class="header-section-number">39.2.2</span> The Grid-Stride Loop</h3>
+<p>A natural first instinct is to launch exactly as many threads as there are data elements. This works but is brittle. It hardcodes a relationship between problem size and launch configuration, and for very large <code>n</code> it can exceed hardware limits on grid size. The standard, more robust pattern is the <strong>grid-stride loop</strong>: launch a fixed, hardware-appropriate number of threads, and have each thread process multiple elements, striding forward by the total thread count:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb3-1"><span class="dt">int</span> stride <span class="op">=</span> blockDim<span class="op">.</span>x <span class="op">*</span> gridDim<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb3-2"><span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb3-3">     i <span class="op">&lt;</span> n<span class="op">;</span> i <span class="op">+=</span> stride<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-4">    c<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> a<span class="op">[</span>i<span class="op">]</span> <span class="op">+</span> b<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb3-5"><span class="op">}</span></span></code></pre></div>
+<p>This works correctly for any <code>n</code>, launched with the same grid/block configuration every time. The launch configuration is tuned once per GPU, not per problem size.</p>
+</section>
+<section id="host---device-memory-two-worlds-one-bus" class="level3" data-number="39.2.3">
+<h3 data-number="39.2.3" class="anchored" data-anchor-id="host---device-memory-two-worlds-one-bus"><span class="header-section-number">39.2.3</span> Host &lt;-&gt; Device Memory: Two Worlds, One Bus</h3>
+<p>The CPU and GPU have physically separate memory. Getting data from one to the other means an explicit copy across the PCIe bus:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb4-1"><span class="co">// allocate on GPU</span></span>
+<span id="cb4-2">cudaMalloc<span class="op">(&amp;</span>d_ptr<span class="op">,</span> bytes<span class="op">);</span></span>
+<span id="cb4-3"><span class="co">// CPU -&gt; GPU</span></span>
+<span id="cb4-4">cudaMemcpy<span class="op">(</span>d_ptr<span class="op">,</span> h_ptr<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyHostToDevice<span class="op">);</span></span>
+<span id="cb4-5"><span class="co">// ... kernel runs on d_ptr ...</span></span>
+<span id="cb4-6"><span class="co">// GPU -&gt; CPU</span></span>
+<span id="cb4-7">cudaMemcpy<span class="op">(</span>h_ptr<span class="op">,</span> d_ptr<span class="op">,</span> bytes<span class="op">,</span> cudaMemcpyDeviceToHost<span class="op">);</span></span>
+<span id="cb4-8">cudaFree<span class="op">(</span>d_ptr<span class="op">);</span></span></code></pre></div>
+<p>This transfer is not free, and it is very often the slowest part of the whole pipeline, not the kernel itself. The Worked Example below measures this directly. A vector-add kernel that takes under a millisecond to <em>compute</em> sits inside a pipeline that spends tens of milliseconds just moving data across PCIe. This is why real systems batch work, keep data resident on the GPU across many kernel launches, and overlap transfers with compute wherever possible: a technique called CUDA streams, which this introductory chapter doesn’t cover in depth but is worth knowing the name of.</p>
+</section>
+<section id="pinned-memory-why-the-transfer-speed-isnt-fixed" class="level3" data-number="39.2.4">
+<h3 data-number="39.2.4" class="anchored" data-anchor-id="pinned-memory-why-the-transfer-speed-isnt-fixed"><span class="header-section-number">39.2.4</span> Pinned Memory: Why the Transfer Speed Isn’t Fixed</h3>
+<p>Ordinary host memory allocated with <code>new</code> or <code>malloc</code> is <strong>pageable</strong>. The OS is free to move it around in physical RAM, or swap it to disk. Because <code>cudaMemcpy</code> needs a stable physical address to hand to the DMA engine that actually drives the PCIe transfer, a pageable-memory copy has to be staged through a temporary pinned buffer first, an extra copy the driver performs invisibly, at a real performance cost.</p>
+<p><strong>Pinned (page-locked) memory</strong>, allocated with <code>cudaMallocHost</code> instead of <code>new</code>, tells the OS “never move this,” so the DMA engine can transfer directly with no staging copy required. The Worked Example measures the real difference on this book’s reference rig. Switching a vector-add pipeline’s host buffers from pageable to pinned memory cuts the device-to-host transfer time by roughly 5.9x, with no other code change. This is one of the highest-value, lowest-effort optimisations in all of CUDA programming.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="39.3">
+<h2 data-number="39.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">39.3</span> Trade-offs and Limits</h2>
+<p>Explicit memory management, what this chapter teaches, wins at predictable, measurable transfer costs that can be reasoned about and optimised (pinned memory, overlapping transfers), and at giving maximum control over exactly when data moves. It loses at development speed. Unified Memory (<code>cudaMallocManaged</code>, not covered in depth here) lets code skip explicit copies entirely, at some performance cost and less predictability, and is often the right choice for prototyping. It also loses at ergonomics compared to just writing PyTorch and letting the framework manage memory automatically, which is exactly why the overwhelming majority of ML code never touches any of this directly. Pinned memory itself is not free either. It cannot be swapped, so over-pinning large amounts of host memory starves the OS of memory the rest of the system needs. Pin only the buffers that are actually on a performance-sensitive, frequently-used transfer path.</p>
+</section>
+<section id="procedures" class="level2" data-number="39.4">
+<h2 data-number="39.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">39.4</span> Procedures</h2>
+<p id="proc-39-1"><strong>Procedure 39.1 (Write, Compile, and Run a Minimal Kernel).</strong> <em>When to use:</em> the very first raw CUDA program. Confirming the whole toolchain (<code>nvcc</code>, driver, GPU) works end to end.</p>
+<div id="lst-cudaprog-hello" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cudaprog-hello-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;39.1: A minimal kernel where every thread prints its own computed identity
+</figcaption>
+<div aria-describedby="lst-cudaprog-hello-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>#include &lt;cstdio&gt;
+
+__global__ void helloKernel() {
+    int global_id = blockIdx.x * blockDim.x + threadIdx.x;
+    printf(
+        "Block %d, Thread %d -&gt; global thread id %d\n",
+        blockIdx.x,
+        threadIdx.x,
+        global_id
+    );
+}
+
+int main() {
+    // 3 blocks x 4 threads = 12 threads total
+    helloKernel&lt;&lt;&lt;3, 4&gt;&gt;&gt;();
+    // wait for device printf to flush before exiting
+    cudaDeviceSynchronize();
+    return 0;
+}</code></pre>
+</div>
+</figure>
+</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb6-1"><span class="co"># replace sm_120 with your GPU's compute capability</span></span>
+<span id="cb6-2"><span class="ex">nvcc</span> <span class="at">-arch</span><span class="op">=</span>sm_120 hello.cu <span class="at">-o</span> hello</span>
+<span id="cb6-3"><span class="ex">./hello</span></span></code></pre></div>
+<p><strong>Common mistake:</strong> forgetting <code>cudaDeviceSynchronize()</code> before the program exits. Kernel launches are asynchronous, and device-side <code>printf</code> output is buffered and flushed on synchronisation. Without it, <code>main()</code> can return, and the process exit, before the device has actually printed anything.</p>
+<p id="proc-39-2"><strong>Procedure 39.2 (Write a Kernel That Handles Any Problem Size).</strong> <em>When to use:</em> any time the data size isn’t known at compile time, or exceeds what’s wanted as a 1:1 thread-per-element mapping.</p>
+<div id="lst-cudaprog-gridstride" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cudaprog-gridstride-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;39.2: A grid-stride vector-add kernel, launched with a fixed configuration regardless of n
+</figcaption>
+<div aria-describedby="lst-cudaprog-gridstride-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>__global__ void vecAddGridStride(
+    const float* a,
+    const float* b,
+    float* c,
+    int n
+) {
+    int stride = blockDim.x * gridDim.x;
+    for (int i = blockIdx.x * blockDim.x + threadIdx.x;
+     i &lt; n; i += stride) {
+        c[i] = a[i] + b[i];
+    }
+}
+
+// Launch with a fixed, hardware-sized configuration
+// regardless of n:
+int block = 256;
+// tune once per GPU (roughly 4-8x the SM count), not
+// per problem size
+int grid = 1024;
+vecAddGridStride&lt;&lt;&lt;grid, block&gt;&gt;&gt;(d_a, d_b, d_c, n);</code></pre>
+</div>
+</figure>
+</div>
+<p><code>block</code> (threads per block) is typically 128-256 and must be a multiple of 32, the warp size. <code>grid</code> (blocks) should be enough to keep every SM busy with several blocks. Over-launching relative to <code>n</code> is fine, since the stride loop covers the rest. <strong>Common mistake:</strong> launching exactly <code>n</code> threads for every kernel (<code>grid = (n + block - 1) / block</code>) and re-deriving this for every different <code>n</code> in a program. It works, but it’s needless coupling. The grid-stride version allows one good launch configuration per GPU, reused everywhere.</p>
+<p id="proc-39-3"><strong>Procedure 39.3 (Move Data Between Host and Device, With and Without Pinned Memory).</strong> <em>When to use:</em> every CUDA program that isn’t purely synthetic, and any pipeline where transfer time matters. Nearly all of them.</p>
+<div id="lst-cudaprog-pinned" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cudaprog-pinned-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;39.3: Pinned host memory: a one-line change from ordinary heap allocation
+</figcaption>
+<div aria-describedby="lst-cudaprog-pinned-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>float *h_data;
+// PINNED, instead of `new float[n]`
+cudaMallocHost(&amp;h_data, bytes);
+// ... use h_data exactly as before ...
+// must free with cudaFreeHost, not delete[]
+cudaFreeHost(h_data);</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> pinning <em>all</em> of a large application’s host memory “just in case.” Pinned memory can’t be swapped, so over-pinning starves the OS of memory it needs for everything else running on the machine. Pin only the buffers actually on a frequent, performance-sensitive transfer path.</p>
+<p id="proc-39-4"><strong>Procedure 39.4 (Time CUDA Work Correctly, With Events).</strong> <em>When to use:</em> any time host-side or device-side work needs accurate timing. The same principle as <code>torch.cuda.Event</code> from Chapter 38, one level lower, in raw CUDA C++.</p>
+<div id="lst-cudaprog-events" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cudaprog-events-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;39.4: Timing a kernel launch with CUDA events instead of a host-side clock
+</figcaption>
+<div aria-describedby="lst-cudaprog-events-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>cudaEvent_t start, stop;
+cudaEventCreate(&amp;start);
+cudaEventCreate(&amp;stop);
+
+cudaEventRecord(start);
+myKernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;(args...);
+cudaEventRecord(stop);
+// wait for the stop event to actually complete
+cudaEventSynchronize(stop);
+
+float ms;
+cudaEventElapsedTime(&amp;ms, start, stop);</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> wrapping a host-side clock (<code>std::chrono</code>) around a kernel launch without a synchronisation call. Kernel launches are asynchronous. The host resumes immediately after queuing the launch, so an unsynchronised host-side timer measures launch overhead, not execution time.</p>
+</section>
+<section id="worked-example" class="level2" data-number="39.5">
+<h2 data-number="39.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">39.5</span> Worked Example</h2>
+<p>The companion notebook compiles and runs raw <code>.cu</code> files with <code>nvcc</code>, targeting this book’s reference rig’s real compute capability (<code>sm_120</code>, queried live rather than hardcoded), and times a grid-stride vector-add pipeline stage by stage using Procedure 39.4’s CUDA events.</p>
+<p>With <code>n = 33,554,432</code> elements (134.2 MB per array) and ordinary pageable host buffers (<code>new float[n]</code>), the pipeline breaks down as:</p>
+<pre class="text"><code>H2D transfer (pageable):  19.224 ms
+Kernel:                    0.529 ms
+D2H transfer (pageable):  54.469 ms
+Total:                    74.222 ms</code></pre>
+<p>The kernel, the actual computation, is a small fraction of the total time. Almost all of the wall-clock time is spent moving 134 MB arrays across the PCIe bus, in both directions. This is the single most common surprise in anyone’s first real CUDA program. The GPU can be extremely fast at <em>compute</em> and still leave a slow <em>pipeline</em>, because the bottleneck moved somewhere else entirely.</p>
+<p>Switching only the host buffers to pinned memory (Procedure 39.3), with the identical kernel and identical problem size:</p>
+<pre class="text"><code>H2D transfer (pinned):   18.562 ms
+Kernel:                   0.463 ms
+D2H transfer (pinned):    9.263 ms
+Total:                   28.287 ms</code></pre>
+<p>One line changed, <code>cudaMallocHost</code> in place of <code>new</code>, and the device-to-host transfer dropped from 54.469 ms to 9.263 ms, roughly 5.9x<span class="ref-rig-mark">†</span> faster, cutting total pipeline time from 74.222 ms to 28.287 ms, more than 2.6x<span class="ref-rig-mark">†</span> overall. The H2D transfer barely moves (19.224 ms to 18.562 ms) because this particular pipeline only pinned the <em>destination</em> buffer used for the D2H copy in a way that most benefits that direction on this measurement. The dominant, unambiguous win is D2H. The result is bit-identical in both runs (<code>hc[i] == 3.0</code> for every element, verified by the notebook), confirming the optimisation changes nothing about correctness, only about where the wall-clock time goes.</p>
+<p>The lesson generalises beyond this one kernel: before optimising a kernel’s arithmetic, check where the time is actually going. Here, no amount of kernel optimisation could have mattered much, because the kernel was never more than about 2% of the pipeline’s total time on either run.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="39.6">
+<h2 data-number="39.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">39.6</span> History and Further Reading</h2>
+<p>The NVIDIA CUDA C++ Programming Guide, chapters 2-3, is the authoritative and complete reference for the programming model in this chapter. The NVIDIA CUDA C++ Best Practices Guide’s “Data Transfer” chapter goes deeper on pinned memory, streams, and overlapping transfer with compute. “An Easy Introduction to CUDA C and C++,” on the NVIDIA Developer Blog, is a gentler first pass over the same ground. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 6, works through this same launch-parameter tuning in more depth, including why 256 threads per block is a common starting point and how <code>blocksPerGrid</code> is computed from problem size, worth reading once this chapter’s own launch-configuration choices have been made concrete. Cautaerts and Ghorbanfekr’s <em>GPU-Accelerated Computing with Python 3 and CUDA</em> <span class="citation" data-cites="cautaerts2026gpuaccelerated">(<a href="#ref-cautaerts2026gpuaccelerated" role="doc-biblioref">Cautaerts and Ghorbanfekr 2026</a>)</span>, Chapter 3, walks through this identical programming model using Numba-CUDA instead of raw C++, a direct Python-native counterpart worth comparing line by line against this chapter’s kernels.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="39.7">
+<h2 data-number="39.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">39.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 38’s SM and warp model. Blocks map onto SMs, and warps are how a block’s threads actually execute in lockstep. It enables Chapter 40 (shared memory is allocated per block, using exactly the block/thread model introduced here), Chapter 41 (writing real first kernels), and Book 3’s later PyTorch CUDA extension chapters, which wrap exactly this launch syntax underneath a Python-callable interface. It is often confused with Triton, covered later in this book, which replaces explicit thread/block indexing with a higher-level block-of-data abstraction. Understanding this raw model first is what makes Triton’s abstraction read as a convenience rather than magic.</p>
+</section>
+<section id="exercises" class="level2" data-number="39.8">
+<h2 data-number="39.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">39.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-39-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In your own words, explain the difference between a block and a grid, and state which of the two can synchronise internally with <code>__syncthreads()</code>.</p></li>
+<li id="ex-39-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Write the one-line global thread ID formula this chapter calls “arguably the single most important line of code in CUDA,” and explain what each of its four terms refers to.</p></li>
+<li id="ex-39-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-cudaprog-gridstride" class="quarto-xref">Listing&nbsp;<span>39.2</span></a> as a starting point, explain what would happen, correctness-wise, not just performance-wise, if <code>grid * block</code> were smaller than <code>n</code> and the <code>stride</code> loop were removed (i.e., each thread processed only a single element via <code>if (i &lt; n)</code> instead of <code>while</code>).</p></li>
+<li id="ex-39-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter measured a pageable D2H transfer of 54.469 ms and a pinned D2H transfer of 9.263 ms for a 134.2 MB array. Compute the effective bandwidth in GB/s for each case, and compare both against Chapter 38’s roughly 1.7 TB/s peak bandwidth estimate for this book’s reference rig.</p></li>
+<li id="ex-39-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> The Worked Example found the kernel was under 1% of total pipeline time. Using <a href="#lst-cudaprog-events" class="quarto-xref">Listing&nbsp;<span>39.4</span></a>, describe how you would confirm this same imbalance exists (or doesn’t) for a kernel that does substantially more arithmetic per element than a vector add.</p></li>
+<li id="ex-39-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague proposes pinning every host buffer in a large training pipeline “to be safe.” Using this chapter’s Trade-offs section, write the two or three sentences you’d say back.</p></li>
+<li id="ex-39-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Design a scenario (in one or two sentences, no code required) where Unified Memory (<code>cudaMallocManaged</code>) would be a reasonable choice over the explicit <code>cudaMalloc</code>/<code>cudaMemcpy</code> pattern this chapter teaches, and one where it would clearly be the wrong choice.</p></li>
+<li id="ex-39-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Skim the “Data Transfer” chapter of the NVIDIA CUDA C++ Best Practices Guide. Summarise, in a few sentences, what CUDA streams add on top of the pinned-memory optimisation in this chapter, and why streams require pinned memory to be effective.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="39.9">
+<h2 data-number="39.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">39.9</span> Mental Model</h2>
+<p>A kernel launch is a phone tree, not a to-do list. You don’t write “do this to element 1, then element 2, …” You write one instruction sheet (the kernel) and specify how many people get a copy of it (<code>&lt;&lt;&lt;grid, block&gt;&gt;&gt;</code>). Every person on the tree runs the identical sheet, but reads their own name off it first (<code>blockIdx</code>, <code>threadIdx</code>) to know which slice of the work is theirs. The data has to physically reach them, though, and that phone call across PCIe is frequently the slowest step of the entire operation, exactly as this chapter’s measurements showed.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-cautaerts2026gpuaccelerated" class="csl-entry" role="listitem">
+Cautaerts, Niels, and Hossein Ghorbanfekr. 2026. <em>GPU-Accelerated Computing with Python 3 and CUDA: From Low-Level Kernels to Real-World Applications in Scientific Computing and Machine Learning</em>. Packt Publishing.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+</div>
+</section>

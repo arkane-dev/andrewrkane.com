@@ -1,0 +1,237 @@
+<p><a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> made its case with exactly one multi-hop question and one control question: enough to introduce the idea convincingly, not enough to know how much of an advantage GraphRAG really provides, or where that advantage stops. Book 2’s LLM Evaluation chapter gave the right instrument for this (RAGAS-style context precision and recall) but applied it to a single RAG pipeline’s generation quality. This chapter asks the comparative question directly: across a real benchmark of several questions of different shapes, how much does GraphRAG actually help, and at what cost? And separately: once GraphRAG is worth it, when does a self-hosted, in-memory graph stop being the right way to run it?</p>
+<section id="motivation" class="level2" data-number="82.1">
+<h2 data-number="82.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">82.1</span> Motivation</h2>
+<p>A single worked example shows that something is possible. A benchmark shows how much it matters, on average, across a distribution of question shapes. Worked Example 82 below builds an 8-question set (4 single-hop, 4 multi-hop, one with no valid answer at all) and scores both retrieval strategies on every question with the same two RAGAS-style metrics, rather than eyeballing one pair of examples. The result is a genuine statistic, not an anecdote: on single-hop questions, vector-RAG and GraphRAG tie exactly; on multi-hop questions, GraphRAG scores an order of magnitude better on precision, concentrated exactly where <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> predicted it would be.</p>
+</section>
+<section id="exposition" class="level2" data-number="82.2">
+<h2 data-number="82.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">82.2</span> Exposition</h2>
+<section id="context-precision-and-recall-adapted-for-retrieval-without-generation" class="level3" data-number="82.2.1">
+<h3 data-number="82.2.1" class="anchored" data-anchor-id="context-precision-and-recall-adapted-for-retrieval-without-generation"><span class="header-section-number">82.2.1</span> Context Precision and Recall, Adapted for Retrieval Without Generation</h3>
+<p>Book 2’s LLM Evaluation chapter defines RAGAS’s context recall as the fraction of ground-truth facts present in the retrieved context, and context precision as the fraction of retrieved chunks that are relevant. This chapter computes both directly against retrieved entities rather than a downstream generated answer, because there’s no live LLM call needed for this evaluation. But the metric definitions are identical, and the same metrics apply cleanly to a generation-free retrieval evaluation. A retrieval pipeline’s quality can, and should, be evaluated before it’s ever wired up to a generation step.</p>
+</section>
+<section id="a-fair-comparison-requires-giving-each-method-its-right-tool" class="level3" data-number="82.2.2">
+<h3 data-number="82.2.2" class="anchored" data-anchor-id="a-fair-comparison-requires-giving-each-method-its-right-tool"><span class="header-section-number">82.2.2</span> A Fair Comparison Requires Giving Each Method Its Right Tool</h3>
+<p>The first version of Worked Example 82’s benchmark scored GraphRAG on single-hop questions using only <a href="/books/applied-ai-domains/ch81-graph-agentic-reasoning" class="quarto-xref"><span>Chapter 81</span></a>’s multi-hop pattern-matching function, and GraphRAG scored 0.0 recall on two of four single-hop questions as a result. That wasn’t a finding about GraphRAG; it was a bug in the evaluation harness, structurally identical to evaluating a calculator on essay questions and reporting that it “failed.” A real graph-RAG system answers a single-hop question with a direct entity/attribute lookup (trivial for a property graph), not by running a relationship pattern-matcher built for a different job. Once the harness was fixed to give GraphRAG the right tool for each question shape, the single-hop tie appeared, and it’s the more honest, more useful result: it shows GraphRAG doesn’t cost anything on the questions vector-RAG already handles, and wins substantially on the questions it doesn’t.</p>
+</section>
+<section id="a-second-bug-the-benchmark-itself-had" class="level3" data-number="82.2.3">
+<h3 data-number="82.2.3" class="anchored" data-anchor-id="a-second-bug-the-benchmark-itself-had"><span class="header-section-number">82.2.3</span> A Second Bug the Benchmark Itself Had</h3>
+<p>Building the benchmark also surfaced a labelling error: one multi-hop question was originally written against a graph where the intended two-hop pattern didn’t actually exist. The vendor in question purchased directly from the flagged entity, a one-hop question shape, not the two-hop “shares a parent with a flagged entity” shape the question was meant to test. The fix wasn’t to force a wrong answer through the scoring function. It was to add a genuine third vendor to the graph so the intended multi-hop pattern actually existed. A benchmark’s ground truth needs the same scrutiny as the systems being scored against it. An unanswerable or mislabelled question doesn’t measure anything, it just produces a number that looks like a measurement.</p>
+</section>
+<section id="cost-isnt-free-to-ignore-even-when-it-favours-graphrag-here" class="level3" data-number="82.2.4">
+<h3 data-number="82.2.4" class="anchored" data-anchor-id="cost-isnt-free-to-ignore-even-when-it-favours-graphrag-here"><span class="header-section-number">82.2.4</span> Cost Isn’t Free to Ignore, Even When It Favours GraphRAG Here</h3>
+<p>Worked Example 82 counts operations per query as a cost proxy: vector-RAG scores every passage against the query every time, a constant cost regardless of question; GraphRAG’s cost scales with the local graph structure near the anchor entity. On a small graph, GraphRAG is also cheaper, but that’s a property of <em>this graph’s size</em>, not a general law. A production knowledge graph with millions of nodes could have anchor entities with very high fan-out, making a traversal’s operation count far larger than a flat vector index’s constant per-query cost. This has to be measured on the graph actually being deployed, not assumed in either direction.</p>
+</section>
+<section id="the-scaling-benchmark-answers-a-different-question-than-is-it-fast" class="level3" data-number="82.2.5">
+<h3 data-number="82.2.5" class="anchored" data-anchor-id="the-scaling-benchmark-answers-a-different-question-than-is-it-fast"><span class="header-section-number">82.2.5</span> The Scaling Benchmark Answers a Different Question Than “Is It Fast?”</h3>
+<p>Worked Example 82’s scaling benchmark measures depth-limited BFS traversal staying fast even at very large graph sizes, meaning raw traversal speed is essentially never the reason to move off self-hosted <code>networkx</code> at the graph sizes most organisations actually have. The real reasons to move to a managed graph database are the ones a single-process, single-user timing loop cannot show: concurrent query load from many users at once, a graph too large to fit in one process’s memory, durability and backup guarantees, and access control.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="82.3">
+<h2 data-number="82.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">82.3</span> Trade-offs and Limits</h2>
+<p>GraphRAG’s advantage is concentrated, not blanket. This chapter’s numbers make <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a>’s original point statistically rather than anecdotally: parity on single-hop questions, a large and real advantage on multi-hop ones. Don’t generalise “GraphRAG is better” from this. Generalise “GraphRAG is better specifically for relationship-shaped questions,” a narrower and more accurate claim. A cheap self-hosted benchmark can mislead into thinking deployment is a non-issue. This chapter’s own traversal-speed benchmark could be read as “self-hosted graph traversal scales fine, don’t bother with a managed database,” which is true for raw traversal latency and false for the production concerns (concurrency, durability, access control) that latency benchmark never tested.</p>
+</section>
+<section id="procedures" class="level2" data-number="82.4">
+<h2 data-number="82.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">82.4</span> Procedures</h2>
+<p id="proc-82-1"><strong>Procedure 82.1 (Compute Retrieval-Only Context Precision and Recall).</strong> <em>When to use:</em> evaluating a retrieval pipeline’s quality before wiring it up to a generation step.</p>
+<div id="lst-graphllm-precision-recall" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphllm-precision-recall-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;82.1: RAGAS-style metrics, applied to retrieved entities directly
+</figcaption>
+<div aria-describedby="lst-graphllm-precision-recall-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> context_precision(retrieved, relevant):</span>
+<span id="cb1-2">    <span class="cf">if</span> <span class="kw">not</span> retrieved:</span>
+<span id="cb1-3">        <span class="cf">return</span> <span class="fl">0.0</span></span>
+<span id="cb1-4">    <span class="cf">return</span> <span class="bu">len</span>(<span class="bu">set</span>(retrieved) <span class="op">&amp;</span> <span class="bu">set</span>(relevant)) <span class="op">/</span> <span class="bu">len</span>(retrieved)</span>
+<span id="cb1-5"></span>
+<span id="cb1-6"><span class="kw">def</span> context_recall(retrieved, ground_truth_facts):</span>
+<span id="cb1-7">    overlap <span class="op">=</span> <span class="bu">len</span>(<span class="bu">set</span>(retrieved) <span class="op">&amp;</span> <span class="bu">set</span>(ground_truth_facts))</span>
+<span id="cb1-8">    <span class="cf">return</span> overlap <span class="op">/</span> <span class="bu">len</span>(ground_truth_facts)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-82-2"><strong>Procedure 82.2 (Give Each Retrieval Method Its Right Tool per Question Shape).</strong> <em>When to use:</em> building any comparative benchmark across methods with structurally different strengths.</p>
+<div id="lst-graphllm-fair-tool" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphllm-fair-tool-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;82.2: Route each question to the retrieval strategy actually suited to its shape
+</figcaption>
+<div aria-describedby="lst-graphllm-fair-tool-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> graphrag_retrieve(question, question_type, graph):</span>
+<span id="cb2-2">    <span class="cf">if</span> question_type <span class="op">==</span> <span class="st">"single-hop"</span>:</span>
+<span id="cb2-3">        <span class="co"># trivial for a property graph</span></span>
+<span id="cb2-4">        <span class="cf">return</span> direct_entity_lookup(question, graph)</span>
+<span id="cb2-5">    <span class="co"># Chapter 80/81's pattern-matcher</span></span>
+<span id="cb2-6">    <span class="cf">return</span> multi_hop_traversal(question, graph)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> scoring a method on a question shape it was never designed to answer, then reporting the resulting low score as a finding about the method. That’s a bug in the evaluation harness, not a result.</p>
+<p id="proc-82-3"><strong>Procedure 82.3 (Audit Benchmark Ground Truth, Not Just the Systems Under Test).</strong> <em>When to use:</em> before trusting any benchmark result, especially a surprising one.</p>
+<div id="lst-graphllm-audit-gt" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphllm-audit-gt-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;82.3: A ground-truth question deserves the same scrutiny as the system being scored
+</figcaption>
+<div aria-describedby="lst-graphllm-audit-gt-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>For each benchmark question:
+  - Does the intended answer pattern actually exist in
+    the graph as constructed?
+  - Is the question's "hop shape" (single vs. multi) what
+    the question text implies?
+A "no valid answer" score can mean the system failed, OR
+  the benchmark is wrong: check the ground truth before
+  concluding it's the former.</code></pre>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="82.5">
+<h2 data-number="82.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">82.5</span> Worked Example</h2>
+<p>An 8-question benchmark (4 single-hop, 4 multi-hop) against a real 9-node knowledge graph, scored with Procedure 82.1’s metrics for both vector-RAG (16 passages, flat retrieval) and GraphRAG (Procedure 82.2’s shape-appropriate routing):</p>
+<div id="lst-graphllm-worked-benchmark" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphllm-worked-benchmark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;82.4: Every question scored the same way, aggregated by question type
+</figcaption>
+<div aria-describedby="lst-graphllm-worked-benchmark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">results <span class="op">=</span> [</span>
+<span id="cb4-2">    score_both_pipelines(q, vector_rag, graph_rag)</span>
+<span id="cb4-3">    <span class="cf">for</span> q <span class="kw">in</span> benchmark_questions</span>
+<span id="cb4-4">]</span>
+<span id="cb4-5">aggregate_by_type(results)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question type (n=4 each)</th>
+<th>Vector-RAG precision</th>
+<th>Vector-RAG recall</th>
+<th>GraphRAG precision</th>
+<th>GraphRAG recall</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Single-hop</td>
+<td>0.333</td>
+<td>1.000</td>
+<td><strong>0.333</strong></td>
+<td><strong>1.000</strong></td>
+</tr>
+<tr class="even">
+<td>Multi-hop</td>
+<td>0.167</td>
+<td>0.312</td>
+<td><strong>0.778</strong></td>
+<td><strong>1.000</strong></td>
+</tr>
+</tbody>
+</table>
+<p>On single-hop questions, the two methods tie exactly. GraphRAG costs nothing here, once Procedure 82.2’s fair-tool routing is applied. On multi-hop questions, GraphRAG’s precision (0.778) is more than 4.5x vector-RAG’s (0.167), and recall reaches perfect 1.000 against vector-RAG’s 0.312: a real, measured, order-of-magnitude difference concentrated exactly where <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> predicted it would be, not a blanket “GraphRAG is better” result.</p>
+<p>Measuring the cost side of the trade-off directly, on the same small graph:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Operations per query</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Vector-RAG</td>
+<td>16.0 (constant: scores every passage every time)</td>
+</tr>
+<tr class="even">
+<td><strong>GraphRAG</strong></td>
+<td><strong>3.8 average</strong> (varies with graph structure near the anchor entity)</td>
+</tr>
+</tbody>
+</table>
+<p>On this graph’s size, GraphRAG is also the cheaper method, but Exposition’s warning applies directly: this is a property of a 9-node graph, not a general law, and a production graph with high-fan-out anchor entities could easily invert this comparison.</p>
+<p>A separate scaling benchmark measures self-hosted traversal speed as graph size grows:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Graph size</th>
+<th>Time per traversal (depth-limited BFS, 4 hops)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>100 nodes</td>
+<td>0.027 ms</td>
+</tr>
+<tr class="even">
+<td>1,000 nodes</td>
+<td>0.044 ms</td>
+</tr>
+<tr class="odd">
+<td>10,000 nodes</td>
+<td>0.242 ms</td>
+</tr>
+<tr class="even">
+<td><strong>100,000 nodes</strong></td>
+<td><strong>2.346 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A 1,000x increase in graph size (100 → 100,000 nodes) produced only an <strong>87.5x</strong> slowdown: traversal stays well under 2.5ms even at 100,000 nodes. Raw traversal speed is essentially never the reason to move off self-hosted <code>networkx</code> at the graph sizes most organisations actually have. This benchmark deliberately does not answer the full deployment question, though: it says nothing about concurrent query load from many simultaneous users, a graph too large for one process’s memory, durability/backup guarantees, or access control: the actual reasons a production system moves to a managed graph database like Amazon Neptune.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># Amazon Neptune: when the traversal-speed benchmark</span></span>
+<span id="cb5-2"><span class="co"># above says "fast enough," the deployment decision still</span></span>
+<span id="cb5-3"><span class="co"># turns on concurrency, durability, and access control,</span></span>
+<span id="cb5-4"><span class="co"># none of which a single-process timing loop measures:</span></span>
+<span id="cb5-5"><span class="im">import</span> boto3</span>
+<span id="cb5-6">client <span class="op">=</span> boto3.client(<span class="st">"neptune"</span>)</span>
+<span id="cb5-7"><span class="co"># Managed backups, IAM-based access control, and multi-AZ</span></span>
+<span id="cb5-8"><span class="co"># durability are the actual reasons to migrate off</span></span>
+<span id="cb5-9"><span class="co"># self-hosted networkx, not traversal latency.</span></span></code></pre></div>
+<p><strong>When this chapter’s cost/speed measurements matter for a Neptune migration decision:</strong> the 87.5x scaling factor and sub-2.5ms traversal latency measured here argue against migrating for <em>speed</em> alone. The argument for Neptune should rest on the production concerns this chapter’s benchmark explicitly couldn’t test, not on a latency number that already looks fine locally.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="82.6">
+<h2 data-number="82.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">82.6</span> History and Further Reading</h2>
+<p>Es et al.’s “RAGAS: Automated Evaluation of Retrieval Augmented Generation” <span class="citation" data-cites="es2023ragas">(<a href="#ref-es2023ragas" role="doc-biblioref">Es et al. 2024</a>)</span> is the paper defining the context precision/recall metrics this chapter adapts. Amazon Neptune documentation covers production graph-database deployment concerns this chapter’s speed benchmark deliberately didn’t measure.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="82.7">
+<h2 data-number="82.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">82.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> (both retrieval pipelines benchmarked here directly) and <a href="/books/applied-ai-domains/ch81-graph-agentic-reasoning" class="quarto-xref"><span>Chapter 81</span></a> (the same “give the right tool for the shape of the question” principle, applied there to hop depth and here to single-hop vs.&nbsp;multi-hop retrieval strategy), as well as Book 2’s LLM Evaluation chapter (RAGAS context precision/recall, benchmark design, and the general discipline of measuring rather than asserting). It enables <a href="/books/applied-ai-domains/ch83-capstone-knowledge-graphs" class="quarto-xref"><span>Chapter 83</span></a>, which reuses this chapter’s benchmark-and-scoring pattern for its own end-to-end measured comparison. It’s often confused with “a retrieval benchmark’s ground truth is self-evidently correct because you wrote it.” This chapter’s own mislabelled multi-hop question is the direct counterexample: benchmark construction is itself a place bugs hide, and deserves the same scrutiny as the systems it measures.</p>
+</section>
+<section id="exercises" class="level2" data-number="82.8">
+<h2 data-number="82.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">82.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-82-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the RAGAS-style definitions of context precision and context recall, and explain why they can be computed here without any generation step.</p></li>
+<li id="ex-82-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the measured single-hop and multi-hop precision/recall numbers for vector-RAG vs.&nbsp;GraphRAG from the Worked Example, and summarise the pattern in one sentence.</p></li>
+<li id="ex-82-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s harness-bug finding (GraphRAG scoring 0.0 recall on single-hop questions before the fix), explain why this result was correctly diagnosed as an evaluation-harness bug rather than a genuine finding about GraphRAG’s capability.</p></li>
+<li id="ex-82-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s operations-per-query result (vector-RAG 16.0 constant, GraphRAG 3.8 average), explain specifically why this cost comparison should NOT be generalised to a production knowledge graph with millions of nodes, connecting your answer to what “average” and “constant” mean for each method’s scaling behaviour.</p></li>
+<li id="ex-82-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team reads this chapter’s traversal-speed benchmark (87.5x slowdown for 1000x more nodes, still under 2.5ms) and concludes “we don’t need a managed graph database, self-hosted networkx scales fine.” Using this chapter’s Trade-offs section, write the two or three sentences you’d say about what that conclusion misses.</p></li>
+<li id="ex-82-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 82.3 warns that a “no valid answer” benchmark result can mean either a system failure or a benchmark ground-truth error. Using this chapter’s Solaris Energy question example, describe what evidence should be checked to distinguish between these two explanations before reporting a result.</p></li>
+<li id="ex-82-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about RAGAS’s original context precision/recall definitions (Es et al., 2023) as applied to a full generation pipeline, not just retrieval. Explain in your own words what additional failure mode a full RAGAS evaluation (including faithfulness and answer relevance) could catch that this chapter’s retrieval-only evaluation cannot.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="82.9">
+<h2 data-number="82.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">82.9</span> Mental Model</h2>
+<p>A single example shows something can happen. A benchmark, scored the same way on every question, shows how often it happens and where the boundary sits, and building the benchmark honestly, fixing evaluation-harness bugs and mislabelled ground truth along the way, is exactly as much engineering discipline as building the system under test. This chapter’s numbers turned <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a>’s one worked example into a statistic: parity where vector-RAG already worked, an order-of-magnitude advantage exactly where it didn’t, and a cost/speed picture honest enough to say what it does and doesn’t prove.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-es2023ragas" class="csl-entry" role="listitem">
+Es, Shahul, Jithin James, Luis Espinosa Anke, and Steven Schockaert. 2024. <span>“RAGAs: Automated Evaluation of Retrieval Augmented Generation.”</span> <em>Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics: System Demonstrations</em> (St. Julians, Malta), 150–58.
+</div>
+</div>
+</section>

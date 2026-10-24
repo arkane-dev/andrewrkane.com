@@ -1,0 +1,286 @@
+<p><a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a> gave exact, deterministic answers about graph structure (a node’s PageRank, its betweenness, which community it falls into) computed by a fixed formula, no training required. That works well as long as the question is purely structural. But real problems are often messier: “is this transaction fraudulent, given who it’s connected to,” or “what’s the likely relationship between these two entities never directly observed together” aren’t questions a fixed formula answers. They need a model that has learned from examples what patterns of connection tend to mean. This chapter is where the approach shifts from “compute an exact structural property” to “learn a representation,” the same shift Book 1 made going from classical ML to neural networks, applied to graph-shaped data instead of tabular or sequential data.</p>
+<section id="motivation" class="level2" data-number="79.1">
+<h2 data-number="79.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">79.1</span> Motivation</h2>
+<p>A graph neural network learns a vector for each node such that the vector reflects both the node’s own information and its position in the graph. Three ways to do this, all measured directly in Worked Example 79: GCN (supervised: given a few labelled nodes, learn representations via repeated neighbourhood aggregation that let labels be predicted for the rest), node2vec (unsupervised: given only graph structure, learn representations such that nodes co-occurring in random walks end up close together in vector space), and TransE (unsupervised, for typed relations: learn entity and relation vectors such that <code>head + relation ≈ tail</code> for every true fact). All three replace “apply a formula” with “learn parameters from data,” making the same fundamental bet Chapter 76’s algorithms made, that graph structure alone carries usable signal, extracted through gradient descent instead of a closed-form formula.</p>
+</section>
+<section id="exposition" class="level2" data-number="79.2">
+<h2 data-number="79.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">79.2</span> Exposition</h2>
+<section id="message-passing-the-one-idea-behind-every-gnn-variant" class="level3" data-number="79.2.1">
+<h3 data-number="79.2.1" class="anchored" data-anchor-id="message-passing-the-one-idea-behind-every-gnn-variant"><span class="header-section-number">79.2.1</span> Message Passing: The One Idea Behind Every GNN Variant</h3>
+<p>Every GNN variant (GCN, GraphSAGE, GAT, and dozens more in the wider literature) is a version of the same pattern: each node updates its own representation by aggregating its neighbours’ representations, then applying a learned transformation. Stack several such layers, and a node’s final representation has been influenced by every node within that many hops. A 2-layer GCN’s output for node A has “seen” A’s neighbours and its neighbours’ neighbours, without ever being told explicitly to look 2 hops away. The GCN’s specific aggregation, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mover accent="true"><mi>D</mi><mo>^</mo></mover><mrow><mo>−</mo><mn>1</mn><mi mathvariant="normal">/</mi><mn>2</mn></mrow></msup><mo stretchy="false">(</mo><mi>A</mi><mo>+</mo><mi>I</mi><mo stretchy="false">)</mo><msup><mover accent="true"><mi>D</mi><mo>^</mo></mover><mrow><mo>−</mo><mn>1</mn><mi mathvariant="normal">/</mi><mn>2</mn></mrow></msup></mrow><annotation encoding="application/x-tex">\hat{D}^{-1/2}(A+I)\hat{D}^{-1/2}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.1968em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord katex-accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.9468em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span></span><span style="top:-3.2523em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span></span></span></span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.888em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1/2</span></span></span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.1968em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">I</span><span class="mclose">)</span><span class="mord"><span class="mord katex-accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.9468em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span></span><span style="top:-3.2523em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span></span></span></span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.888em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">1/2</span></span></span></span></span></span></span></span></span></span></span></span>, is a symmetric, degree-normalised average: every node’s neighbours are averaged (with self included via the <code>+I</code> self-loop), scaled so high-degree nodes don’t dominate purely by having more connections.</p>
+</section>
+<section id="why-this-needs-no-node-features-at-all" class="level3" data-number="79.2.2">
+<h3 data-number="79.2.2" class="anchored" data-anchor-id="why-this-needs-no-node-features-at-all"><span class="header-section-number">79.2.2</span> Why This Needs No Node Features At All</h3>
+<p>Worked Example 79’s GCN is given an identity matrix as input features: every node starts as “featureless” except for a one-hot marker of its own identity. That the model still classifies almost every node correctly is the clearest possible demonstration that the graph’s connectivity pattern alone is enough signal, without any node attributes at all. In practice real node features would typically also be fed in. This is what makes GNNs so useful for fraud detection, combining a transaction’s own features with who it’s connected to, but the mechanism doesn’t require them.</p>
+</section>
+<section id="node2vec-borrowing-word2vecs-trick-applied-to-walks-instead-of-sentences" class="level3" data-number="79.2.3">
+<h3 data-number="79.2.3" class="anchored" data-anchor-id="node2vec-borrowing-word2vecs-trick-applied-to-walks-instead-of-sentences"><span class="header-section-number">79.2.3</span> node2vec: Borrowing word2vec’s Trick, Applied to Walks Instead of Sentences</h3>
+<p>node2vec’s insight is a direct transplant from NLP (Chapter 27’s embeddings): treat a random walk over a graph as a “sentence” of node IDs, and the same skip-gram objective that learns word embeddings from co-occurring words learns node embeddings from co-occurring graph positions. Two nodes that show up near each other in many random walks, because they’re structurally close, well-connected, or in the same dense cluster, end up with similar embeddings, with no labels used anywhere in training.</p>
+</section>
+<section id="transe-relations-as-geometric-translations" class="level3" data-number="79.2.4">
+<h3 data-number="79.2.4" class="anchored" data-anchor-id="transe-relations-as-geometric-translations"><span class="header-section-number">79.2.4</span> TransE: Relations as Geometric Translations</h3>
+<p>TransE makes a specific, falsifiable geometric bet: that a relationship like “owned by” can be represented as a single vector that, when added to any owned company’s vector, lands close to its owner’s vector, for every true <code>OWNED_BY</code> fact simultaneously. This is a strong assumption (real relations aren’t always this simple: a company can have multiple owners, a relation might not compose this cleanly), which is exactly why TransE has known limitations and why later, more expressive models (TransR, RotatE, ComplEx) exist. But the assumption is remarkably effective at the scale Worked Example 79 uses, recovering typed relational facts entirely from structure: no text, no external features, just the constraint that true triples satisfy <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi><mo>+</mo><mi>r</mi><mo>≈</mo><mi>t</mi></mrow><annotation encoding="application/x-tex">h + r \approx t</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">h</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6151em;"></span><span class="mord mathnormal">t</span></span></span></span> better than corrupted ones.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="79.3">
+<h2 data-number="79.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">79.3</span> Trade-offs and Limits</h2>
+<p>A GCN is transductive: trained against a specific, fixed graph, it doesn’t natively handle new nodes it never saw during training. GraphSAGE fixes this by learning an aggregation function rather than fixed per-node weights, applicable to unseen nodes at inference time. GAT adds learned attention weights so not every neighbour contributes equally, useful when some neighbours are clearly more relevant, at the cost of more parameters and compute. Supervised (GCN) versus unsupervised (node2vec, TransE): a GCN needs labels, often expensive or unavailable at the scale desired; node2vec and TransE need none, but as a direct consequence can only optimise for “structure looks similar,” not for whatever specific downstream task actually matters. Worked Example 79’s node2vec validation check uses labels only to <em>check</em> the unsupervised embeddings, never to train them, precisely because that’s the honest way to validate an unsupervised method when ground truth happens to be available. TransE’s structural assumption is a real limitation, not just a design choice: because it insists every relation is a single additive translation, it struggles with relations that aren’t 1-to-1 in that simple sense. A company having multiple owners violates the geometry, which is what motivates more expressive successor models.</p>
+</section>
+<section id="procedures" class="level2" data-number="79.4">
+<h2 data-number="79.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">79.4</span> Procedures</h2>
+<p id="proc-79-1"><strong>Procedure 79.1 (Build the Symmetric Degree-Normalised GCN Aggregation).</strong> <em>When to use:</em> implementing a GCN layer from its defining formula.</p>
+<div id="lst-gnn-gcn-norm" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gnn-gcn-norm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;79.1: A_hat = D^-1/2 (A+I) D^-1/2: self-loops plus degree normalisation
+</figcaption>
+<div aria-describedby="lst-gnn-gcn-norm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="co"># add self-loops</span></span>
+<span id="cb1-2">A_hat <span class="op">=</span> A <span class="op">+</span> np.eye(A.shape[<span class="dv">0</span>])</span>
+<span id="cb1-3"><span class="co"># degree matrix, post self-loop</span></span>
+<span id="cb1-4">D_hat <span class="op">=</span> np.diag(A_hat.<span class="bu">sum</span>(axis<span class="op">=</span><span class="dv">1</span>))</span>
+<span id="cb1-5">D_hat_inv_sqrt <span class="op">=</span> np.linalg.inv(np.sqrt(D_hat))</span>
+<span id="cb1-6">A_norm <span class="op">=</span> D_hat_inv_sqrt <span class="op">@</span> A_hat <span class="op">@</span> D_hat_inv_sqrt</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-79-2"><strong>Procedure 79.2 (Generate Random Walks for node2vec).</strong> <em>When to use:</em> preparing training data for any skip-gram-over-graphs embedding method.</p>
+<div id="lst-gnn-walks" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gnn-walks-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;79.2: Random walks, treated as sentences of node IDs
+</figcaption>
+<div aria-describedby="lst-gnn-walks-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> random_walk(G, start, walk_length):</span>
+<span id="cb2-2">    walk <span class="op">=</span> [start]</span>
+<span id="cb2-3">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(walk_length <span class="op">-</span> <span class="dv">1</span>):</span>
+<span id="cb2-4">        neighbors <span class="op">=</span> <span class="bu">list</span>(G.neighbors(walk[<span class="op">-</span><span class="dv">1</span>]))</span>
+<span id="cb2-5">        <span class="cf">if</span> <span class="kw">not</span> neighbors:</span>
+<span id="cb2-6">            <span class="cf">break</span></span>
+<span id="cb2-7">        walk.append(random.choice(neighbors))</span>
+<span id="cb2-8">    <span class="cf">return</span> walk</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-79-3"><strong>Procedure 79.3 (Score TransE Candidate Triples).</strong> <em>When to use:</em> link prediction or knowledge-graph completion with typed relations.</p>
+<div id="lst-gnn-transe-score" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gnn-transe-score-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;79.3: h + r ≈ t: score every candidate tail, rank by distance
+</figcaption>
+<div aria-describedby="lst-gnn-transe-score-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">def</span> transe_score(h_vec, r_vec, t_vec):</span>
+<span id="cb3-2">    <span class="co"># higher (less negative) = better</span></span>
+<span id="cb3-3">    <span class="cf">return</span> <span class="op">-</span>np.linalg.norm(h_vec <span class="op">+</span> r_vec <span class="op">-</span> t_vec)</span>
+<span id="cb3-4"></span>
+<span id="cb3-5"><span class="kw">def</span> predict_tail(h, r, all_entities, embeddings):</span>
+<span id="cb3-6">    scores <span class="op">=</span> {</span>
+<span id="cb3-7">        t: transe_score(</span>
+<span id="cb3-8">            embeddings[h], embeddings[r], embeddings[t]</span>
+<span id="cb3-9">        )</span>
+<span id="cb3-10">        <span class="cf">for</span> t <span class="kw">in</span> all_entities</span>
+<span id="cb3-11">    }</span>
+<span id="cb3-12">    <span class="cf">return</span> <span class="bu">sorted</span>(scores, key<span class="op">=</span>scores.get, reverse<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> evaluating TransE with only Hits@1. A near-miss (correct answer ranked 2nd or 3rd) looks identical to a total failure under Hits@1 alone; Mean Rank and Hits@3 (Worked Example 79) give a fuller picture.</p>
+</section>
+<section id="worked-example" class="level2" data-number="79.5">
+<h2 data-number="79.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">79.5</span> Worked Example</h2>
+<p><strong>GCN</strong>, trained on the Zachary karate club graph (34 nodes, 78 edges, two real-world factions), with only <strong>4 of 34 nodes labelled</strong> (11.8% of the graph) and node features deliberately set to the identity matrix: the model sees only structure, no attributes:</p>
+<div id="lst-gnn-worked-gcn" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gnn-worked-gcn-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;79.4: 2-layer GCN, 4 labelled nodes, structure-only features
+</figcaption>
+<div aria-describedby="lst-gnn-worked-gcn-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">labelled_nodes, labels <span class="op">=</span> [<span class="dv">1</span>, <span class="dv">6</span>, <span class="dv">15</span>, <span class="dv">32</span>], [<span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">1</span>, <span class="dv">1</span>]</span>
+<span id="cb4-2">gcn <span class="op">=</span> GCN(A_norm, X<span class="op">=</span>np.eye(<span class="dv">34</span>))</span>
+<span id="cb4-3">train(gcn, labelled_nodes, labels, epochs<span class="op">=</span><span class="dv">150</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Epoch</th>
+<th>Train loss</th>
+<th>Test accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>0.7187</td>
+<td>0.5000</td>
+</tr>
+<tr class="even">
+<td>50</td>
+<td>0.0008</td>
+<td>0.9667</td>
+</tr>
+<tr class="odd">
+<td>150 (final)</td>
+<td>0.0027</td>
+<td><strong>0.9667</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Final test accuracy <strong>0.9667</strong> against a majority-class baseline of 0.5000, on the 30 nodes never shown a label. The label signal from just 4 nodes propagated outward through the graph’s structure alone (no node attributes whatsoever) to correctly classify nearly every remaining node, exactly Exposition’s claim about connectivity-alone signal, made numeric.</p>
+<p><strong>node2vec</strong>, trained fully unsupervised (680 random walks, 23,120 center/context pairs, skip-gram objective, no labels used anywhere in training) on the same graph:</p>
+<div id="lst-gnn-worked-node2vec" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gnn-worked-node2vec-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;79.5: Skip-gram over random walks, then a label-free validation check
+</figcaption>
+<div aria-describedby="lst-gnn-worked-node2vec-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">walks <span class="op">=</span> [</span>
+<span id="cb5-2">    random_walk(G, node, length<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb5-3">    <span class="cf">for</span> node <span class="kw">in</span> G.nodes() <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">20</span>)</span>
+<span id="cb5-4">]</span>
+<span id="cb5-5">embeddings <span class="op">=</span> train_skipgram(walks, epochs<span class="op">=</span><span class="dv">20</span>)</span>
+<span id="cb5-6"><span class="co"># labels used ONLY to check</span></span>
+<span id="cb5-7">same_faction_rate <span class="op">=</span> evaluate_top3_neighbors(</span>
+<span id="cb5-8">    embeddings,</span>
+<span id="cb5-9">    ground_truth_factions,</span>
+<span id="cb5-10">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>node2vec: same-faction rate among top-3 nearest neighbours</td>
+<td><strong>0.9412</strong></td>
+</tr>
+<tr class="even">
+<td>Random-embedding baseline</td>
+<td>0.5490</td>
+</tr>
+</tbody>
+</table>
+<p>Nodes’ nearest neighbours in the learned embedding space share the correct real-world faction 94.12% of the time, dramatically above the 54.90% random-embedding baseline, recovering most of the same real-world structure <a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a>’s supervised-against-ground-truth community detection also found, but via an entirely different, fully unsupervised mechanism with zero labels used in training.</p>
+<p><strong>TransE</strong>, trained on a tiny typed-relation knowledge graph (12 entities, 4 relation types, 13 triples): <code>OWNED_BY</code>, <code>SUPPLIES</code>, <code>EMPLOYS</code>, <code>LOCATED_IN</code> facts, learned entirely from structure:</p>
+<div id="lst-gnn-worked-transe" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gnn-worked-transe-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;79.6: Training loss over 400 epochs, then link-prediction evaluation
+</figcaption>
+<div aria-describedby="lst-gnn-worked-transe-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">400</span>):</span>
+<span id="cb6-2">    loss <span class="op">=</span> train_transe_step(triples, corrupted_triples)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Epoch</th>
+<th>Total loss</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>13.3860</td>
+</tr>
+<tr class="even">
+<td>100</td>
+<td>2.2914</td>
+</tr>
+<tr class="odd">
+<td>300</td>
+<td>1.3371</td>
+</tr>
+<tr class="even">
+<td>400 (final)</td>
+<td><strong>1.1954</strong></td>
+</tr>
+</tbody>
+</table>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Mean rank (out of 12 entities, 1 = perfect)</td>
+<td><strong>1.0769</strong></td>
+</tr>
+<tr class="even">
+<td>Hits@1</td>
+<td>0.9231</td>
+</tr>
+<tr class="odd">
+<td><strong>Hits@3</strong></td>
+<td><strong>1.0000</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Every true fact’s correct tail entity ranks within TransE’s top 3 predictions (Hits@3 = 1.0000), and the mean rank of 1.0769 is nearly perfect (1.0 would mean every correct answer ranked first every time). A concrete example: querying <code>'Acme Corp OWNED_BY ?'</code> returns <code>['Zenith Holdings', 'Orion Group', 'Acme Corp']</code> as its top-3 predicted tails. The ground truth, Zenith Holdings, ranks first, recovered purely from the geometric constraint <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>h</mi><mo>+</mo><mi>r</mi><mo>≈</mo><mi>t</mi></mrow><annotation encoding="application/x-tex">h + r \approx t</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">h</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6151em;"></span><span class="mord mathnormal">t</span></span></span></span>, with no text or external features involved at all.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="im">from</span> sagemaker.pytorch <span class="im">import</span> PyTorch</span>
+<span id="cb7-2"></span>
+<span id="cb7-3">estimator <span class="op">=</span> PyTorch(</span>
+<span id="cb7-4">    entry_point<span class="op">=</span><span class="st">'train_gnn.py'</span>, instance_type<span class="op">=</span><span class="st">'ml.g5.xlarge'</span>,</span>
+<span id="cb7-5">    <span class="co"># or 'node2vec', 'transe'</span></span>
+<span id="cb7-6">    hyperparameters<span class="op">=</span>{<span class="st">'model'</span>: <span class="st">'gcn'</span>, <span class="st">'n_labelled'</span>: <span class="dv">4</span>},</span>
+<span id="cb7-7">)</span></code></pre></div>
+<p><strong>When this chapter’s supervised-vs-unsupervised measurement matters for a SageMaker training decision:</strong> the GCN’s 96.67% accuracy came from only 4 labels; node2vec’s 94.12% same-faction recovery came from zero labels. Before committing a labelling budget to a GCN-style pipeline, Worked Example 79’s comparison is the concrete argument for first checking whether an unsupervised embedding (node2vec) already recovers enough of the needed structure. Labelling cost is a real budget line, and this chapter’s numbers show it isn’t always necessary.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="79.6">
+<h2 data-number="79.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">79.6</span> History and Further Reading</h2>
+<p>Kipf &amp; Welling’s “Semi-Supervised Classification with Graph Convolutional Networks” <span class="citation" data-cites="kipf2017gcn">(<a href="#ref-kipf2017gcn" role="doc-biblioref">Kipf and Welling 2017</a>)</span> is the original GCN paper, including the exact normalisation this chapter implements. Grover &amp; Leskovec’s “node2vec: Scalable Feature Learning for Networks” <span class="citation" data-cites="grover2016node2vec">(<a href="#ref-grover2016node2vec" role="doc-biblioref">Grover and Leskovec 2016</a>)</span> is the original node2vec paper. Bordes et al.’s “Translating Embeddings for Modeling Multi-relational Data” <span class="citation" data-cites="bordes2013transe">(<a href="#ref-bordes2013transe" role="doc-biblioref">Bordes et al. 2013</a>)</span> is the original TransE paper. Sun et al.’s “RotatE: Knowledge Graph Embedding by Relational Rotation in Complex Space” <span class="citation" data-cites="sun2019rotate">(<a href="#ref-sun2019rotate" role="doc-biblioref">Sun et al. 2019</a>)</span> is a successor model addressing TransE’s 1-to-1 relation limitation directly.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="79.7">
+<h2 data-number="79.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">79.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a> (the same karate club graph, replacing exact Louvain community detection with node2vec’s learned structural embeddings) and <a href="/books/applied-ai-domains/ch77-graph-data-modeling-and-databases" class="quarto-xref"><span>Chapter 77</span></a> (TransE operates on exactly the typed-relation triples that chapter introduced), as well as Book 2’s neural-network and NLP chapters (this chapter’s GCN and skip-gram training are ordinary neural-network training, just with graph-shaped inputs). It enables <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a>, whose entity-centric retrieval frequently uses exactly these kinds of learned embeddings to find semantically or structurally related entities beyond what an LLM’s text embedding alone would surface. It’s often confused with assuming a GNN “sees” the whole graph like a human reading a diagram. It only ever aggregates local neighbourhoods, layer by layer; a 2-layer GCN literally cannot use information from a node more than 2 hops away, however important that distant node might be.</p>
+</section>
+<section id="exercises" class="level2" data-number="79.8">
+<h2 data-number="79.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">79.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-79-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the “message passing” idea shared by every GNN variant in one sentence, and explain what it means for a 2-layer GCN’s “field of view.”</p></li>
+<li id="ex-79-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three models covered (GCN, node2vec, TransE) and state which one(s) require no labels during training.</p></li>
+<li id="ex-79-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the GCN Worked Example’s measured result (96.67% test accuracy from only 4 of 34 labelled nodes, identity-matrix features), explain what this specifically proves about where the model’s predictive signal came from, given that no node carried any real attribute information.</p></li>
+<li id="ex-79-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using node2vec’s measured result (94.12% same-faction rate vs.&nbsp;54.90% random baseline), explain why comparing against the random-embedding baseline, not just reporting 94.12% alone, is necessary to interpret this number correctly.</p></li>
+<li id="ex-79-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team has a large graph with almost no labelled nodes and a fixed budget for manual labelling. Using this chapter’s Worked Example (GCN vs.&nbsp;node2vec results) and Trade-offs section, write the two or three sentences you’d say about how to prioritise their labelling effort.</p></li>
+<li id="ex-79-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 79.3 warns against evaluating TransE with only Hits@1. Using the Worked Example’s measured Hits@1 (0.9231) vs.&nbsp;Hits@3 (1.0000), construct a concrete scenario (a specific query) where Hits@1 alone would understate the model’s real usefulness for a human reviewing its top-3 suggestions.</p></li>
+<li id="ex-79-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about TransE’s known limitation with 1-to-many relations (e.g.&nbsp;a company with multiple owners), referenced in this chapter’s Trade-offs. Explain in your own words, using the <code>h + r ≈ t</code> geometric constraint, exactly why one shared relation vector <code>r</code> cannot correctly place <code>h + r</code> close to two genuinely different tail entities simultaneously.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="79.9">
+<h2 data-number="79.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">79.9</span> Mental Model</h2>
+<p>Chapter 76 asked exact structural questions and got exact structural answers. This chapter asks the same kind of question (how does this node relate to the rest of the graph?) but answers it by learning a vector through gradient descent instead of computing a formula, trading determinism and interpretability for flexibility: a learned embedding can capture patterns no human-designed formula anticipated, at the cost of needing training, data, and, for the supervised case, at least some labels to learn from. This chapter’s three Worked Examples show that trade-off paying off three different ways: 4 labels propagating to 30 correct predictions, zero labels recovering 94% faction agreement, and 13 triples recovering a near-perfect relational structure, all from connectivity alone.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-bordes2013transe" class="csl-entry" role="listitem">
+Bordes, Antoine, Nicolas Usunier, Alberto Garcia-Duran, Jason Weston, and Oksana Yakhnenko. 2013. <span>“Translating Embeddings for Modeling Multi-Relational Data.”</span> <em>Advances in Neural Information Processing Systems</em> 26: 2787–95.
+</div>
+<div id="ref-grover2016node2vec" class="csl-entry" role="listitem">
+Grover, Aditya, and Jure Leskovec. 2016. <span>“Node2vec: Scalable Feature Learning for Networks.”</span> <em>Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining</em>, 855–64.
+</div>
+<div id="ref-kipf2017gcn" class="csl-entry" role="listitem">
+Kipf, Thomas N., and Max Welling. 2017. <span>“Semi-Supervised Classification with Graph Convolutional Networks.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+<div id="ref-sun2019rotate" class="csl-entry" role="listitem">
+Sun, Zhiqing, Zhi-Hong Deng, Jian-Yun Nie, and Jian Tang. 2019. <span>“RotatE: Knowledge Graph Embedding by Relational Rotation in Complex Space.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+</div>
+</section>

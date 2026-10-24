@@ -1,0 +1,218 @@
+<p>Over the previous chapters, pieces of an ML platform got built by hand: a training loop, an experiment tracker (Chapter 22), a deployment layer (Chapter 23), a monitoring loop (Chapter 25). Each piece works individually. Stitching them together, securing them, scaling them, and keeping them running at 2am when a fraud model needs to answer in 80ms is a different job entirely. It’s infrastructure engineering, and the same undifferentiated heavy lifting every company doing ML eventually has to solve. A managed ML platform exists to take that lifting off the table. This chapter doesn’t teach a new ML concept. It teaches how everything already learned maps onto AWS’s managed platform, and how to advise a customer on when that trade is actually worth it.</p>
+<section id="motivation" class="level2" data-number="26.1">
+<h2 data-number="26.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">26.1</span> Motivation</h2>
+<p>Every capability built from Chapter 16 onward has both an open-source implementation (what was actually built in this book) and a managed AWS equivalent. Local Jupyter maps to SageMaker Studio. A training script on a laptop maps to SageMaker Training Jobs. Self-hosted MLflow maps to SageMaker’s managed MLflow and Model Registry. FastAPI-plus-Docker maps to SageMaker Endpoints and Batch Transform. Hand-rolled drift checks map to SageMaker Model Monitor. This chapter fills in that right-hand column: what each managed service actually is, what it costs in money and lock-in, and when an SA should recommend it over the open-source path.</p>
+</section>
+<section id="exposition" class="level2" data-number="26.2">
+<h2 data-number="26.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">26.2</span> Exposition</h2>
+<section id="s3-the-foundation" class="level3" data-number="26.2.1">
+<h3 data-number="26.2.1" class="anchored" data-anchor-id="s3-the-foundation"><span class="header-section-number">26.2.1</span> S3: The Foundation</h3>
+<p>Everything in the AWS ML stack sits on S3. Training data, model artefacts, pipeline outputs, feature store offline data: all of it lives in S3, referenced by URI, and SageMaker reads and writes there directly rather than moving data into some proprietary store. This matters directly for the lock-in conversation. Data stays in a standard, portable format even if the compute layer later moves off SageMaker.</p>
+</section>
+<section id="sagemaker-the-ml-compute-and-orchestration-layer" class="level3" data-number="26.2.2">
+<h3 data-number="26.2.2" class="anchored" data-anchor-id="sagemaker-the-ml-compute-and-orchestration-layer"><span class="header-section-number">26.2.2</span> SageMaker: The ML Compute and Orchestration Layer</h3>
+<p>Studio is a hosted JupyterLab-like IDE, replacing “a data scientist’s laptop” with a governed, access-controlled, auto-provisioned environment. It’s Chapter 6’s Python ecosystem, hosted, nothing conceptually new. Training Jobs replace <code>python train.py</code> run locally. A training script gets packaged, pointed at S3 data, given an instance type, and SageMaker provisions the machine, runs the script, streams logs, and tears the machine down when finished. It’s billed per second of actual training time, not for an idle instance. Processing Jobs apply the same managed, scaled-out pattern to data cleaning and feature engineering. Pipelines is SageMaker’s answer to Chapter 24’s CI/CD-for-ML problem: a versioned, re-runnable DAG of process-train-evaluate-conditionally-register steps, narrower and more opinionated than a general orchestrator like Airflow specifically because it only orchestrates ML steps. Model Registry is the same concept as Chapter 22’s MLflow registry, natively wired into Pipelines and Endpoints so approving a model version can directly trigger deployment. Endpoints and Batch Transform are Chapter 23’s real-time and batch inference patterns, managed. A container and model artefact go in, and SageMaker supplies the always-on HTTP service or the scheduled batch job. Feature Store solves training/serving skew directly. The same feature computation logic feeds both a low-latency online store for real-time inference and an S3-backed offline store for training, so train-time and serve-time features can never quietly diverge.</p>
+</section>
+<section id="bedrock-managed-foundation-models" class="level3" data-number="26.2.3">
+<h3 data-number="26.2.3" class="anchored" data-anchor-id="bedrock-managed-foundation-models"><span class="header-section-number">26.2.3</span> Bedrock: Managed Foundation Models</h3>
+<p>Bedrock is a different kind of service. It’s not about training and deploying your own models, but calling <em>someone else’s</em> pretrained foundation models (Claude, Titan, Llama, and others) through one unified API, with no infrastructure to manage and no weights to host. It’s the managed alternative to hosting your own transformer, in the same shape as SageMaker Endpoints being the managed alternative to a hand-hosted FastAPI service. The trade-off is identical too: control over model internals traded for zero infrastructure and a per-token bill instead of a GPU bill.</p>
+</section>
+<section id="advising-a-customer-the-actual-sa-judgment-call" class="level3" data-number="26.2.4">
+<h3 data-number="26.2.4" class="anchored" data-anchor-id="advising-a-customer-the-actual-sa-judgment-call"><span class="header-section-number">26.2.4</span> Advising a Customer: The Actual SA Judgment Call</h3>
+<p>This is the real skill. “Should we use SageMaker or build on open source?” has an honest answer of “it depends.” An SA earns their keep making that concrete across four axes. Team size and platform maturity: a five-person DS team with no MLOps engineer benefits enormously from a managed surface, while a fifty-person platform team with existing Kubernetes expertise may already have better tooling. Multi-cloud or portability requirements: a hard cloud-agnostic requirement rules SageMaker out entirely, since its Pipelines, Registry, and Endpoints don’t run anywhere but AWS. Cost model: per-second managed billing is often cheaper than a team’s fully-loaded cost of running equivalent infrastructure at low-to-variable volume, but self-managed clusters can win at very high, steady-state volume. Existing AWS footprint: a customer already deep in AWS’s IAM/VPC/S3 ecosystem gets much faster time-to-value than one starting integration from zero on another cloud. There is rarely a universally correct answer. Only a correct answer for <em>this</em> customer’s specific constraints.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="26.3">
+<h2 data-number="26.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">26.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Dimension</th>
+<th>AWS-managed</th>
+<th>Open-source, self-hosted</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Time to first production model</td>
+<td>Fast: infra pre-built</td>
+<td>Slower: build and secure the platform first</td>
+</tr>
+<tr class="even">
+<td>Operational burden</td>
+<td>Low: AWS patches/scales/monitors</td>
+<td>High: the team owns uptime, security, upgrades</td>
+</tr>
+<tr class="odd">
+<td>Cost at low/variable volume</td>
+<td>Often cheaper (pay-per-use)</td>
+<td>Often more expensive (idle infra, dedicated staff)</td>
+</tr>
+<tr class="even">
+<td>Cost at very high, steady volume</td>
+<td>Can be more expensive</td>
+<td>Can be cheaper at scale</td>
+</tr>
+<tr class="odd">
+<td>Portability</td>
+<td>Locked to AWS</td>
+<td>Portable to any cloud or on-prem</td>
+</tr>
+<tr class="even">
+<td>Customisation depth</td>
+<td>Bounded by what’s exposed</td>
+<td>Unlimited: full control of every layer</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="procedures" class="level2" data-number="26.4">
+<h2 data-number="26.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">26.4</span> Procedures</h2>
+<p id="proc-26-1"><strong>Procedure 26.1 (Set Up a Least-Privilege IAM Role for SageMaker).</strong> <em>When to use:</em> before running anything on SageMaker.</p>
+<div id="lst-iam-role" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-iam-role-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;26.1: Scoping S3 and SageMaker permissions to what a training job actually needs
+</figcaption>
+<div aria-describedby="lst-iam-role-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1">permission_policy <span class="op">=</span> {</span>
+<span id="cb1-2">    <span class="st">"Version"</span>: <span class="st">"2012-10-17"</span>,</span>
+<span id="cb1-3">    <span class="st">"Statement"</span>: [</span>
+<span id="cb1-4">        {</span>
+<span id="cb1-5">            <span class="st">"Effect"</span>: <span class="st">"Allow"</span>,</span>
+<span id="cb1-6">            <span class="st">"Action"</span>: [</span>
+<span id="cb1-7">                <span class="st">"s3:GetObject"</span>, <span class="st">"s3:PutObject"</span>, <span class="st">"s3:ListBucket"</span></span>
+<span id="cb1-8">            ],</span>
+<span id="cb1-9">            <span class="st">"Resource"</span>: [</span>
+<span id="cb1-10">                <span class="st">"arn:aws:s3:::my-ml-bucket"</span>,</span>
+<span id="cb1-11">                <span class="st">"arn:aws:s3:::my-ml-bucket/*"</span>,</span>
+<span id="cb1-12">            ],</span>
+<span id="cb1-13">        },</span>
+<span id="cb1-14">        {</span>
+<span id="cb1-15">            <span class="st">"Effect"</span>: <span class="st">"Allow"</span>,</span>
+<span id="cb1-16">            <span class="st">"Action"</span>: [</span>
+<span id="cb1-17">                <span class="st">"sagemaker:CreateTrainingJob"</span>,</span>
+<span id="cb1-18">                <span class="st">"sagemaker:CreateEndpoint"</span>,</span>
+<span id="cb1-19">            ],</span>
+<span id="cb1-20">            <span class="st">"Resource"</span>: <span class="st">"*"</span>,</span>
+<span id="cb1-21">        },</span>
+<span id="cb1-22">    ],</span>
+<span id="cb1-23">}</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> attaching <code>AmazonSageMakerFullAccess</code> to every role for convenience. It grants far more than a training job needs. Fine for a personal sandbox, not fine for a shared or production account.</p>
+<p id="proc-26-2"><strong>Procedure 26.2 (Launch a SageMaker Training Job in Script Mode).</strong> <em>When to use:</em> running an existing training script on managed, right-sized compute instead of a laptop.</p>
+<div id="lst-training-job" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-training-job-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;26.2: Packaging a training script for managed SageMaker compute
+</figcaption>
+<div aria-describedby="lst-training-job-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sagemaker.sklearn.estimator <span class="im">import</span> SKLearn</span>
+<span id="cb2-2"></span>
+<span id="cb2-3">estimator <span class="op">=</span> SKLearn(</span>
+<span id="cb2-4">    entry_point<span class="op">=</span><span class="st">"train.py"</span>,</span>
+<span id="cb2-5">    source_dir<span class="op">=</span><span class="st">"src"</span>,</span>
+<span id="cb2-6">    role<span class="op">=</span>sagemaker_role,</span>
+<span id="cb2-7">    instance_type<span class="op">=</span><span class="st">"ml.m5.xlarge"</span>,</span>
+<span id="cb2-8">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb2-9">    framework_version<span class="op">=</span><span class="st">"1.2-1"</span>,</span>
+<span id="cb2-10">    hyperparameters<span class="op">=</span>{<span class="st">"n_estimators"</span>: <span class="dv">100</span>, <span class="st">"max_depth"</span>: <span class="dv">8</span>},</span>
+<span id="cb2-11">)</span>
+<span id="cb2-12">estimator.fit({<span class="st">"train"</span>: train_data_uri})</span>
+<span id="cb2-13"><span class="co"># s3:// path to model.tar.gz</span></span>
+<span id="cb2-14"><span class="bu">print</span>(estimator.model_data)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-26-3"><strong>Procedure 26.3 (Deploy and Invoke a Real-Time Endpoint).</strong> <em>When to use:</em> a use case needing millisecond-scale responses.</p>
+<div id="lst-endpoint-deploy" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-endpoint-deploy-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;26.3: Deploy, invoke, and, critically, delete when done
+</figcaption>
+<div aria-describedby="lst-endpoint-deploy-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">predictor <span class="op">=</span> estimator.deploy(</span>
+<span id="cb3-2">    initial_instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb3-3">    instance_type<span class="op">=</span><span class="st">"ml.m5.large"</span>,</span>
+<span id="cb3-4">)</span>
+<span id="cb3-5">result <span class="op">=</span> predictor.predict(sample_row)</span>
+<span id="cb3-6"><span class="co"># endpoints bill continuously until deleted</span></span>
+<span id="cb3-7">predictor.delete_endpoint()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> leaving a real-time endpoint running after a demo. Unlike Training Jobs (billed per second of actual compute), endpoints bill continuously whether called or not.</p>
+<p id="proc-26-4"><strong>Procedure 26.4 (Call a Foundation Model via Bedrock).</strong> <em>When to use:</em> a managed foundation model call is needed rather than self-hosting.</p>
+<div id="lst-bedrock-call" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-bedrock-call-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;26.4: A single unified API call regardless of underlying model provider
+</figcaption>
+<div aria-describedby="lst-bedrock-call-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> boto3, json</span>
+<span id="cb4-2"></span>
+<span id="cb4-3">bedrock <span class="op">=</span> boto3.client(</span>
+<span id="cb4-4">    <span class="st">"bedrock-runtime"</span>, region_name<span class="op">=</span><span class="st">"us-east-1"</span></span>
+<span id="cb4-5">)</span>
+<span id="cb4-6">response <span class="op">=</span> bedrock.invoke_model(</span>
+<span id="cb4-7">    modelId<span class="op">=</span><span class="st">"anthropic.claude-sonnet-5"</span>,</span>
+<span id="cb4-8">    body<span class="op">=</span>json.dumps({</span>
+<span id="cb4-9">        <span class="st">"anthropic_version"</span>: <span class="st">"bedrock-2023-05-31"</span>,</span>
+<span id="cb4-10">        <span class="st">"max_tokens"</span>: <span class="dv">500</span>,</span>
+<span id="cb4-11">        <span class="st">"messages"</span>: [{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"..."</span>}],</span>
+<span id="cb4-12">    }),</span>
+<span id="cb4-13">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting Bedrock model access must be explicitly enabled per-model in the console before the first call. An <code>AccessDeniedException</code> on an otherwise-correct IAM policy usually means the model itself isn’t enabled for the account/region yet.</p>
+</section>
+<section id="worked-example" class="level2" data-number="26.5">
+<h2 data-number="26.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">26.5</span> Worked Example</h2>
+<p>Applying this chapter’s four-axis advising framework to two contrasting hypothetical customers makes the “it depends” answer concrete rather than evasive.</p>
+<p><strong>Customer A:</strong> a 6-person data science team at a Series B startup, no dedicated MLOps engineer, already running its product on AWS (RDS, S3, existing IAM setup), no regulatory requirement for multi-cloud. Scoring the four axes: team size/maturity strongly favours managed, since every hour not spent operating Airflow is an hour spent on models, and there’s no one to operate it. Portability requirements are absent, removing the strongest argument for open-source. Cost model favours managed at this team’s low, variable training volume. Existing AWS footprint means most of the integration work is already done. All four axes point the same direction. SageMaker is close to an unambiguous recommendation here.</p>
+<p><strong>Customer B:</strong> a 60-person ML platform team at a large financial institution, existing Kubernetes expertise, a regulatory requirement to remain multi-cloud-capable for disaster-recovery purposes, and steady-state training volume large enough that dedicated GPU clusters are already partially amortised. Scoring the same four axes: team size/maturity favours self-hosting, since the team likely already has better tooling than a generic managed surface. The multi-cloud requirement <em>rules SageMaker out structurally</em>. Pipelines, Registry, and Endpoints don’t run anywhere but AWS, so this axis alone can decide the question regardless of the other three. Cost model at this volume plausibly favours self-managed clusters. Existing footprint is a wash, since the team is deliberately not AWS-exclusive. Here the axes don’t just lean the other way. One of them (portability) is a hard constraint that overrides the others entirely. The right answer isn’t “weigh four factors.” It’s “check whether any single factor is a hard constraint before weighing the rest.”</p>
+<p>This is the actual shape of the SA judgment call. Not a scorecard averaged across four dimensions, but a check for hard constraints first, then a genuine trade-off analysis for whatever’s left.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<p>This entire chapter <em>is</em> the AWS-equivalent material for Chapters 16-25. Rather than a single boxed sidebar, every Procedure above is itself the managed-service mapping. The open-source counterpart to everything in this chapter is Chapter 22’s MLflow, Chapter 23’s FastAPI/Docker, Chapter 24’s pipeline code, and Chapter 25’s custom drift checks, all cross-referenced directly in the Exposition above.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="26.6">
+<h2 data-number="26.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">26.6</span> History and Further Reading</h2>
+<p>The AWS SageMaker Developer Guide is the canonical reference for every service mentioned here. The AWS Bedrock User Guide covers the foundation model catalogue, API reference, and guardrails. Huyen’s <em>Designing ML Systems</em>, Ch. 10, covers infrastructure and platform trade-offs in a vendor-neutral framing <span class="citation" data-cites="huyen2022designingml">(<a href="#ref-huyen2022designingml" role="doc-biblioref">Huyen 2022</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="26.7">
+<h2 data-number="26.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">26.7</span> How This Connects</h2>
+<p>This chapter builds directly on Chapter 2’s business problem framing (the same “advise the customer” lens applied here) and on Chapters 22-25, since every SageMaker feature covered has a named open-source counterpart already built earlier in this book. It enables Chapter 31’s RAG work with Bedrock and a vector database, and any capstone with a deployment or architecture component. It’s often confused with “using AWS” in general. A customer can run entirely on AWS (EC2, S3, RDS) without touching any SageMaker service at all. SageMaker is AWS’s <em>opinionated ML platform</em>, not a synonym for doing ML on AWS.</p>
+</section>
+<section id="exercises" class="level2" data-number="26.8">
+<h2 data-number="26.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">26.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-26-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Match each of these open-source tools to its SageMaker equivalent: (a) self-hosted MLflow; (b) FastAPI + Docker; (c) Airflow.</p></li>
+<li id="ex-26-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in one sentence why SageMaker Training Jobs are typically cheaper than running the same training on an always-on EC2 instance.</p></li>
+<li id="ex-26-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using this chapter’s four advising axes (team maturity, portability, cost model, existing footprint), score a hypothetical 15-person team with moderate AWS usage and no regulatory constraints, and state whether any single axis would override the others the way Customer B’s portability requirement did.</p></li>
+<li id="ex-26-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-endpoint-deploy" class="quarto-xref">Listing&nbsp;<span>26.3</span></a>, explain what happens to billing if <code>predictor.delete_endpoint()</code> is never called after a one-off demo that used the endpoint for five minutes.</p></li>
+<li id="ex-26-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer says “we’re on AWS, so we should use SageMaker for everything.” Using this chapter’s How This Connects section, write the two or three sentences you’d say back.</p></li>
+<li id="ex-26-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer with a hard multi-cloud regulatory requirement asks whether SageMaker Pipelines could still work “just for the AWS parts of our workload.” Using this chapter’s Customer B analysis, explain why portability requirements typically need to be evaluated for the whole pipeline, not service-by-service.</p></li>
+<li id="ex-26-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the AWS Well-Architected Framework’s Machine Learning Lens. Identify one consideration it raises that this chapter’s four-axis advising framework does not explicitly name, and explain where it would fit into the framework.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="26.9">
+<h2 data-number="26.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">26.9</span> Mental Model</h2>
+<p>Everything from Chapter 16 onward is a recipe learned from scratch: every ingredient, every step, understood directly. SageMaker is a well-equipped commercial kitchen. Same recipe, but someone else bought, installed, and maintains the ovens. The recipe still has to be known, and it is, by this point. SageMaker just removes the burden of running the kitchen. Whether renting that kitchen is worth it depends entirely on how often the cooking happens and how much not doing the dishes is actually worth.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-huyen2022designingml" class="csl-entry" role="listitem">
+Huyen, Chip. 2022. <em>Designing Machine Learning Systems: An Iterative Process for Production-Ready Applications</em>. O’Reilly Media.
+</div>
+</div>
+</section>

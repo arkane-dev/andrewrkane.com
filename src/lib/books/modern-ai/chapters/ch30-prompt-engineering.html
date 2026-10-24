@@ -1,0 +1,312 @@
+<p>Once a transformer is trained (Chapter 29), the question a Solutions Architect faces daily isn’t “how do I train a model” but “how do I get this frozen model to do a specific task, reliably, without retraining it.” Fine-tuning (Chapter 34) is one answer, but it costs data, compute, and iteration time. Prompting is the other: steering a frozen model’s behaviour purely through the text fed into it, with no weight updates, at the cost of a single API call. This chapter turns prompting from trial-and-error guesswork into an engineering discipline: zero-shot and few-shot framing, chain-of-thought reasoning, and two different strengths of guarantee for structured output.</p>
+<section id="motivation" class="level2" data-number="30.1">
+<h2 data-number="30.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">30.1</span> Motivation</h2>
+<p>A large language model is, mechanically, a function that maps a sequence of tokens to a probability distribution over the next token. Generation is sampling from that distribution, appending the result, and repeating. A <strong>prompt</strong> is nothing more than the input sequence that distribution is conditioned on. Every token in it can, via self-attention, influence every token the model is about to generate. There is no separate “instruction-following module” bolted onto the transformer. Instruction-following is a <em>learned behaviour</em>, trained in during pretraining and alignment, so that certain textual patterns reliably steer generation in predictable directions. Prompt engineering, then, is not programming the model in the traditional sense. It’s constructing a context that makes the correct completion the most probable next tokens, given everything the model learned during training. Getting this right is the cheapest lever a Solutions Architect has for improving an LLM application, and it should almost always be pulled before fine-tuning enters the conversation.</p>
+</section>
+<section id="exposition" class="level2" data-number="30.2">
+<h2 data-number="30.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">30.2</span> Exposition</h2>
+<section id="in-context-learning-zero-shot-vs.-few-shot" class="level3" data-number="30.2.1">
+<h3 data-number="30.2.1" class="anchored" data-anchor-id="in-context-learning-zero-shot-vs.-few-shot"><span class="header-section-number">30.2.1</span> In-Context Learning: Zero-Shot vs.&nbsp;Few-Shot</h3>
+<p><strong>Zero-shot</strong> prompting gives the model only a natural-language instruction, “classify this message as billing, technical, or account,” and relies entirely on the model’s prior knowledge of what “classify” and the category names mean. <strong>Few-shot</strong> prompting adds worked examples directly in the prompt before the real input. This is <strong>in-context learning</strong>. The model conditions its next-token predictions on a handful of concrete input→output demonstrations sitting in its context window, not just on an instruction. The mechanism isn’t fully understood, but the leading account is that pretraining exposes models to enough structurally similar patterns, worked examples, analogies, templates, that the model develops a general-purpose “pattern completion” capability, and few-shot examples invoke it.</p>
+<p>Few-shot examples aren’t free. They cost context length (latency and money), and they <em>anchor</em> the model’s behaviour, sometimes too strongly. A model can over-fit to superficial patterns in the examples, such as always predicting whichever category the majority of the examples used. Good few-shot sets are class-balanced, include at least one genuinely ambiguous case so the model sees how ties should be broken, and place the strongest, clearest example last, closest to the real input. Recency has a measurable effect on which example dominates.</p>
+</section>
+<section id="chain-of-thought-buying-the-model-time-to-think" class="level3" data-number="30.2.2">
+<h3 data-number="30.2.2" class="anchored" data-anchor-id="chain-of-thought-buying-the-model-time-to-think"><span class="header-section-number">30.2.2</span> Chain-of-Thought: Buying the Model Time to Think</h3>
+<p>Every token a decoder-only model generates is produced by the same fixed amount of computation: one forward pass through a fixed number of layers. If a problem genuinely requires multiple reasoning steps, asking for the final answer directly forces the model to do all of that reasoning silently, compressed into the hidden state that produces a single output token. That’s fragile. <strong>Chain-of-thought (CoT)</strong> prompting asks the model to write out its reasoning before committing to a final answer. This isn’t just a presentation choice. It materially increases the computation available to solve the problem, because each generated reasoning token becomes part of the context for the next one. The model can “see” its own intermediate result when generating the next step, rather than holding everything in an implicit internal state. This is why CoT helps disproportionately on multi-step arithmetic, logic, and planning tasks, and helps little on tasks that were already a single lookup or classification. Reserving it for genuinely multi-step problems avoids paying for output tokens with no accuracy benefit.</p>
+<p>A stronger variant, <strong>self-consistency</strong>, samples several independent CoT reasoning paths for the same problem and takes a majority vote over the final answers. It costs <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>×</mo></mrow><annotation encoding="application/x-tex">N\times</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord">×</span></span></span></span> the tokens of a single CoT call but measurably improves reliability on harder problems, since it’s less likely that every one of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span> independent reasoning paths makes the same mistake.</p>
+</section>
+<section id="structured-output-constraining-a-fundamentally-unstructured-process" class="level3" data-number="30.2.3">
+<h3 data-number="30.2.3" class="anchored" data-anchor-id="structured-output-constraining-a-fundamentally-unstructured-process"><span class="header-section-number">30.2.3</span> Structured Output: Constraining a Fundamentally Unstructured Process</h3>
+<p>Text generation is, by default, unstructured. The model can emit any token sequence. Production systems need to parse the output programmatically, which means the output has to reliably match a schema. Two families of technique exist, differing in the <em>strength</em> of guarantee they offer:</p>
+<ul>
+<li><strong>Schema-in-prompt.</strong> Describe the desired JSON shape in natural language, ask the model to comply, and validate plus retry on failure. This works because instruction-following, including “comply with this output format,” is itself a learned behaviour, but it is <em>probabilistic compliance</em>, not a guarantee. Models occasionally wrap JSON in markdown fences, add a trailing sentence, or drop a required key despite explicit instructions.</li>
+<li><strong>Constrained decoding / native tool calling.</strong> Rather than hoping the model complies, the serving system restricts <em>which tokens are even eligible</em> to be sampled at each generation step, so the output is provably valid against a schema. Or, in the tool-calling case, the API packages a structured “tool call” object directly, validated server-side. This moves the guarantee from the model’s behaviour to the serving infrastructure, which is why production systems that need structured output almost always prefer tool calling over schema-in-prompt whenever the provider supports it.</li>
+</ul>
+</section>
+<section id="prompt-brittleness-and-prompt-injection" class="level3" data-number="30.2.4">
+<h3 data-number="30.2.4" class="anchored" data-anchor-id="prompt-brittleness-and-prompt-injection"><span class="header-section-number">30.2.4</span> Prompt Brittleness and Prompt Injection</h3>
+<p>Because prompts work by shifting a learned probability distribution rather than executing deterministic logic, small changes in wording, example order, or even whitespace can measurably change outputs. This isn’t a bug to be embarrassed about. It’s the direct consequence of prompting being a soft, statistical steering mechanism rather than a programming language. The engineering response mirrors how any other probabilistic system is managed. Version prompts as named constants (never inline strings scattered through a codebase). Test them against a held-out labelled set before shipping a change (Chapter 32 formalises this). Prefer techniques like tool calling that constrain the output space wherever the requirement allows it.</p>
+<p>A related and higher-stakes concern is <strong>prompt injection</strong>: untrusted input, a user message, or a retrieved document in a RAG pipeline (Chapter 31), that contains text designed to override or hijack the model’s instructions (“ignore previous instructions and…”). Treat this the same way any other untrusted-input boundary is treated in software engineering. Never treat user-supplied text as trustworthy instructions. Keep system instructions in a dedicated <code>system</code> parameter separate from user content where the API supports it. For high-stakes actions (sending money, deleting data, calling other tools), never let model output alone trigger the action. Require a validation step or human confirmation outside the model’s control.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="30.3">
+<h2 data-number="30.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">30.3</span> Trade-offs and Limits</h2>
+<p><strong>Few-shot vs.&nbsp;zero-shot:</strong> few-shot usually improves accuracy and consistency, at the cost of more input tokens and the risk of over-anchoring to the examples’ incidental patterns. Start zero-shot on any new task. Add few-shot only once zero-shot proves inconsistent or the output format needs to match a very specific convention.</p>
+<p><strong>Chain-of-thought vs.&nbsp;direct answer:</strong> CoT improves accuracy on genuinely multi-step tasks, at the cost of more output tokens and slower responses. Using it on trivial tasks is pure overhead with no accuracy benefit, and can occasionally <em>hurt</em> by giving the model room to talk itself into an overcomplicated wrong answer.</p>
+<p><strong>Schema-in-prompt vs.&nbsp;tool calling:</strong> schema-in-prompt works with any model and is easy to prototype, but compliance is probabilistic. Always validate and handle failure. Tool calling gives a much stronger guarantee but requires provider support and a bit more setup, defining the schema as a first-class object rather than prose.</p>
+<p><strong>Prompting vs.&nbsp;fine-tuning:</strong> prompting steers a frozen model at inference time. Cheap, instant, but limited by context length and the model’s existing capabilities. Fine-tuning (Chapter 34) changes the model’s weights and can teach genuinely new behaviours, but costs data, compute, and iteration time. Most production systems reach the prompting ceiling first and only fine-tune once it’s clearly been hit.</p>
+</section>
+<section id="procedures" class="level2" data-number="30.4">
+<h2 data-number="30.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">30.4</span> Procedures</h2>
+<p id="proc-30-1"><strong>Procedure 30.1 (Write a Zero-Shot Prompt).</strong> <em>When to use:</em> the first attempt at any new task, or when no representative examples exist yet.</p>
+<div id="lst-zero-shot" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-zero-shot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;30.1: A zero-shot classification prompt with explicit output-format constraints
+</figcaption>
+<div aria-describedby="lst-zero-shot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1">prompt <span class="op">=</span> <span class="st">"""Classify the sentiment of the following product</span></span>
+<span id="cb1-2"><span class="st">review as positive, negative, or mixed.</span></span>
+<span id="cb1-3"><span class="st">Respond with only the label, nothing else.</span></span>
+<span id="cb1-4"></span>
+<span id="cb1-5"><span class="st">Review: </span><span class="sc">{review}</span><span class="st">"""</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>A zero-shot prompt works well when it has an explicit task verb (“classify”, “extract”, “summarise”), enumerated output options (preventing free-form drift), an explicit output-format constraint, and the task framing placed <em>before</em> the input, with the input last. <strong>Common mistake:</strong> burying the actual instruction in the middle of a long prompt, or after the input data. Instruction-following degrades when the instruction is far from where generation begins.</p>
+<p id="proc-30-2"><strong>Procedure 30.2 (Add Few-Shot Examples).</strong> <em>When to use:</em> zero-shot is inconsistent, ambiguous, or the output format needs to match a specific convention.</p>
+<div id="lst-few-shot" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-few-shot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;30.2: A few-shot prompt with balanced, edge-case-inclusive examples
+</figcaption>
+<div aria-describedby="lst-few-shot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">few_shot_prompt <span class="op">=</span> <span class="st">"""Classify the customer support message</span></span>
+<span id="cb2-2"><span class="st">into billing, technical, or account.</span></span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="st">Message: "My card was declined but the site still says</span></span>
+<span id="cb2-5"><span class="st">I owe money."</span></span>
+<span id="cb2-6"><span class="st">Category: billing</span></span>
+<span id="cb2-7"></span>
+<span id="cb2-8"><span class="st">Message: "The page just shows a blank white screen when</span></span>
+<span id="cb2-9"><span class="st">I click submit."</span></span>
+<span id="cb2-10"><span class="st">Category: technical</span></span>
+<span id="cb2-11"></span>
+<span id="cb2-12"><span class="st">Message: "I need to update the phone number on file."</span></span>
+<span id="cb2-13"><span class="st">Category: account</span></span>
+<span id="cb2-14"></span>
+<span id="cb2-15"><span class="st">Message: </span><span class="sc">{new_message}</span></span>
+<span id="cb2-16"><span class="st">Category:"""</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Start with 3-5 examples; more cost context length with diminishing returns past roughly 8-10 for most classification-style tasks. <strong>Common mistake:</strong> using examples that are all “easy” cases, leaving the model no signal for the hard cases it will actually see in production.</p>
+<p id="proc-30-3"><strong>Procedure 30.3 (Elicit Chain-of-Thought Reasoning).</strong> <em>When to use:</em> multi-step arithmetic, logic puzzles, planning tasks, or anything where the answer depends on an intermediate computed value.</p>
+<div id="lst-cot" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;30.3: A chain-of-thought prompt with a parseable final-answer line
+</figcaption>
+<div aria-describedby="lst-cot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">cot_prompt <span class="op">=</span> <span class="st">"""Solve the following problem. Think through</span></span>
+<span id="cb3-2"><span class="st">it step by step, showing your reasoning for each step. On</span></span>
+<span id="cb3-3"><span class="st">the final line, write your answer as: Answer: &lt;value&gt;</span></span>
+<span id="cb3-4"></span>
+<span id="cb3-5"><span class="st">Problem: </span><span class="sc">{problem}</span><span class="st">"""</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> asking for chain-of-thought on tasks that don’t need it: single-step lookups, simple classification. It adds latency and cost with no accuracy benefit.</p>
+<p id="proc-30-4"><strong>Procedure 30.4 (Force Structured Output via Schema-in-Prompt, with Validation).</strong> <em>When to use:</em> downstream code needs to parse the model’s output programmatically and native tool calling isn’t available.</p>
+<div id="lst-structured-json" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-structured-json-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;30.4: Schema-in-prompt structured output with fence-stripping and a bounded retry loop
+</figcaption>
+<div aria-describedby="lst-structured-json-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> json</span>
+<span id="cb4-2"></span>
+<span id="cb4-3"><span class="kw">def</span> extract_json(text):</span>
+<span id="cb4-4">    cleaned <span class="op">=</span> text.strip()</span>
+<span id="cb4-5">    <span class="cf">if</span> cleaned.startswith(<span class="st">"```"</span>):</span>
+<span id="cb4-6">        cleaned <span class="op">=</span> cleaned.strip(<span class="st">"`"</span>)</span>
+<span id="cb4-7">        cleaned <span class="op">=</span> cleaned.split(</span>
+<span id="cb4-8">            <span class="st">"</span><span class="ch">\n</span><span class="st">"</span>,</span>
+<span id="cb4-9">            <span class="dv">1</span>,</span>
+<span id="cb4-10">        )[<span class="dv">1</span>] <span class="cf">if</span> <span class="st">"</span><span class="ch">\n</span><span class="st">"</span> <span class="kw">in</span> cleaned <span class="cf">else</span> cleaned</span>
+<span id="cb4-11">    <span class="cf">return</span> json.loads(cleaned)</span>
+<span id="cb4-12"></span>
+<span id="cb4-13"><span class="kw">def</span> get_structured_output(prompt, required_keys, max_retries<span class="op">=</span><span class="dv">2</span>):</span>
+<span id="cb4-14">    last_error <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb4-15">    <span class="cf">for</span> attempt <span class="kw">in</span> <span class="bu">range</span>(max_retries <span class="op">+</span> <span class="dv">1</span>):</span>
+<span id="cb4-16">        raw <span class="op">=</span> ask(prompt)</span>
+<span id="cb4-17">        <span class="cf">try</span>:</span>
+<span id="cb4-18">            data <span class="op">=</span> extract_json(raw)</span>
+<span id="cb4-19">            missing <span class="op">=</span> required_keys <span class="op">-</span> data.keys()</span>
+<span id="cb4-20">            <span class="cf">if</span> missing:</span>
+<span id="cb4-21">                <span class="cf">raise</span> <span class="pp">ValueError</span>(<span class="ss">f"missing keys: </span><span class="sc">{</span>missing<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb4-22">            <span class="cf">return</span> data</span>
+<span id="cb4-23">        <span class="cf">except</span> (json.JSONDecodeError, <span class="pp">ValueError</span>) <span class="im">as</span> e:</span>
+<span id="cb4-24">            last_error <span class="op">=</span> e</span>
+<span id="cb4-25">    <span class="cf">raise</span> <span class="pp">RuntimeError</span>(</span>
+<span id="cb4-26">        <span class="ss">f"Failed after </span><span class="sc">{</span>max_retries <span class="op">+</span> <span class="dv">1</span><span class="sc">}</span><span class="ss"> attempts: </span><span class="sc">{</span>last_error<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb4-27">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> not validating at all: treating “the model usually returns valid JSON” as “the model always returns valid JSON.” Malformed output will happen. Always wrap parsing in a try/except with a defined fallback or retry.</p>
+<p id="proc-30-5"><strong>Procedure 30.5 (Use Native Tool Calling for a Stronger Guarantee).</strong> <em>When to use:</em> the provider supports tool/function calling. Prefer this over Procedure 30.4 whenever it’s available.</p>
+<div id="lst-tool-calling" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-tool-calling-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;30.5: Native tool calling: the API enforces the schema server-side
+</figcaption>
+<div aria-describedby="lst-tool-calling-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">tool <span class="op">=</span> {</span>
+<span id="cb5-2">    <span class="st">"name"</span>: <span class="st">"record_result"</span>,</span>
+<span id="cb5-3">    <span class="st">"description"</span>: <span class="st">"Record the structured result."</span>,</span>
+<span id="cb5-4">    <span class="st">"input_schema"</span>: {</span>
+<span id="cb5-5">        <span class="st">"type"</span>: <span class="st">"object"</span>,</span>
+<span id="cb5-6">        <span class="st">"properties"</span>: {</span>
+<span id="cb5-7">            <span class="st">"label"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},</span>
+<span id="cb5-8">            <span class="st">"confidence"</span>: {<span class="st">"type"</span>: <span class="st">"number"</span>},</span>
+<span id="cb5-9">        },</span>
+<span id="cb5-10">        <span class="st">"required"</span>: [<span class="st">"label"</span>, <span class="st">"confidence"</span>],</span>
+<span id="cb5-11">    },</span>
+<span id="cb5-12">}</span>
+<span id="cb5-13">response <span class="op">=</span> client.messages.create(</span>
+<span id="cb5-14">    model<span class="op">=</span>MODEL, max_tokens<span class="op">=</span><span class="dv">200</span>, tools<span class="op">=</span>[tool],</span>
+<span id="cb5-15">    tool_choice<span class="op">=</span>{<span class="st">"type"</span>: <span class="st">"tool"</span>, <span class="st">"name"</span>: <span class="st">"record_result"</span>},</span>
+<span id="cb5-16">    messages<span class="op">=</span>[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: prompt}],</span>
+<span id="cb5-17">)</span>
+<span id="cb5-18">tool_call <span class="op">=</span> <span class="bu">next</span>(</span>
+<span id="cb5-19">    b <span class="cf">for</span> b <span class="kw">in</span> response.content <span class="cf">if</span> b.<span class="bu">type</span> <span class="op">==</span> <span class="st">"tool_use"</span></span>
+<span id="cb5-20">)</span>
+<span id="cb5-21"><span class="co"># already a validated dict: no fence-stripping needed</span></span>
+<span id="cb5-22">data <span class="op">=</span> tool_call.<span class="bu">input</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-30-6"><strong>Procedure 30.6 (Version and A/B Test a Prompt Before Shipping).</strong> <em>When to use:</em> before shipping any prompt change to production. Treat prompts as code, not throwaway strings.</p>
+<div id="lst-prompt-versioning" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-prompt-versioning-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;30.6: Named, versioned prompt constants evaluated against a held-out set
+</figcaption>
+<div aria-describedby="lst-prompt-versioning-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">PROMPTS <span class="op">=</span> {</span>
+<span id="cb6-2">    <span class="st">"classify_ticket_v1"</span>: (</span>
+<span id="cb6-3">        <span class="st">"Classify the following message as billing, "</span></span>
+<span id="cb6-4">        <span class="st">"technical, or account: </span><span class="sc">{message}</span><span class="st">"</span></span>
+<span id="cb6-5">    ),</span>
+<span id="cb6-6">    <span class="st">"classify_ticket_v2"</span>: <span class="st">"...(few-shot version)..."</span>,</span>
+<span id="cb6-7">}</span>
+<span id="cb6-8"></span>
+<span id="cb6-9"><span class="kw">def</span> evaluate_prompt(prompt_template, eval_set):</span>
+<span id="cb6-10">    <span class="kw">def</span> is_correct(ex):</span>
+<span id="cb6-11">        formatted <span class="op">=</span> prompt_template.<span class="bu">format</span>(message<span class="op">=</span>ex[<span class="st">"input"</span>])</span>
+<span id="cb6-12">        <span class="cf">return</span> ask(formatted).strip() <span class="op">==</span> ex[<span class="st">"label"</span>]</span>
+<span id="cb6-13"></span>
+<span id="cb6-14">    correct <span class="op">=</span> <span class="bu">sum</span>(is_correct(ex) <span class="cf">for</span> ex <span class="kw">in</span> eval_set)</span>
+<span id="cb6-15">    <span class="cf">return</span> correct <span class="op">/</span> <span class="bu">len</span>(eval_set)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Chapter 32 (LLM Evaluation) covers this formally, with proper metrics and statistical rigour. This is the minimum viable version. Never ship a prompt change that hasn’t been measured against a held-out set.</p>
+</section>
+<section id="worked-example" class="level2" data-number="30.5">
+<h2 data-number="30.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">30.5</span> Worked Example</h2>
+<p>The tutorial notebook behind this chapter runs four experiments against a live Claude model (<code>claude-haiku-4-5</code>), comparing techniques head-to-head rather than describing them in the abstract.</p>
+<p>The first experiment classifies five customer support messages, deliberately including one ambiguous case (“I was charged twice this month and my login also stopped working after that”), under both <a href="#lst-zero-shot" class="quarto-xref">Listing&nbsp;<span>30.1</span></a> and <a href="#lst-few-shot" class="quarto-xref">Listing&nbsp;<span>30.2</span></a>, using the exact same five messages for both runs so the only variable is the presence of three worked examples. Because this technique compares live model output, the specific labels vary by run. The diagnostic the notebook is built around is whether the ambiguous message’s classification <em>changes</em> between the two prompts. A change indicates the few-shot examples shifted the model’s tie-breaking behaviour, which is the effect in-context learning is supposed to produce.</p>
+<p>The second experiment is fully deterministic in its ground truth, which makes it the sharper worked example. Four arithmetic word problems are scored under direct-answer and chain-of-thought prompting, using an exact-match tolerance of 0.1 against known correct answers:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Problem</th>
+<th>Correct answer</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>120 apples, sell 35% in the morning, sell 28 more in the afternoon. How many remain?</td>
+<td>50</td>
+</tr>
+<tr class="even">
+<td>Train travels 60 km in hour 1, then speed +20% for 2 more hours. Total distance?</td>
+<td>204.0</td>
+</tr>
+<tr class="odd">
+<td>Sara has 3× Tom’s stickers; together 48. How many does Tom have?</td>
+<td>12</td>
+</tr>
+<tr class="even">
+<td>Tank filled by pipe A in 6h, pipe B in 3h. Time if both run together?</td>
+<td>2.0</td>
+</tr>
+</tbody>
+</table>
+<p>The train and tank problems are the ones most likely to separate the two prompting styles, since both require carrying an intermediate computed value (the increased speed; the combined fill rate) into a second step, exactly the case <a href="#lst-cot" class="quarto-xref">Listing&nbsp;<span>30.3</span></a>’s mechanism (each reasoning token becomes context for the next) is designed to help with. Direct-answer prompting has to produce that intermediate result silently, in one hidden state, with nowhere to write it down.</p>
+<p>The third experiment applies <a href="#lst-structured-json" class="quarto-xref">Listing&nbsp;<span>30.4</span></a> to a genuinely mixed product review (praises the bass and battery life, criticises Bluetooth reliability and case build quality) and asserts two structural properties on the result, <code>isinstance(result["issues"], list)</code> and <code>1 &lt;= result["rating_estimate"] &lt;= 5</code>, which is the validation half of Procedure 30.4 made concrete rather than just described. The fourth experiment re-runs the same review through <a href="#lst-tool-calling" class="quarto-xref">Listing&nbsp;<span>30.5</span></a> and returns a <code>tool_call.input</code> dict that arrives pre-validated against the JSON Schema, with no fence-stripping logic required: the direct illustration of why production systems prefer the stronger guarantee whenever a provider supports it.</p>
+</section>
+<section id="aws-sagemaker-notes" class="level2" data-number="30.6">
+<h2 data-number="30.6" class="anchored" data-anchor-id="aws-sagemaker-notes"><span class="header-section-number">30.6</span> AWS SageMaker Notes</h2>
+<p>Amazon Bedrock exposes the same prompting techniques against foundation models, Claude, Llama, Titan, and others, behind one unified API, so nothing in this chapter’s procedures is Anthropic-SDK-specific in practice.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS Bedrock Equivalent</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="im">import</span> boto3</span>
+<span id="cb7-2"></span>
+<span id="cb7-3">bedrock <span class="op">=</span> boto3.client(</span>
+<span id="cb7-4">    <span class="st">"bedrock-runtime"</span>, region_name<span class="op">=</span><span class="st">"us-east-1"</span></span>
+<span id="cb7-5">)</span>
+<span id="cb7-6"></span>
+<span id="cb7-7">response <span class="op">=</span> bedrock.converse(</span>
+<span id="cb7-8">    modelId<span class="op">=</span><span class="st">"anthropic.claude-haiku-4-5-20251001-v1:0"</span>,</span>
+<span id="cb7-9">    messages<span class="op">=</span>[{</span>
+<span id="cb7-10">        <span class="st">"role"</span>: <span class="st">"user"</span>,</span>
+<span id="cb7-11">        <span class="st">"content"</span>: [{<span class="st">"text"</span>: <span class="st">"Classify this message: ..."</span>}],</span>
+<span id="cb7-12">    }],</span>
+<span id="cb7-13">    inferenceConfig<span class="op">=</span>{<span class="st">"maxTokens"</span>: <span class="dv">300</span>, <span class="st">"temperature"</span>: <span class="dv">0</span>},</span>
+<span id="cb7-14">)</span>
+<span id="cb7-15"><span class="bu">print</span>(response[<span class="st">"output"</span>][<span class="st">"message"</span>][<span class="st">"content"</span>][<span class="dv">0</span>][<span class="st">"text"</span>])</span>
+<span id="cb7-16"></span>
+<span id="cb7-17"><span class="co"># Structured output via Bedrock's toolConfig:</span></span>
+<span id="cb7-18"><span class="co"># equivalent to Procedure 30.5</span></span>
+<span id="cb7-19">response <span class="op">=</span> bedrock.converse(</span>
+<span id="cb7-20">    modelId<span class="op">=</span><span class="st">"anthropic.claude-haiku-4-5-20251001-v1:0"</span>,</span>
+<span id="cb7-21">    messages<span class="op">=</span>[{</span>
+<span id="cb7-22">        <span class="st">"role"</span>: <span class="st">"user"</span>,</span>
+<span id="cb7-23">        <span class="st">"content"</span>: [{<span class="st">"text"</span>: <span class="st">"Analyse this review: ..."</span>}],</span>
+<span id="cb7-24">    }],</span>
+<span id="cb7-25">    toolConfig<span class="op">=</span>{<span class="st">"tools"</span>: [{<span class="st">"toolSpec"</span>: {</span>
+<span id="cb7-26">        <span class="st">"name"</span>: <span class="st">"record_result"</span>,</span>
+<span id="cb7-27">        <span class="st">"inputSchema"</span>: {<span class="st">"json"</span>: {}},</span>
+<span id="cb7-28">    }}]},</span>
+<span id="cb7-29">)</span></code></pre></div>
+<p><strong>When to prefer Bedrock:</strong> centralised governance across multiple foundation model providers behind one API, built-in <strong>Guardrails</strong> for content filtering and prompt-injection mitigation, or <strong>Prompt Management</strong> for team-shared, versioned prompt templates with a UI: a managed counterpart to Procedure 30.6. For solo experimentation or when the latest model-specific features are needed immediately, calling the provider’s own SDK directly is usually faster to iterate with.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="30.7">
+<h2 data-number="30.7" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">30.7</span> History and Further Reading</h2>
+<p>Brown et al.’s “Language Models are Few-Shot Learners” is where in-context learning was first characterised at scale, the GPT-3 paper this chapter’s Exposition draws on directly <span class="citation" data-cites="brown2020fewshotlearners">(<a href="#ref-brown2020fewshotlearners" role="doc-biblioref"><span class="nocase">Brown et al.</span> 2020</a>)</span>. Wei et al.’s “Chain-of-Thought Prompting Elicits Reasoning in Large Language Models” is the original CoT paper and documents the scaling behaviour: CoT helps more as models get larger <span class="citation" data-cites="wei2022chainofthought">(<a href="#ref-wei2022chainofthought" role="doc-biblioref">Wei et al. 2022</a>)</span>. Yao et al.’s “ReAct: Synergizing Reasoning and Acting in Language Models” extends CoT with interleaved tool use, the natural next step past this chapter’s structured-output procedures <span class="citation" data-cites="yao2022react">(<a href="#ref-yao2022react" role="doc-biblioref">Yao et al. 2023</a>)</span>. Burkov’s <em>Hundred-Page Language Models Book</em>, Section 5.7, covers prompt engineering as a direct extension of how LLMs are trained and sampled, useful context for why certain prompting techniques work at all <span class="citation" data-cites="burkov2025hundredpagellm">(<a href="#ref-burkov2025hundredpagellm" role="doc-biblioref">Burkov 2025</a>)</span>. Anthropic’s own prompt engineering documentation is worth keeping open alongside this chapter for practical, model-specific guidance that complements the general theory here.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="30.8">
+<h2 data-number="30.8" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">30.8</span> How This Connects</h2>
+<p>This chapter builds directly on Chapter 29. Self-attention and autoregressive generation are the mechanism prompts act through, and nothing here works without that architecture underneath it. It enables Chapter 31, where the retrieved context in a RAG pipeline is itself a prompt-engineering problem (how retrieved chunks are formatted strongly affects generation quality), and Chapter 32, which formalises how to test prompt quality with real metrics instead of eyeballing a handful of examples. It is often confused with fine-tuning. The distinction that matters is that prompting steers a frozen model at inference time, while fine-tuning changes what the model’s weights actually encode.</p>
+</section>
+<section id="exercises" class="level2" data-number="30.9">
+<h2 data-number="30.9" class="anchored" data-anchor-id="exercises"><span class="header-section-number">30.9</span> Exercises</h2>
+<ol type="1">
+<li id="ex-30-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Using <a href="#lst-zero-shot" class="quarto-xref">Listing&nbsp;<span>30.1</span></a> and <a href="#lst-few-shot" class="quarto-xref">Listing&nbsp;<span>30.2</span></a> as templates, write a zero-shot and a few-shot version of a prompt that classifies IT helpdesk tickets into <code>hardware</code>, <code>software</code>, or <code>network</code>. Identify which of the two you’d expect to handle a ticket like “my laptop won’t connect to the VPN” more consistently, and why.</p></li>
+<li id="ex-30-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> For each of the four arithmetic problems in the Worked Example, state whether you’d expect chain-of-thought to help, and identify the specific intermediate value that direct-answer prompting has nowhere to “write down.”</p></li>
+<li id="ex-30-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Extend <a href="#lst-structured-json" class="quarto-xref">Listing&nbsp;<span>30.4</span></a>’s <code>get_structured_output</code> so that on a retry, the fed-back prompt includes the previous attempt’s parse error (rather than blindly re-asking). Explain in a sentence why this should improve the retry’s success rate over the version in the chapter.</p></li>
+<li id="ex-30-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-tool-calling" class="quarto-xref">Listing&nbsp;<span>30.5</span></a> as a template, define a tool schema for extracting <code>{company_name: string, deal_stage: string, deal_value_usd: number}</code> from a sales call transcript, and state which field(s) should be marked <code>required</code>.</p></li>
+<li id="ex-30-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team wants to use self-consistency (5-way CoT sampling with majority vote) on every request in a customer-facing chat product with a 2-second latency budget. Explain why this is very likely the wrong call, and propose where in the system self-consistency would be appropriate instead.</p></li>
+<li id="ex-30-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer’s support-ticket classifier prompt embeds retrieved ticket text (from a separate system) directly into the same string as the system instructions. Using this chapter’s prompt-injection guidance, identify the specific risk and the concrete change you’d recommend.</p></li>
+<li id="ex-30-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Wei et al.&nbsp;chain-of-thought paper’s discussion of scaling behaviour. Explain, in your own words, why CoT’s benefit is reported to grow with model scale, and what that implies about applying CoT prompting to a small (sub-1B parameter) locally-hosted model.</p></li>
+<li id="ex-30-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Compare the position-bias failure mode this chapter’s Trade-offs section implicitly sets up (favouring whichever example format anchors first) against the position bias Chapter 32 documents for LLM-as-judge pairwise comparisons. Are these the same underlying phenomenon or two different ones? Justify your answer.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="30.10">
+<h2 data-number="30.10" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">30.10</span> Mental Model</h2>
+<p>A prompt is a lever on a probability distribution, not a command. Zero-shot pulls that lever with instruction alone. Few-shot pulls it with demonstration. Chain-of-thought gives the model room to pull the lever gradually, one reasoning step at a time, instead of in one blind yank. Structured-output techniques don’t change the lever. They change how tightly the output is checked, or constrained, against a schema afterward, ranging from “hope and validate” to “the platform guarantees it.”</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-brown2020fewshotlearners" class="csl-entry" role="listitem">
+<span class="nocase">Brown, Tom, Benjamin Mann, Nick Ryder, et al.</span> 2020. <span>“Language Models Are Few-Shot Learners.”</span> <em>Advances in Neural Information Processing Systems</em> 33: 1877–901.
+</div>
+<div id="ref-burkov2025hundredpagellm" class="csl-entry" role="listitem">
+Burkov, Andriy. 2025. <em>The Hundred-Page Language Models Book</em>. True Positive Inc.
+</div>
+<div id="ref-wei2022chainofthought" class="csl-entry" role="listitem">
+Wei, Jason, Xuezhi Wang, Dale Schuurmans, et al. 2022. <span>“Chain-of-Thought Prompting Elicits Reasoning in Large Language Models.”</span> <em>Advances in Neural Information Processing Systems</em> 35.
+</div>
+<div id="ref-yao2022react" class="csl-entry" role="listitem">
+Yao, Shunyu, Jeffrey Zhao, Dian Yu, et al. 2023. <span>“ReAct: Synergizing Reasoning and Acting in Language Models.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+</div>
+</section>

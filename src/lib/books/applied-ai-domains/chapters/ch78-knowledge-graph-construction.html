@@ -1,0 +1,293 @@
+<p><a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a> and <a href="/books/applied-ai-domains/ch77-graph-data-modeling-and-databases" class="quarto-xref"><span>Chapter 77</span></a> both assumed a graph already existed: hand-built, six nodes, six edges, ready to traverse or query. Real knowledge graphs don’t start that way. They start as unstructured text: contracts, news articles, support tickets, internal wikis. Something has to read that text and decide what the nodes, edges, and their types actually are, before either earlier chapter’s techniques have anything to operate on. This chapter is that something.</p>
+<section id="motivation" class="level2" data-number="78.1">
+<h2 data-number="78.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">78.1</span> Motivation</h2>
+<p>Knowledge graph construction from text is a pipeline, not a single step: entity recognition (what things are mentioned?), relation extraction (how are they connected?), then validation (is what got extracted actually consistent with a schema?). Each stage can fail independently, in different ways, for different reasons. Worked Example 78 below builds a pipeline plain enough to see exactly where and why each stage’s mistakes happen, rather than treating “extraction accuracy” as one number.</p>
+</section>
+<section id="exposition" class="level2" data-number="78.2">
+<h2 data-number="78.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">78.2</span> Exposition</h2>
+<section id="rule-based-extraction-is-cheap-transparent-and-brittle-all-three-at-once" class="level3" data-number="78.2.1">
+<h3 data-number="78.2.1" class="anchored" data-anchor-id="rule-based-extraction-is-cheap-transparent-and-brittle-all-three-at-once"><span class="header-section-number">78.2.1</span> Rule-Based Extraction Is Cheap, Transparent, and Brittle: All Three at Once</h3>
+<p>A regex-based extractor costs nothing to run and its failures are fully explainable. Worked Example 78 hits a real bug where “Jane Doe previously worked at Initech” extracts the subject as “Jane Doe previously” instead of “Jane Doe,” because the non-greedy regex group had no way to know the adverb “previously” wasn’t part of a name. There was no other literal boundary for it to stop at. That’s not a contrived failure; it’s the generic failure mode of pattern matching that has no model of sentence structure. Entity extraction and relation extraction are two genuinely different problems with different measured difficulty, as Worked Example 78 shows directly: entity extraction (recognising that a capitalised span is an entity) is measurably easier than relation extraction (getting phrase <em>boundaries</em> right).</p>
+</section>
+<section id="ontology-validation-fixes-precision-not-recall-and-that-split-is-the-point" class="level3" data-number="78.2.2">
+<h3 data-number="78.2.2" class="anchored" data-anchor-id="ontology-validation-fixes-precision-not-recall-and-that-split-is-the-point"><span class="header-section-number">78.2.2</span> Ontology Validation Fixes Precision, Not Recall: and That Split Is the Point</h3>
+<p>A small ontology (allowed entity types, plus a domain/range constraint per relation: <code>WORKED_AT</code> must run from a <code>PERSON</code> to an <code>ORG</code>) allows catching bad extractions by checking consistency, without touching the extractor that produced them. Validation can only delete predictions; it has no mechanism to conjure the correct fact the extractor never produced correctly in the first place. Precision and recall are genuinely controlled by different parts of the pipeline, and Worked Example 78 is direct, measured proof of that split, not an assertion.</p>
+</section>
+<section id="llm-as-extractor-handling-what-rules-structurally-cant" class="level3" data-number="78.2.3">
+<h3 data-number="78.2.3" class="anchored" data-anchor-id="llm-as-extractor-handling-what-rules-structurally-cant"><span class="header-section-number">78.2.3</span> LLM-as-Extractor: Handling What Rules Structurally Can’t</h3>
+<p>Some sentences use passive voice or an implicit relation that no regex pattern targets at all: not a near-miss, a complete miss, because no pattern was even written for that shape of sentence. An LLM handles this differently: given a prompt describing the target schema (entity types, an <code>ALL_CAPS_SNAKE_CASE</code> predicate convention, subjects/objects restricted to extracted entities), it can return structured JSON that a small parser validates and converts into typed objects. Worked Example 78 adds the resulting facts to the validated set and measures the recall gain directly: real, measured progress, not a clean sweep to perfect recall, because the LLM step only reprocesses the sentence it targets; an earlier mistake elsewhere in the pipeline is still sitting there, uncorrected, because nothing revisited it.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="78.3">
+<h2 data-number="78.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">78.3</span> Trade-offs and Limits</h2>
+<p>Rules are free, instant, and fully auditable: the regex can be read and its behaviour fully explained. They also only work for sentence shapes someone anticipated. An LLM handles novel phrasing without new patterns being written, at the cost of a per-call price, latency, and a parsing/validation step that has to defend against malformed or hallucinated JSON. Validation catches consistency errors, not missing facts. A domain/range ontology check is a precision tool; if recall is the problem, either a better extractor for that specific gap or a different extraction strategy entirely is needed, and validation alone will never get there. A small, fixed ontology (bounded entity/relation types) is exactly right for a bounded domain where the entities and relationships of interest are known in advance; an open-domain extractor with no fixed schema is a different, harder problem, useful when the relevant relationships aren’t yet known, but with much weaker validation guarantees, since there’s no fixed domain/range to check against.</p>
+</section>
+<section id="procedures" class="level2" data-number="78.4">
+<h2 data-number="78.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">78.4</span> Procedures</h2>
+<p id="proc-78-1"><strong>Procedure 78.1 (Extract Entities with Rule-Based Heuristics).</strong> <em>When to use:</em> a bounded domain where entity naming conventions are consistent (capitalisation, known suffixes).</p>
+<div id="lst-kgconstruct-entities" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-kgconstruct-entities-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;78.1: A suffix-based heuristic for ORG entities
+</figcaption>
+<div aria-describedby="lst-kgconstruct-entities-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1">ORG_SUFFIXES <span class="op">=</span> (<span class="st">"Corp"</span>, <span class="st">"Inc"</span>, <span class="st">"Holdings"</span>, <span class="st">"Ltd"</span>, <span class="st">"Bolts"</span>)</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="kw">def</span> extract_entities(text):</span>
+<span id="cb1-4">    candidates <span class="op">=</span> re.findall(</span>
+<span id="cb1-5">        <span class="vs">r'</span><span class="dv">\b</span><span class="pp">[A-Z][a-zA-Z]</span><span class="op">*</span>(?:<span class="dv">\s</span><span class="op">+</span><span class="pp">[A-Z][a-zA-Z]</span><span class="op">*</span>)<span class="op">*</span><span class="dv">\b</span><span class="vs">'</span>,</span>
+<span id="cb1-6">        text,</span>
+<span id="cb1-7">    )</span>
+<span id="cb1-8">    <span class="cf">return</span> [</span>
+<span id="cb1-9">        (c, <span class="st">"ORG"</span>) <span class="cf">for</span> c <span class="kw">in</span> candidates</span>
+<span id="cb1-10">        <span class="cf">if</span> c.endswith(ORG_SUFFIXES)</span>
+<span id="cb1-11">    ]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-78-2"><strong>Procedure 78.2 (Validate Extracted Triples Against a Small Ontology).</strong> <em>When to use:</em> after any extraction pass, rule-based or LLM, before trusting the resulting graph.</p>
+<div id="lst-kgconstruct-validate" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-kgconstruct-validate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;78.2: Domain/range checking drops structurally inconsistent triples
+</figcaption>
+<div aria-describedby="lst-kgconstruct-validate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">RELATION_SCHEMA <span class="op">=</span> {</span>
+<span id="cb2-2">    <span class="st">"WORKED_AT"</span>: (<span class="st">"PERSON"</span>, <span class="st">"ORG"</span>),</span>
+<span id="cb2-3">    <span class="st">"ACQUIRED"</span>: (<span class="st">"ORG"</span>, <span class="st">"ORG"</span>),</span>
+<span id="cb2-4">    ...,</span>
+<span id="cb2-5">}</span>
+<span id="cb2-6"></span>
+<span id="cb2-7"><span class="kw">def</span> validate_triple(subject, predicate, obj, known_entities):</span>
+<span id="cb2-8">    <span class="cf">if</span> subject <span class="kw">not</span> <span class="kw">in</span> known_entities <span class="kw">or</span> obj <span class="kw">not</span> <span class="kw">in</span> known_entities:</span>
+<span id="cb2-9">        <span class="co"># subject/object isn't a recognised entity at all</span></span>
+<span id="cb2-10">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb2-11">    expected_subj_type, expected_obj_type <span class="op">=</span> (</span>
+<span id="cb2-12">        RELATION_SCHEMA[predicate]</span>
+<span id="cb2-13">    )</span>
+<span id="cb2-14">    <span class="cf">return</span> (known_entities[subject] <span class="op">==</span> expected_subj_type</span>
+<span id="cb2-15">            <span class="kw">and</span> known_entities[obj] <span class="op">==</span> expected_obj_type)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> treating a validation pass as a fix for low recall. It can only remove bad triples, never add correct ones the extractor missed.</p>
+<p id="proc-78-3"><strong>Procedure 78.3 (Extract with an LLM for Sentence Shapes Rules Can’t Handle).</strong> <em>When to use:</em> a specific, identified extraction gap that no reasonable amount of additional regex patterns would close.</p>
+<div id="lst-kgconstruct-llm" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-kgconstruct-llm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;78.3: Schema-constrained LLM extraction, parsed and validated like any other source
+</figcaption>
+<div aria-describedby="lst-kgconstruct-llm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">prompt <span class="op">=</span> <span class="ss">f"""Extract from the passage below:</span></span>
+<span id="cb3-2"><span class="ss">1. entities: [</span><span class="ch">{{</span><span class="ss">"text": str, "type": str</span><span class="ch">}}</span><span class="ss">] where type is</span></span>
+<span id="cb3-3"><span class="ss">   one of ORG, PERSON, DATE</span></span>
+<span id="cb3-4"><span class="ss">2. relations: [</span><span class="ch">{{</span><span class="ss">"subject": str, "predicate": str, "object": str</span><span class="ch">}}</span><span class="ss">]</span></span>
+<span id="cb3-5"><span class="ss">Passage: </span><span class="sc">{</span>sentence<span class="sc">}</span><span class="ss">"""</span></span>
+<span id="cb3-6">llm_output <span class="op">=</span> call_llm(prompt)</span>
+<span id="cb3-7"><span class="co"># then validate exactly like Procedure 78.2</span></span>
+<span id="cb3-8">parsed <span class="op">=</span> json.loads(llm_output)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> trusting LLM output without the same validation pass applied to rule-based output. An LLM extraction needs a consistency check before being trusted, not automatic faith because a bigger model produced it.</p>
+</section>
+<section id="worked-example" class="level2" data-number="78.5">
+<h2 data-number="78.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">78.5</span> Worked Example</h2>
+<p>A rule-based extractor (Procedure 78.1) run on a small corpus of six sentences, evaluated against a hand-labelled gold standard:</p>
+<div id="lst-kgconstruct-worked-entities" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-kgconstruct-worked-entities-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;78.4: Entity extraction, measured against gold labels
+</figcaption>
+<div aria-describedby="lst-kgconstruct-worked-entities-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">entities <span class="op">=</span> extract_entities(corpus)</span>
+<span id="cb4-2">precision, recall <span class="op">=</span> evaluate(entities, gold_entities)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Predicted</th>
+<th>Correct</th>
+<th>Gold</th>
+<th>Precision</th>
+<th>Recall</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Entities</strong></td>
+<td>7</td>
+<td>7</td>
+<td>7</td>
+<td><strong>1.000</strong></td>
+<td><strong>1.000</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A clean sweep for entities: the suffix-based heuristic genuinely worked on this corpus. Relation extraction, the same corpus, a harder problem:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Predicted</th>
+<th>Correct</th>
+<th>Gold</th>
+<th>Precision</th>
+<th>Recall</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Relations (raw)</strong></td>
+<td>5</td>
+<td>4</td>
+<td>7</td>
+<td><strong>0.800</strong></td>
+<td><strong>0.571</strong></td>
+</tr>
+</tbody>
+</table>
+<p>A measurably worse result from the same corpus and the same general extraction approach, because relations require getting phrase <em>boundaries</em> right, not just recognising that a capitalised span is an entity. The wrong prediction, <code>("Jane Doe previously", "WORKED_AT", "Initech")</code>, is exactly the boundary bug Exposition describes.</p>
+<div id="lst-kgconstruct-worked-validate" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-kgconstruct-worked-validate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;78.5: Ontology validation applied to the raw relation predictions
+</figcaption>
+<div aria-describedby="lst-kgconstruct-worked-validate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">validated <span class="op">=</span> [</span>
+<span id="cb5-2">    t <span class="cf">for</span> t <span class="kw">in</span> relations</span>
+<span id="cb5-3">    <span class="cf">if</span> validate_triple(<span class="op">*</span>t, known_entities)</span>
+<span id="cb5-4">]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Predicted</th>
+<th>Correct</th>
+<th>Precision</th>
+<th>Recall</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Relations, raw</td>
+<td>5</td>
+<td>4</td>
+<td>0.800</td>
+<td>0.571</td>
+</tr>
+<tr class="even">
+<td><strong>Relations, post-validation</strong></td>
+<td>4</td>
+<td>4</td>
+<td><strong>1.000</strong></td>
+<td><strong>0.571 (unchanged)</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Validation dropped the malformed triple automatically. <code>"Jane Doe previously"</code> was never in the known entity set, and precision jumped to a clean 1.000. Recall stayed at exactly 0.571, unchanged, confirming Exposition’s claim precisely: validation can only delete predictions, and the correct <code>("Jane Doe", "WORKED_AT", "Initech")</code> fact the extractor should have produced never appeared, so no amount of validation recovers it.</p>
+<div id="lst-kgconstruct-worked-llm" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-kgconstruct-worked-llm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;78.6: LLM extraction targeting the one sentence rules structurally missed
+</figcaption>
+<div aria-describedby="lst-kgconstruct-worked-llm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># passive voice, implicit PARTNER_OF relation</span></span>
+<span id="cb6-2">llm_result <span class="op">=</span> extract_with_llm(sentence_6)</span>
+<span id="cb6-3">combined <span class="op">=</span> validated_relations <span class="op">+</span> validate(llm_result)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Predicted</th>
+<th>Correct</th>
+<th>Precision</th>
+<th>Recall</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Rule-based + validation</td>
+<td>4</td>
+<td>4</td>
+<td>1.000</td>
+<td>0.571</td>
+</tr>
+<tr class="even">
+<td><strong>+ LLM extraction on the missed sentence</strong></td>
+<td>6</td>
+<td>6</td>
+<td><strong>1.000</strong></td>
+<td><strong>0.857</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Recall rises from 0.571 to 0.857: real, measured progress, not a clean sweep to 1.000, because the LLM step only reprocessed the one sentence it targeted (passive voice, implicit “partner of” relation with no matching regex pattern at all); the earlier <code>WORKED_AT</code> boundary mistake is still sitting there, permanently lost to the raw extractor’s error, uncorrected because nothing revisited it. The complete trace across the whole pipeline (<strong>1.000/1.000 entities, 0.800/0.571 → 1.000/0.571 → 1.000/0.857 relations</strong>) is Mental Model’s claim made fully numeric: precision and recall move independently, and each pipeline stage’s contribution is visible, not inferred.</p>
+<p>The final constructed graph: <strong>8 nodes, 6 edges</strong>, ready for <a href="/books/applied-ai-domains/ch77-graph-data-modeling-and-databases" class="quarto-xref"><span>Chapter 77</span></a>’s traversal and query techniques to operate on. This is the object neither this chapter’s preceding chapters, nor any downstream graph technique, could have started with directly from raw text.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="co"># Amazon Comprehend's custom entity/relationship</span></span>
+<span id="cb7-2"><span class="co"># recognition, or a Bedrock-hosted LLM called via the same</span></span>
+<span id="cb7-3"><span class="co"># schema-constrained prompt pattern as Procedure 78.3, are</span></span>
+<span id="cb7-4"><span class="co"># the managed equivalents of this chapter's rule-based and</span></span>
+<span id="cb7-5"><span class="co"># LLM extraction stages.</span></span></code></pre></div>
+<p><strong>When this chapter’s precision/recall trace matters for a managed extraction pipeline:</strong> whichever extraction service is used (Comprehend, a Bedrock LLM, or a hand-rolled regex pipeline), this chapter’s methodology (measure entity and relation precision/recall <em>separately</em>, validate against a domain/range schema, and track exactly which pipeline stage each improvement came from) is the evaluation discipline that distinguishes “we used AI to build a knowledge graph” from a graph whose actual reliability has been measured.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="78.6">
+<h2 data-number="78.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">78.6</span> History and Further Reading</h2>
+<p>Grishman &amp; Sundheim’s “Message Understanding Conference-6: A Brief History” <span class="citation" data-cites="grishman1996muc6">(<a href="#ref-grishman1996muc6" role="doc-biblioref">Grishman and Sundheim 1996</a>)</span> is the origin of NER/relation-extraction evaluation as a task, including precision/recall as the standard metrics used throughout this chapter. Edge et al.’s “From Local to Global: A Graph RAG Approach to Query-Focused Summarization” <span class="citation" data-cites="edge2024graphrag">(<a href="#ref-edge2024graphrag" role="doc-biblioref">Edge et al. 2024</a>)</span> uses LLM-based extraction (this chapter’s Procedure 78.3, at production scale) as the first stage of a GraphRAG pipeline.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="78.7">
+<h2 data-number="78.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">78.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a> and <a href="/books/applied-ai-domains/ch77-graph-data-modeling-and-databases" class="quarto-xref"><span>Chapter 77</span></a> (the property graph this chapter builds uses the exact same <code>networkx</code> node/edge conventions). It enables <a href="/books/applied-ai-domains/ch79-graph-neural-networks" class="quarto-xref"><span>Chapter 79</span></a> (a graph needs to exist, with typed nodes and edges, before embeddings can be learned over it) and <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> (GraphRAG retrieves from exactly this kind of constructed graph: the whole retrieval pipeline is only as good as the graph this chapter’s techniques built). It’s often confused with assuming “we used an LLM to extract it” means the graph is now reliable. This chapter’s validation step exists precisely because LLM output, like rule-based output, needs a consistency check before being trusted, not automatic faith because a bigger model produced it.</p>
+</section>
+<section id="exercises" class="level2" data-number="78.8">
+<h2 data-number="78.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">78.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-78-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three pipeline stages of knowledge graph construction from text (entity recognition, relation extraction, validation), and state which one can only remove predictions, never add them.</p></li>
+<li id="ex-78-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the measured entity precision/recall (1.000/1.000) and raw relation precision/recall (0.800/0.571) from the Worked Example, and explain in one sentence why the two tasks measured so differently on the same corpus.</p></li>
+<li id="ex-78-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s validation-step result (precision 0.800→1.000, recall 0.571→0.571, unchanged), explain concretely why this specific pattern (precision improving, recall exactly flat) is the expected signature of a validation-only fix, and what a DIFFERENT pattern (e.g.&nbsp;both precision and recall improving) would have implied instead.</p></li>
+<li id="ex-78-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s full pipeline trace (entities 1.000/1.000; relations 0.800/0.571 → 1.000/0.571 → 1.000/0.857), explain why final recall (0.857) is still below 1.000 even after both validation and LLM extraction were applied. What specific, still-uncorrected error is responsible?</p></li>
+<li id="ex-78-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team reports “we validated our knowledge graph extraction and precision is now 100%, so the graph is complete and accurate.” Using this chapter’s Worked Example, write the two or three sentences you’d say about what that claim is missing.</p></li>
+<li id="ex-78-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 78.3 warns against trusting LLM output without the same validation pass applied to rule-based output. Describe a concrete way an LLM extraction could produce a plausible-looking but structurally invalid triple that Procedure 78.2’s domain/range check would catch.</p></li>
+<li id="ex-78-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about complex/learned embedding-based approaches to relation extraction and link prediction (e.g.&nbsp;Trouillon et al., “Complex Embeddings for Simple Link Prediction,” referenced in this chapter’s Further Reading). Explain in your own words how a learned approach might address this chapter’s specific boundary-detection failure mode (“Jane Doe previously”) differently than either the rule-based or LLM-prompting approaches here.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="78.9">
+<h2 data-number="78.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">78.9</span> Mental Model</h2>
+<p>Building a knowledge graph from text is not “run an extractor, get a graph.” It’s “run an extractor, measure exactly what it got right and wrong, add a validation layer that fixes what it can fix (consistency), and add a different technique for what it structurally cannot (novel sentence shapes).” Precision and recall move independently through that pipeline, and this chapter’s numbers (1.000/1.000 entities, 0.800/0.571 → 1.000/0.571 → 1.000/0.857 relations) are the concrete trace of exactly where and why, stage by stage, rather than one opaque “extraction accuracy” figure.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-edge2024graphrag" class="csl-entry" role="listitem">
+Edge, Darren, Ha Trinh, Newman Cheng, et al. 2024. <span>“From Local to Global: A Graph RAG Approach to Query-Focused Summarization.”</span> <em>arXiv Preprint arXiv:2404.16130</em>.
+</div>
+<div id="ref-grishman1996muc6" class="csl-entry" role="listitem">
+Grishman, Ralph, and Beth Sundheim. 1996. <span>“Message Understanding Conference-6: A Brief History.”</span> <em>COLING 1996: The 16th International Conference on Computational Linguistics</em>, 466–71.
+</div>
+</div>
+</section>

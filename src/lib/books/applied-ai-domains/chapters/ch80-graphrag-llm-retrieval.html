@@ -1,0 +1,259 @@
+<p>Book 2, Chapter 31 (Retrieval-Augmented Generation (RAG)) covered the standard RAG recipe: embed a chunk, embed a query, retrieve whatever is textually or semantically closest, hand it to an LLM. That works well when the answer to a question sits inside one passage. It works badly, often silently badly, when the answer only exists as a <em>relationship spanning multiple passages</em>, because vector similarity has no notion of “connected to,” only “reads alike.” Chapter 76 of this track gave traversal and shortest-path algorithms; Chapter 77 gave a place to store a richly-attributed graph; Chapter 78 gave a way to build one from text. This chapter is where those three pieces combine into a retrieval strategy that succeeds precisely where flat vector RAG structurally cannot.</p>
+<section id="motivation" class="level2" data-number="80.1">
+<h2 data-number="80.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">80.1</span> Motivation</h2>
+<p>Vector search asks “what reads alike?” Graph traversal asks “what’s connected?” These are different questions, and a lot of genuinely useful questions are the second kind: “which vendor shares a parent company with a vendor flagged for a compliance issue” has no single sentence that states the answer. It emerges only once three separate facts are connected: entity A was flagged, A’s parent is P, P also owns entity B. GraphRAG’s answer is: don’t rank passages by text similarity for this kind of question. Build a graph, anchor on the entity the question is about, and traverse.</p>
+</section>
+<section id="exposition" class="level2" data-number="80.2">
+<h2 data-number="80.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">80.2</span> Exposition</h2>
+<section id="entity-centric-retrieval-starts-from-a-thing-not-a-query-string" class="level3" data-number="80.2.1">
+<h3 data-number="80.2.1" class="anchored" data-anchor-id="entity-centric-retrieval-starts-from-a-thing-not-a-query-string"><span class="header-section-number">80.2.1</span> Entity-Centric Retrieval Starts From a Thing, Not a Query String</h3>
+<p>Flat vector RAG turns the whole query into one embedding and searches for nearby chunks. Entity-centric retrieval instead identifies the specific entities the question concerns (“a vendor that was flagged,” “Acme Corp’s vendors”) and starts traversal <em>from those entities in the graph</em>, using exact graph lookups (<code>in_edges</code>, <code>out_edges</code>) instead of approximate textual similarity. The <code>graphrag_multihop_answer</code> function built in this chapter does exactly this: find flagged vendors, walk to their owner, walk to the owner’s other holdings, filter by Acme’s actual vendor list.</p>
+</section>
+<section id="multi-hop-traversal-is-chapter-76s-machinery-reused" class="level3" data-number="80.2.2">
+<h3 data-number="80.2.2" class="anchored" data-anchor-id="multi-hop-traversal-is-chapter-76s-machinery-reused"><span class="header-section-number">80.2.2</span> Multi-Hop Traversal Is Chapter 76’s Machinery, Reused</h3>
+<p>There is no new algorithm here. <code>owners_of</code>, <code>siblings_owned_by</code>, and <code>vendors_of</code> are each a one-hop graph query, chained together exactly the way breadth-first search explores one layer at a time. GraphRAG’s “multi-hop retrieval” is not a different kind of computation from ordinary graph traversal; it’s the same traversal idea, aimed at answering a specific factual question instead of computing a general graph property.</p>
+</section>
+<section id="the-measured-comparison-a-genuine-not-cherry-picked-failure" class="level3" data-number="80.2.3">
+<h3 data-number="80.2.3" class="anchored" data-anchor-id="the-measured-comparison-a-genuine-not-cherry-picked-failure"><span class="header-section-number">80.2.3</span> The Measured Comparison: A Genuine, Not Cherry-Picked, Failure</h3>
+<p>This chapter’s tutorial measured, rather than asserted, the difference. On a genuinely multi-hop question, a flat TF-IDF baseline’s top-3 retrieved passages never mentioned the answer entity at all, because the passage naming that entity as the connecting vendor shares almost no vocabulary with the query’s specific words (“flagged,” “parent,” “compliance”). Graph traversal, by contrast, found the exact two-hop chain deterministically, because it never depended on textual overlap in the first place. Crucially, the same worked example also ran a control query whose answer sits in one sentence. There, flat vector RAG’s top-ranked passage stated the answer directly. This is the honest, load-bearing point: GraphRAG isn’t a strictly better retrieval method. It’s the right tool for a specific <em>shape</em> of question (multi-hop, relationship-dependent), and flat vector RAG remains perfectly adequate, often simpler and cheaper, for single-hop, fact-lookup questions.</p>
+</section>
+<section id="community-summarisation-answers-a-different-kind-of-question-again" class="level3" data-number="80.2.4">
+<h3 data-number="80.2.4" class="anchored" data-anchor-id="community-summarisation-answers-a-different-kind-of-question-again"><span class="header-section-number">80.2.4</span> Community Summarisation Answers a Different Kind of Question Again</h3>
+<p>A specific two-hop path answers “does X relate to Y.” Some questions are broader, “summarise this vendor’s risk exposure,” and don’t have one specific path as the answer; they need a <em>cluster</em>. Louvain community detection (Chapter 76) run directly on the ownership/purchasing graph finds natural clusters, and a natural-language summary can be built <strong>entirely from real graph facts, assembled by string formatting</strong>: no LLM call, no hallucination risk, the same “compute it exactly, don’t ask a model to recall it” principle that graph algorithms embody generally.</p>
+</section>
+<section id="the-graph-grounded-prompt-makes-the-traversals-output-auditable" class="level3" data-number="80.2.5">
+<h3 data-number="80.2.5" class="anchored" data-anchor-id="the-graph-grounded-prompt-makes-the-traversals-output-auditable"><span class="header-section-number">80.2.5</span> The Graph-Grounded Prompt Makes the Traversal’s Output Auditable</h3>
+<p>The final prompt this chapter constructs states the derived multi-hop fact explicitly as a fact, not as raw source text the model has to re-derive: <code>Northwind Ltd -OWNED_BY-&gt; Meridian Holdings</code>, <code>Meridian Holdings -OWNS-&gt; Fenwick Supplies</code>. This is a meaningfully different object to hand a generation step than three separate, unconnected sentences. It’s the <em>answer to the connecting question</em>, computed and stated, with every hop individually inspectable and auditable, rather than left for the LLM to (maybe, silently) infer from concatenated context.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="80.3">
+<h2 data-number="80.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">80.3</span> Trade-offs and Limits</h2>
+<p>GraphRAG requires a knowledge graph to already exist (the extraction work of Chapter 78), requires knowing which entities a question concerns (not always obvious from an arbitrary natural-language query), and adds engineering complexity a flat vector index doesn’t have. Flat vector RAG requires none of that setup, and, as this chapter’s control-query result showed, is entirely sufficient when the answer lives in one passage. Reach for GraphRAG specifically when questions in a domain are relationship-shaped, not by default.</p>
+<p>Multi-hop traversal depth is a real design decision. This chapter’s traversal was fixed at exactly two hops because that’s what the worked scenario needed. A production system has to decide how many hops to traverse before stopping. Too few and the answer is missed, exactly as flat vector RAG missed it here; too many and the pipeline retrieves an explosion of loosely-related context, reintroducing the “too much irrelevant material” problem RAG exists to avoid in the first place. Community summarisation trades precision for coverage: a specific traversal path is a precise, auditable answer to a specific question, while a community summary covers more ground but is a coarser artefact, useful for “tell me about this cluster” questions, wrong for “what specifically connects X and Y.”</p>
+</section>
+<section id="procedures" class="level2" data-number="80.4">
+<h2 data-number="80.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">80.4</span> Procedures</h2>
+<p id="proc-80-1"><strong>Procedure 80.1 (Anchor Retrieval on Named Entities, Not the Query String).</strong> <em>When to use:</em> the question concerns specific, identifiable entities rather than a general topic.</p>
+<div id="lst-graphrag-entity" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphrag-entity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;80.1: Entity-centric anchors: exact node attribute checks and one-hop edge lookups, not text search
+</figcaption>
+<div aria-describedby="lst-graphrag-entity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> find_flagged_vendors(G):</span>
+<span id="cb1-2">    <span class="cf">return</span> [n <span class="cf">for</span> n, d <span class="kw">in</span> G.nodes(data<span class="op">=</span><span class="va">True</span>) <span class="cf">if</span> d.get(<span class="st">"flagged"</span>)]</span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="kw">def</span> owners_of(G, entity):</span>
+<span id="cb1-5">    <span class="co">"""1-hop traversal: who OWNS this entity?"""</span></span>
+<span id="cb1-6">    <span class="cf">return</span> [</span>
+<span id="cb1-7">        u <span class="cf">for</span> u, v, d <span class="kw">in</span> G.in_edges(entity, data<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-8">        <span class="cf">if</span> d.get(<span class="st">"relation"</span>) <span class="op">==</span> <span class="st">"OWNS"</span></span>
+<span id="cb1-9">    ]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Why this matters:</strong> identifying “Northwind Ltd” as the anchor entity via a node attribute check, not a text search, is what lets every subsequent step be an exact graph lookup instead of an approximate similarity search.</p>
+<p id="proc-80-2"><strong>Procedure 80.2 (Run a Fixed-Depth Multi-Hop Traversal).</strong> <em>When to use:</em> the question is a specific relationship between two entities, and the hop count needed is known in advance.</p>
+<div id="lst-graphrag-multihop" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphrag-multihop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;80.2: Two-hop traversal: flagged entity -&gt; owner -&gt; owner’s other holdings, filtered by the buyer’s actual vendors
+</figcaption>
+<div aria-describedby="lst-graphrag-multihop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> siblings_owned_by(G, owner, exclude):</span>
+<span id="cb2-2">    <span class="co">"""1-hop traversal: what else does this owner OWN?"""</span></span>
+<span id="cb2-3">    <span class="cf">return</span> [v <span class="cf">for</span> u, v, d <span class="kw">in</span> G.out_edges(owner, data<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-4">            <span class="cf">if</span> d.get(<span class="st">"relation"</span>) <span class="op">==</span> <span class="st">"OWNS"</span> <span class="kw">and</span> v <span class="op">!=</span> exclude]</span>
+<span id="cb2-5"></span>
+<span id="cb2-6"><span class="kw">def</span> vendors_of(G, buyer):</span>
+<span id="cb2-7">    <span class="co">"""1-hop traversal: who does this buyer PURCHASE_FROM?"""</span></span>
+<span id="cb2-8">    <span class="cf">return</span> [</span>
+<span id="cb2-9">        v <span class="cf">for</span> u, v, d <span class="kw">in</span> G.out_edges(buyer, data<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-10">        <span class="cf">if</span> d.get(<span class="st">"relation"</span>) <span class="op">==</span> <span class="st">"PURCHASES_FROM"</span></span>
+<span id="cb2-11">    ]</span>
+<span id="cb2-12"></span>
+<span id="cb2-13"><span class="kw">def</span> graphrag_multihop_answer(G, buyer):</span>
+<span id="cb2-14">    acme_vendors <span class="op">=</span> <span class="bu">set</span>(vendors_of(G, buyer))</span>
+<span id="cb2-15">    hits <span class="op">=</span> []</span>
+<span id="cb2-16">    <span class="cf">for</span> flagged <span class="kw">in</span> find_flagged_vendors(G):</span>
+<span id="cb2-17">        <span class="cf">for</span> owner <span class="kw">in</span> owners_of(G, flagged):</span>
+<span id="cb2-18">            siblings <span class="op">=</span> siblings_owned_by(G, owner, exclude<span class="op">=</span>flagged)</span>
+<span id="cb2-19">            <span class="cf">for</span> sibling <span class="kw">in</span> siblings:</span>
+<span id="cb2-20">                <span class="cf">if</span> sibling <span class="kw">in</span> acme_vendors:</span>
+<span id="cb2-21">                    hits.append({</span>
+<span id="cb2-22">                        <span class="st">"flagged_vendor"</span>: flagged,</span>
+<span id="cb2-23">                        <span class="st">"shared_parent"</span>: owner,</span>
+<span id="cb2-24">                        <span class="st">"sibling_vendor"</span>: sibling,</span>
+<span id="cb2-25">                        <span class="st">"hops"</span>: [</span>
+<span id="cb2-26">                            <span class="ss">f"</span><span class="sc">{</span>flagged<span class="sc">}</span><span class="ss"> -OWNED_BY-&gt; </span><span class="sc">{</span>owner<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="cb2-27">                            <span class="ss">f"</span><span class="sc">{</span>owner<span class="sc">}</span><span class="ss"> -OWNS-&gt; </span><span class="sc">{</span>sibling<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="cb2-28">                            <span class="ss">f"</span><span class="sc">{</span>buyer<span class="sc">}</span><span class="ss"> -PURCHASES_FROM-&gt; </span><span class="sc">{</span>sibling<span class="sc">}</span><span class="ss">"</span>,</span>
+<span id="cb2-29">                        ],</span>
+<span id="cb2-30">                    })</span>
+<span id="cb2-31">    <span class="cf">return</span> hits</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> hard-coding the hop count without checking whether the domain’s real questions need more or fewer hops. See Chapter 81 for what happens when the required depth isn’t known in advance.</p>
+<p id="proc-80-3"><strong>Procedure 80.3 (Detect and Summarise a Graph Community).</strong> <em>When to use:</em> the question is about a cluster or neighbourhood rather than one specific pair of entities.</p>
+<div id="lst-graphrag-community" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphrag-community-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;80.3: Community detection plus a summary built entirely from verified graph facts
+</figcaption>
+<div aria-describedby="lst-graphrag-community-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> networkx <span class="im">as</span> nx</span>
+<span id="cb3-2"></span>
+<span id="cb3-3">G_undirected <span class="op">=</span> nx.Graph()</span>
+<span id="cb3-4"><span class="cf">for</span> u, v, d <span class="kw">in</span> G.edges(data<span class="op">=</span><span class="va">True</span>):</span>
+<span id="cb3-5">    G_undirected.add_edge(u, v)</span>
+<span id="cb3-6"></span>
+<span id="cb3-7">communities <span class="op">=</span> nx.community.louvain_communities(</span>
+<span id="cb3-8">    G_undirected,</span>
+<span id="cb3-9">    seed<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb3-10">)</span>
+<span id="cb3-11">target_community <span class="op">=</span> <span class="bu">next</span>(</span>
+<span id="cb3-12">    c <span class="cf">for</span> c <span class="kw">in</span> communities <span class="cf">if</span> <span class="st">"Meridian Holdings"</span> <span class="kw">in</span> c</span>
+<span id="cb3-13">)</span>
+<span id="cb3-14"></span>
+<span id="cb3-15"><span class="kw">def</span> summarize_community(G, community, name):</span>
+<span id="cb3-16">    lines <span class="op">=</span> [<span class="ss">f"Community summary (</span><span class="sc">{</span>name<span class="sc">}</span><span class="ss">):"</span>]</span>
+<span id="cb3-17">    owners_in_community <span class="op">=</span> [</span>
+<span id="cb3-18">        n <span class="cf">for</span> n <span class="kw">in</span> community</span>
+<span id="cb3-19">        <span class="cf">if</span> G.nodes[n].get(<span class="st">"type"</span>) <span class="op">==</span> <span class="st">"HOLDING_COMPANY"</span></span>
+<span id="cb3-20">    ]</span>
+<span id="cb3-21">    <span class="cf">for</span> owner <span class="kw">in</span> owners_in_community:</span>
+<span id="cb3-22">        owned <span class="op">=</span> [</span>
+<span id="cb3-23">            v <span class="cf">for</span> u, v, d <span class="kw">in</span> G.out_edges(owner, data<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-24">            <span class="cf">if</span> d.get(<span class="st">"relation"</span>) <span class="op">==</span> <span class="st">"OWNS"</span> <span class="kw">and</span> v <span class="kw">in</span> community</span>
+<span id="cb3-25">        ]</span>
+<span id="cb3-26">        <span class="cf">if</span> owned:</span>
+<span id="cb3-27">            member_list <span class="op">=</span> <span class="st">', '</span>.join(owned)</span>
+<span id="cb3-28">            lines.append(</span>
+<span id="cb3-29">                <span class="ss">f"  </span><span class="sc">{</span>owner<span class="sc">}</span><span class="ss"> owns </span><span class="sc">{</span><span class="bu">len</span>(owned)<span class="sc">}</span><span class="ss"> member(s) of "</span></span>
+<span id="cb3-30">                <span class="ss">f"this community: </span><span class="sc">{</span>member_list<span class="sc">}</span><span class="ss">."</span></span>
+<span id="cb3-31">            )</span>
+<span id="cb3-32">        <span class="cf">for</span> member <span class="kw">in</span> owned:</span>
+<span id="cb3-33">            <span class="cf">if</span> G.nodes[member].get(<span class="st">"flagged"</span>):</span>
+<span id="cb3-34">                reason <span class="op">=</span> G.nodes[member].get(<span class="st">'flag_reason'</span>)</span>
+<span id="cb3-35">                year <span class="op">=</span> G.nodes[member].get(<span class="st">'flag_year'</span>)</span>
+<span id="cb3-36">                lines.append(</span>
+<span id="cb3-37">                    <span class="ss">f"  </span><span class="sc">{</span>member<span class="sc">}</span><span class="ss"> was flagged for </span><span class="sc">{</span>reason<span class="sc">}</span><span class="ss"> "</span></span>
+<span id="cb3-38">                    <span class="ss">f"in </span><span class="sc">{</span>year<span class="sc">}</span><span class="ss">."</span></span>
+<span id="cb3-39">                )</span>
+<span id="cb3-40">    <span class="cf">return</span> <span class="st">"</span><span class="ch">\n</span><span class="st">"</span>.join(lines)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Why this matters:</strong> the summary text is assembled entirely from real graph facts via string formatting: zero hallucination risk, because nothing in the summary wasn’t already a verified graph fact. An LLM can be used to phrase the final sentence more fluently, but should not be the source of the facts themselves.</p>
+<p id="proc-80-4"><strong>Procedure 80.4 (Construct a Graph-Grounded Prompt).</strong> <em>When to use:</em> handing a traversal’s output to a generation step.</p>
+<div id="lst-graphrag-prompt" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphrag-prompt-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;80.4: Stating the derived hop chain as explicit, auditable facts rather than raw source passages
+</figcaption>
+<div aria-describedby="lst-graphrag-prompt-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">hops_text <span class="op">=</span> (<span class="ss">f"- </span><span class="sc">{</span>hop<span class="sc">}</span><span class="ss">"</span> <span class="cf">for</span> hop <span class="kw">in</span> results[<span class="dv">0</span>][<span class="st">"hops"</span>])</span>
+<span id="cb4-2">hop_context <span class="op">=</span> <span class="st">"</span><span class="ch">\n</span><span class="st">"</span>.join(hops_text)</span>
+<span id="cb4-3"></span>
+<span id="cb4-4">graph_grounded_prompt <span class="op">=</span> <span class="ss">f"""You are a procurement risk </span><span class="op">\</span></span>
+<span id="cb4-5"><span class="ss">analyst. Answer using ONLY the graph facts below.</span></span>
+<span id="cb4-6"></span>
+<span id="cb4-7"><span class="ss">Graph facts (derived by multi-hop traversal, not text search):</span></span>
+<span id="cb4-8"><span class="sc">{</span>hop_context<span class="sc">}</span></span>
+<span id="cb4-9"><span class="ss">- Northwind Ltd flag reason: environmental violations (2024)</span></span>
+<span id="cb4-10"></span>
+<span id="cb4-11"><span class="ss">Question: Which of Acme Corp's vendors shares a parent</span></span>
+<span id="cb4-12"><span class="ss">company with a vendor that was flagged for a compliance</span></span>
+<span id="cb4-13"><span class="ss">issue?</span></span>
+<span id="cb4-14"></span>
+<span id="cb4-15"><span class="ss">Answer with the vendor name and the exact chain of facts</span></span>
+<span id="cb4-16"><span class="ss">that supports it."""</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Why this matters:</strong> stating the derived relationship as an explicit fact rather than handing over raw source sentences means the LLM doesn’t have to silently re-derive the connection itself. The traversal already did that, and every hop is independently checkable against the graph.</p>
+</section>
+<section id="worked-example" class="level2" data-number="80.5">
+<h2 data-number="80.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">80.5</span> Worked Example</h2>
+<p>The tutorial notebook behind this chapter builds ten short text passages describing a network of companies, vendors, and a compliance flag, then asks: <em>“Which of Acme Corp’s vendors shares a parent company with a vendor that was flagged for a compliance issue?”</em> The gold answer, worked out by hand from the corpus: Northwind Ltd was flagged; its parent is Meridian Holdings; Meridian Holdings also owns Fenwick Supplies; Acme Corp purchases from Fenwick Supplies. So <strong>Fenwick Supplies</strong> is the answer, reached via two hops and confirmed against a third fact. No single passage states this.</p>
+<p>A flat TF-IDF vector-RAG baseline (the same retrieval <em>mechanism</em> as production RAG: rank passages by similarity to the query, with TF-IDF standing in for a real embedding model) retrieved, at top-3: “Meridian Holdings is a Zurich-based holding company” (score 0.321), “Globex Materials is independently owned with no parent” (score 0.249), and “Northwind Ltd was flagged” (score 0.236). <strong>Fenwick Supplies is never mentioned at all.</strong> TF-IDF ranked the one passage that actually names Fenwick as Meridian’s other subsidiary below three passages sharing more surface vocabulary with the query (“holding company,” “parent,” “flagged”) despite two of them being irrelevant to the actual answer.</p>
+<p><a href="#lst-graphrag-multihop" class="quarto-xref">Listing&nbsp;<span>80.2</span></a>, run against the same graph, found the match deterministically:</p>
+<pre class="text"><code>MATCH FOUND:
+   Northwind Ltd -OWNED_BY-&gt; Meridian Holdings
+   Meridian Holdings -OWNS-&gt; Fenwick Supplies
+   Acme Corp -PURCHASES_FROM-&gt; Fenwick Supplies
+   =&gt; Fenwick Supplies shares parent Meridian Holdings
+      with flagged vendor Northwind Ltd</code></pre>
+<p>A control query, “how much does Acme Corp spend annually with Fenwick Supplies?”, checked that this isn’t a strawman comparison: there, the flat vector-RAG baseline’s top-ranked passage (score 0.551) directly stated “$180,000 annually,” the correct answer. GraphRAG isn’t being compared against a deliberately weak baseline; vector RAG is simply the wrong tool for one specific <em>shape</em> of question, and the right tool for another.</p>
+<p>Community detection (<a href="#lst-graphrag-community" class="quarto-xref">Listing&nbsp;<span>80.3</span></a>) on the same graph found three communities: <code>{Fenwick Supplies, Meridian Holdings, Northwind Ltd}</code>, <code>{Acme Corp, Globex Materials}</code>, and <code>{Atlas Group, Solaris Energy, Voltix Components}</code>. Summarising the first produced, entirely from string-formatted graph facts:</p>
+<pre class="text"><code>Community summary (Meridian Holdings cluster):
+  Meridian Holdings owns 2 member(s) of this community:
+  Northwind Ltd, Fenwick Supplies.
+  Northwind Ltd was flagged for environmental violations in 2024.</code></pre>
+<p>The graph-grounded prompt (<a href="#lst-graphrag-prompt" class="quarto-xref">Listing&nbsp;<span>80.4</span></a>) states the three-hop chain explicitly, and a simulated LLM response (no live endpoint in this chapter’s worked example: the prompt text and one realistic response are both real, but the response is hardcoded and clearly labelled as simulated) correctly names Fenwick Supplies and repeats the supporting chain verbatim. The measured comparison: on the multi-hop query, vector-RAG’s top-3 never states the answer entity together with the flag condition (<code>False</code>); GraphRAG’s traversal finds and states the chain explicitly (<code>True</code>). On the control query, vector-RAG’s top passage directly states the answer (<code>True</code>). GraphRAG isn’t needed there at all.</p>
+</section>
+<section id="aws-sagemaker-notes" class="level2" data-number="80.6">
+<h2 data-number="80.6" class="anchored" data-anchor-id="aws-sagemaker-notes"><span class="header-section-number">80.6</span> AWS SageMaker Notes</h2>
+<p>Production GraphRAG typically stores the graph in Amazon Neptune rather than an in-memory <code>networkx</code> graph, and generates with Amazon Bedrock rather than a simulated response.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS Neptune and Bedrock Equivalent</div>
+<div id="lst-graphrag-cypher" class="cypher listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphrag-cypher-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;80.5: The same two-hop traversal expressed as an openCypher MATCH pattern against Neptune
+</figcaption>
+<div aria-describedby="lst-graphrag-cypher-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cypher"><code>MATCH (flagged:Company {flagged: true})
+  &lt;-[:OWNS]-(parent:Company)-[:OWNS]-&gt;(sibling:Company)
+MATCH (buyer:Company {name: 'Acme Corp'})
+  -[:PURCHASES_FROM]-&gt;(sibling)
+RETURN sibling.name, parent.name, flagged.name</code></pre>
+</div>
+</figure>
+</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><span class="im">import</span> boto3</span>
+<span id="cb8-2"></span>
+<span id="cb8-3"><span class="co"># openCypher or Gremlin queries against Neptune</span></span>
+<span id="cb8-4">neptune <span class="op">=</span> boto3.client(<span class="st">"neptunedata"</span>)</span>
+<span id="cb8-5">bedrock <span class="op">=</span> boto3.client(<span class="st">"bedrock-runtime"</span>)</span>
+<span id="cb8-6"><span class="co"># invoke_model(...) with the graph-grounded prompt</span></span>
+<span id="cb8-7"><span class="co"># built from the Cypher result above</span></span></code></pre></div>
+<p><strong>When to prefer this over self-hosting:</strong> Amazon Neptune handles graph storage and traversal at scale past what fits in <code>networkx</code>’s in-memory model, and Amazon Bedrock Knowledge Bases now offers a managed GraphRAG mode that automates much of the extraction-and-traversal pipeline built by hand in this chapter. Worth evaluating before building a custom pipeline for a production use case.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="80.7">
+<h2 data-number="80.7" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">80.7</span> History and Further Reading</h2>
+<p>Edge et al.’s “From Local to Global: A Graph RAG Approach to Query-Focused Summarization” <span class="citation" data-cites="edge2024graphrag">(<a href="#ref-edge2024graphrag" role="doc-biblioref">Edge et al. 2024</a>)</span> is the paper that popularised the term “GraphRAG,” including LLM-based extraction and community-based summarisation at production scale: the same community-summarisation idea built at toy scale in this chapter. Blondel et al.’s “Fast Unfolding of Communities in Large Networks” <span class="citation" data-cites="blondel2008louvain">(<a href="#ref-blondel2008louvain" role="doc-biblioref">Blondel et al. 2008</a>)</span> is the Louvain algorithm this chapter’s community detection step reuses from Chapter 76. Microsoft Research’s GraphRAG project documentation is a production-oriented reference implementation of the same ideas at much larger scale. Book 2, Chapter 31 (Retrieval-Augmented Generation (RAG)) is the flat vector-RAG baseline this chapter measured against throughout.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="80.8">
+<h2 data-number="80.8" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">80.8</span> How This Connects</h2>
+<p>This chapter builds on Chapter 76 (traversal and community detection, reused directly, not reimplemented), Chapter 77 (the property-graph model this chapter’s graph uses), Chapter 78 (this chapter assumes a graph like the one that construction pipeline would produce), and Chapter 79 (learned embeddings are a common way to do entity-centric retrieval at a scale where exact traversal alone becomes expensive). It enables Chapter 81 (giving an LLM agent the traversal functions built here as a callable tool, rather than running the whole pipeline in one fixed script) and Chapter 82 (measuring GraphRAG vs.&nbsp;vector-RAG rigorously, at scale, the way this chapter’s small worked example did by hand). It connects to Book 2, Chapter 31 (RAG): GraphRAG is not a replacement for that chapter’s architecture, it’s an additional retrieval strategy layered alongside it. Production systems frequently run both and route a query to whichever fits its shape. It’s often confused with “GraphRAG is always better than vector RAG.” This chapter’s own control-query result is the direct counterexample worth keeping in mind for the rest of this track.</p>
+</section>
+<section id="exercises" class="level2" data-number="80.9">
+<h2 data-number="80.9" class="anchored" data-anchor-id="exercises"><span class="header-section-number">80.9</span> Exercises</h2>
+<ol type="1">
+<li id="ex-80-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain, in one or two sentences, why vector similarity has no way to represent “shares a parent company with,” using the distinction between “what reads alike” and “what’s connected.”</p></li>
+<li id="ex-80-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> List the three one-hop lookups <a href="#lst-graphrag-multihop" class="quarto-xref">Listing&nbsp;<span>80.2</span></a> chains together, and state which <code>networkx</code> API call each one uses.</p></li>
+<li id="ex-80-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-graphrag-entity" class="quarto-xref">Listing&nbsp;<span>80.1</span></a> and <a href="#lst-graphrag-multihop" class="quarto-xref">Listing&nbsp;<span>80.2</span></a> as a pattern, write the additional one-hop function needed to check whether two companies share the <em>same</em> parent company two levels up (i.e., a grandparent), rather than a direct parent.</p></li>
+<li id="ex-80-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter’s control query worked because the answer sits in one passage. Using the corpus described in the Worked Example, write a second control query whose answer also sits in exactly one passage, and state which passage index answers it.</p></li>
+<li id="ex-80-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-graphrag-community" class="quarto-xref">Listing&nbsp;<span>80.3</span></a>, trace by hand which community <code>Globex Materials</code> would land in, given it has a <code>PURCHASES_FROM</code> edge to nothing in the Meridian Holdings cluster and no <code>OWNS</code> edges at all.</p></li>
+<li id="ex-80-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer wants to replace their entire vector-RAG pipeline with GraphRAG because “graphs are more accurate.” Using this chapter’s Trade-offs section, write the two or three sentences you’d say back, including what you’d ask about their actual question types first.</p></li>
+<li id="ex-80-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A production knowledge graph has an anchor entity with very high fan-out (thousands of edges). Using the “Trade-offs” discussion of hop depth, explain what specifically goes wrong if the hop budget is left unbounded on this entity.</p></li>
+<li id="ex-80-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Edge et al.&nbsp;GraphRAG paper cited above. Identify one way its community-summarisation approach differs from this chapter’s string-formatted summary (<a href="#lst-graphrag-community" class="quarto-xref">Listing&nbsp;<span>80.3</span></a>), and explain what problem that difference solves at production scale.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="80.10">
+<h2 data-number="80.10" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">80.10</span> Mental Model</h2>
+<p>Vector RAG answers “what does this remind me of?” Graph traversal answers “what is this actually connected to?” A multi-hop question needs the second question asked, explicitly, one hop at a time, and no amount of better embeddings changes that, because the connection was never encoded as text similarity in the first place. This chapter’s numbers are the direct, measured proof: flat retrieval missed the answer entity entirely; traversal found it, deterministically, in three inspectable hops.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-blondel2008louvain" class="csl-entry" role="listitem">
+Blondel, Vincent D., Jean-Loup Guillaume, Renaud Lambiotte, and Etienne Lefebvre. 2008. <span>“Fast Unfolding of Communities in Large Networks.”</span> <em>Journal of Statistical Mechanics: Theory and Experiment</em> 2008 (10): P10008.
+</div>
+<div id="ref-edge2024graphrag" class="csl-entry" role="listitem">
+Edge, Darren, Ha Trinh, Newman Cheng, et al. 2024. <span>“From Local to Global: A Graph RAG Approach to Query-Focused Summarization.”</span> <em>arXiv Preprint arXiv:2404.16130</em>.
+</div>
+</div>
+</section>

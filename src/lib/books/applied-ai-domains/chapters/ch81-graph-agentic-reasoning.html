@@ -1,0 +1,190 @@
+<p><a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> built a genuinely good retrieval pipeline, but a fixed one. Its multi-hop function checked exactly two hops because that’s what its worked example needed, and nothing about the function’s shape adapts if the real answer sits three hops away, or one. In production, the right hop count usually isn’t known in advance: questions about a procurement graph, a citation network, or an organisational hierarchy vary in how many relationships they need to traverse. This chapter asks: what if, instead of writing one fixed traversal function per question shape, an agent were given the traversal primitives as callable tools and allowed to decide, one call at a time, how far to go?</p>
+<section id="motivation" class="level2" data-number="81.1">
+<h2 data-number="81.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">81.1</span> Motivation</h2>
+<p>A fixed pipeline commits to a shape before it sees the data. An agent loop commits to nothing but a stopping rule. Chapter 80’s function is, structurally, nested loops (flagged entities, then owners, then siblings): a shape baked in at write time. This chapter’s <code>agentic_search</code> is one loop that calls the same one-hop <code>get_neighbors</code> primitive repeatedly, checking after every call whether it’s found what it’s looking for, and only going further if it hasn’t. The traversal algorithm underneath, one-hop graph lookups, hasn’t changed at all; <a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a> and Chapter 80 already provide that. What’s changed is the control structure wrapped around it. Worked Example 81 below measures exactly what that control-structure change buys, and what it doesn’t.</p>
+</section>
+<section id="exposition" class="level2" data-number="81.2">
+<h2 data-number="81.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">81.2</span> Exposition</h2>
+<section id="the-measured-failure-a-fixed-pipeline-actually-has" class="level3" data-number="81.2.1">
+<h3 data-number="81.2.1" class="anchored" data-anchor-id="the-measured-failure-a-fixed-pipeline-actually-has"><span class="header-section-number">81.2.1</span> The Measured Failure a Fixed Pipeline Actually Has</h3>
+<p>Worked Example 81 reuses Chapter 80’s exact <code>fixed_2hop_pipeline</code> function, unmodified, on a graph where a real vendor relationship exists three ownership hops from a flagged company. The fixed pipeline returns nothing, because it only ever checks a flagged entity’s owner’s direct other holdings, and the sibling one level up isn’t itself a vendor. The actual vendor is invisible to a function that was never written to look past the first sibling layer.</p>
+</section>
+<section id="the-adaptive-loops-advantage-is-a-stopping-condition-not-a-smarter-algorithm" class="level3" data-number="81.2.2">
+<h3 data-number="81.2.2" class="anchored" data-anchor-id="the-adaptive-loops-advantage-is-a-stopping-condition-not-a-smarter-algorithm"><span class="header-section-number">81.2.2</span> The Adaptive Loop’s Advantage Is a Stopping Condition, Not a Smarter Algorithm</h3>
+<p><code>agentic_search</code> calls <code>get_neighbors</code> on the current frontier, checks whether anything new is in the target set, and only expands the frontier again if it isn’t. There’s no new graph algorithm here. BFS from a start node, hop by hop, is the same idea Chapter 76 used for shortest paths. The genuinely new piece is deciding <em>when to stop</em> dynamically, based on what’s been found so far, rather than deciding it in advance.</p>
+</section>
+<section id="adaptivity-has-a-real-limit-measured-directly" class="level3" data-number="81.2.3">
+<h3 data-number="81.2.3" class="anchored" data-anchor-id="adaptivity-has-a-real-limit-measured-directly"><span class="header-section-number">81.2.3</span> Adaptivity Has a Real Limit, Measured Directly</h3>
+<p>Worked Example 81 doesn’t stop at the success case. Re-running the same search with a tighter hop budget reproduces the fixed pipeline’s exact blind spot. The loop gives up one hop too early, for the same underlying reason: nothing at that depth matched. This is the honest, load-bearing finding of this chapter: an adaptive loop isn’t magic. Its advantage over a fixed pipeline is a <em>tunable</em> ceiling instead of a <em>hard-coded</em> one. Set that ceiling too tight, and the result is back to the fixed pipeline’s exact failure mode, just configurable instead of baked in.</p>
+</section>
+<section id="why-the-visited-set-not-just-the-hop-budget-prevents-infinite-loops" class="level3" data-number="81.2.4">
+<h3 data-number="81.2.4" class="anchored" data-anchor-id="why-the-visited-set-not-just-the-hop-budget-prevents-infinite-loops"><span class="header-section-number">81.2.4</span> Why the Visited Set, Not Just the Hop Budget, Prevents Infinite Loops</h3>
+<p>A hop budget alone caps how many rounds the loop runs, but on a graph with a cycle (a cross-holding structure where an entity ultimately owns a stake back into part of its own ownership chain), an unguarded frontier-expansion step would keep re-adding the same nodes every round. The <code>visited</code> set is what actually stops that: each node is explored exactly once, regardless of how many times it’s reachable. The hop budget is a safety ceiling on top of that; it’s not what makes the loop correct.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="81.3">
+<h2 data-number="81.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">81.3</span> Trade-offs and Limits</h2>
+<p>A fixed pipeline is simpler, faster (no repeated stopping-condition checks), and structurally cannot loop forever, but it’s blind to anything outside the shape it was written for. An adaptive loop generalises to questions whose hop count varies, at the cost of needing an explicit stopping condition and a hop-budget decision that genuinely matters and can be gotten wrong, as Worked Example 81 measures directly. Choosing a hop budget is a real design decision, not a formality: too tight, and the agent silently gives up before finding real answers, the same silent-failure character <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> found in flat vector RAG, just relocated to a different parameter; too loose on a large, densely-connected real-world graph, and the agent risks exploring a large fraction of the graph before concluding there’s no answer, which is slow and can retrieve an explosion of irrelevant context if that exploration also feeds a downstream prompt. This chapter’s “agent” is a deterministic rule-based function, not a real language model deciding what to call next. It’s appropriate for demonstrating the control-structure difference clearly and reproducibly, but a real Bedrock Agents or tool-calling-LLM deployment would have the model itself make the “keep going or stop” decision, more flexible but also less predictable than this chapter’s fixed BFS-with-early-stop policy.</p>
+</section>
+<section id="procedures" class="level2" data-number="81.4">
+<h2 data-number="81.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">81.4</span> Procedures</h2>
+<p id="proc-81-1"><strong>Procedure 81.1 (Implement an Adaptive Frontier-Expansion Search).</strong> <em>When to use:</em> any multi-hop graph question where the right hop count isn’t known in advance.</p>
+<div id="lst-agentic-graph-search" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agentic-graph-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;81.1: One-hop primitive, called repeatedly, with an explicit stopping check
+</figcaption>
+<div aria-describedby="lst-agentic-graph-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> agentic_search(</span>
+<span id="cb1-2">    start_nodes,</span>
+<span id="cb1-3">    target_set,</span>
+<span id="cb1-4">    get_neighbors,</span>
+<span id="cb1-5">    max_hops<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb1-6">):</span>
+<span id="cb1-7">    frontier, visited <span class="op">=</span> <span class="bu">set</span>(start_nodes), <span class="bu">set</span>(start_nodes)</span>
+<span id="cb1-8">    <span class="cf">for</span> hop <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, max_hops <span class="op">+</span> <span class="dv">1</span>):</span>
+<span id="cb1-9">        new_nodes <span class="op">=</span> <span class="bu">set</span>()</span>
+<span id="cb1-10">        <span class="cf">for</span> node <span class="kw">in</span> frontier:</span>
+<span id="cb1-11">            <span class="co"># TOOL CALL, one hop</span></span>
+<span id="cb1-12">            new_nodes <span class="op">|=</span> get_neighbors(node) <span class="op">-</span> visited</span>
+<span id="cb1-13">        <span class="cf">if</span> new_nodes <span class="op">&amp;</span> target_set:</span>
+<span id="cb1-14">            <span class="cf">return</span> {</span>
+<span id="cb1-15">                <span class="st">"found"</span>: <span class="va">True</span>,</span>
+<span id="cb1-16">                <span class="st">"hop"</span>: hop,</span>
+<span id="cb1-17">                <span class="st">"match"</span>: new_nodes <span class="op">&amp;</span> target_set,</span>
+<span id="cb1-18">            }</span>
+<span id="cb1-19">        visited <span class="op">|=</span> new_nodes</span>
+<span id="cb1-20">        frontier <span class="op">=</span> new_nodes</span>
+<span id="cb1-21">        <span class="cf">if</span> <span class="kw">not</span> frontier:</span>
+<span id="cb1-22">            <span class="cf">break</span></span>
+<span id="cb1-23">    <span class="cf">return</span> {<span class="st">"found"</span>: <span class="va">False</span>}</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> relying on the hop budget alone to prevent infinite loops on a cyclic graph. Without the <code>visited</code> set, a cycle causes the same nodes to be re-added to the frontier every round, and the loop only terminates because <code>max_hops</code> eventually runs out, wastefully re-exploring the same nodes many times over.</p>
+<p id="proc-81-2"><strong>Procedure 81.2 (Choose a Hop Budget Deliberately, Not by Default).</strong> <em>When to use:</em> setting <code>max_hops</code> for a new graph or question domain.</p>
+<div id="lst-agentic-hop-budget" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agentic-hop-budget-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;81.2: A hop budget is a real trade-off, not a formality
+</figcaption>
+<div aria-describedby="lst-agentic-hop-budget-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Too tight: the agent silently gives up before finding
+  real, further-away answers: a silent failure, same
+  character as under-retrieving in flat vector RAG.
+Too loose (on a large, dense graph): the agent explores
+  a large fraction of the graph before concluding there's
+  no answer: slow, and risks flooding a downstream
+  prompt with irrelevant context if the exploration feeds
+  one.</code></pre>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="81.5">
+<h2 data-number="81.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">81.5</span> Worked Example</h2>
+<p>A small procurement-risk graph: a flagged company (<code>Northwind Ltd</code>) owned by <code>Meridian Holdings</code>, which also owns <code>Titan Group</code>, which owns <code>Cascade Textiles</code>, an actual vendor to <code>Acme Corp</code>, three ownership hops from the flagged entity.</p>
+<div id="lst-agentic-worked-fixed" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agentic-worked-fixed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;81.3: Chapter 80’s exact fixed pipeline, unmodified, run against this graph
+</figcaption>
+<div aria-describedby="lst-agentic-worked-fixed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">result <span class="op">=</span> fixed_2hop_pipeline(</span>
+<span id="cb3-2">    flagged_entity<span class="op">=</span><span class="st">"Northwind Ltd"</span>,</span>
+<span id="cb3-3">    graph<span class="op">=</span>procurement_graph,</span>
+<span id="cb3-4">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Fixed 2-hop pipeline result: <code>[]</code>, found nothing.</strong> The pipeline only checks a flagged entity’s owner’s direct other holdings; <code>Titan Group</code> (the sibling one level up) isn’t itself a vendor, so <code>Cascade Textiles</code>, the real vendor, one hop further, is structurally invisible to a function that was never written to look past that layer.</p>
+<div id="lst-agentic-worked-adaptive" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agentic-worked-adaptive-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;81.4: The same graph, same target, an adaptive loop instead of a fixed shape
+</figcaption>
+<div aria-describedby="lst-agentic-worked-adaptive-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">result_generous <span class="op">=</span> agentic_search(</span>
+<span id="cb4-2">    [<span class="st">"Northwind Ltd"</span>],</span>
+<span id="cb4-3">    vendor_set,</span>
+<span id="cb4-4">    get_neighbors,</span>
+<span id="cb4-5">    max_hops<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb4-6">)</span>
+<span id="cb4-7">result_tight <span class="op">=</span> agentic_search(</span>
+<span id="cb4-8">    [<span class="st">"Northwind Ltd"</span>],</span>
+<span id="cb4-9">    vendor_set,</span>
+<span id="cb4-10">    get_neighbors,</span>
+<span id="cb4-11">    max_hops<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb4-12">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Approach</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Module 05-style fixed 2-hop pipeline</td>
+<td><strong>Found nothing</strong></td>
+</tr>
+<tr class="even">
+<td>Adaptive agent, <code>max_hops=6</code></td>
+<td><strong>Found <code>Cascade Textiles</code> at hop 3</strong></td>
+</tr>
+<tr class="odd">
+<td>Adaptive agent, <code>max_hops=2</code></td>
+<td><strong>Found nothing: same blind spot as the fixed pipeline</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The adaptive loop, given room to keep going, finds the real vendor relationship the fixed pipeline structurally could not: a genuine capability gain from the control-structure change alone, since the underlying <code>get_neighbors</code> primitive is identical in both approaches. But the third row is the chapter’s most important measured result: with <code>max_hops=2</code>, the exact same adaptive loop reproduces the fixed pipeline’s exact failure, for the exact same underlying reason: nothing at that depth matched. This is Mental Model’s claim made numeric: adaptivity is not a free upgrade, it’s a different, tunable trade-off, and tuning it wrong reproduces the very failure mode it was built to fix.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># AWS Bedrock Agents: the get_neighbors primitive becomes</span></span>
+<span id="cb5-2"><span class="co"># a Lambda-backed action group, and the LLM itself (rather</span></span>
+<span id="cb5-3"><span class="co"># than this chapter's deterministic rule-based policy)</span></span>
+<span id="cb5-4"><span class="co"># decides when to call it again versus stop: the same</span></span>
+<span id="cb5-5"><span class="co"># control-structure shift this chapter demonstrates, with</span></span>
+<span id="cb5-6"><span class="co"># a real language model making the stopping decision.</span></span></code></pre></div>
+<p><strong>When this chapter’s hop-budget finding matters for a Bedrock Agents deployment:</strong> the <code>max_hops=2</code> failure mode measured in Worked Example 81 has a direct analogue in a real LLM-driven agent. A system prompt that discourages “excessive” tool calls, or a low max-iteration limit, can silently reproduce the exact same blind spot this chapter measured, just decided implicitly by the model’s own (possibly premature) judgment to stop rather than an explicit numeric ceiling.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="81.6">
+<h2 data-number="81.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">81.6</span> History and Further Reading</h2>
+<p>Yao et al.’s “ReAct: Synergizing Reasoning and Acting in Language Models” <span class="citation" data-cites="yao2022react">(<a href="#ref-yao2022react" role="doc-biblioref">Yao et al. 2023</a>)</span> is the reasoning-then-acting loop pattern this chapter’s <code>agentic_search</code> mimics in simplified, deterministic form. AWS Bedrock Agents documentation covers production tool-calling agent loops, including action groups backed by Lambda functions.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="81.7">
+<h2 data-number="81.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">81.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> (the fixed pipeline this chapter directly measures against and the graph-traversal primitives it reuses) and <a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a> (BFS/frontier-expansion, the underlying algorithm both this chapter and Chapter 80 rely on). It enables <a href="/books/applied-ai-domains/ch82-evaluating-deploying-graph-llm-systems" class="quarto-xref"><span>Chapter 82</span></a>, which rigorously evaluates GraphRAG and agentic approaches at scale, the way this chapter’s small worked example did by hand. It connects to Book 2’s Agentic AI chapter: this chapter is the “tool calling + reasoning loop” pattern that chapter introduced, applied specifically to a knowledge graph instead of a general API or calculator. It’s often confused with “an agent loop is just a smarter traversal algorithm.” It isn’t; the traversal step (<code>get_neighbors</code>) is identical to Chapter 80’s. The difference is entirely in the control structure deciding when to call it again.</p>
+</section>
+<section id="exercises" class="level2" data-number="81.8">
+<h2 data-number="81.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">81.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-81-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the one-sentence difference between a fixed pipeline and an agent loop, per this chapter’s Motivation.</p></li>
+<li id="ex-81-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain why the <code>visited</code> set, not the hop budget alone, is what prevents an infinite loop on a cyclic graph.</p></li>
+<li id="ex-81-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s three results (fixed pipeline: nothing; adaptive, max_hops=6: found at hop 3; adaptive, max_hops=2: nothing), explain what the third result specifically proves about the source of the adaptive loop’s advantage: is it a better algorithm, or something else?</p></li>
+<li id="ex-81-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s measured hop depth (the real match was found at hop 3), explain why a hop budget of exactly 2 reproduces the fixed pipeline’s failure precisely, connecting this to what “2-hop” meant in Chapter 80’s pipeline design.</p></li>
+<li id="ex-81-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague says “let’s just set max_hops very high, like 20, so we never miss an answer.” Using this chapter’s Trade-offs section, write the two or three sentences you’d say about what that choice risks.</p></li>
+<li id="ex-81-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 81.1’s <code>agentic_search</code> checks <code>new_nodes &amp; target_set</code> after every hop before deciding whether to expand further. Describe what would go wrong (in terms of correctness, not just efficiency) if this check were accidentally moved to only run once, after the loop finishes all <code>max_hops</code> iterations.</p></li>
+<li id="ex-81-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Book 2’s Agentic AI chapter’s treatment of step-limit guardrails. Explain in your own words how this chapter’s <code>max_hops</code> parameter is a domain-specific instance of that same general guardrail pattern, and what’s different about applying it to graph traversal specifically versus a general tool-calling agent.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="81.9">
+<h2 data-number="81.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">81.9</span> Mental Model</h2>
+<p>A fixed pipeline is a script: it runs the same steps regardless of what it finds along the way. An agent loop is a policy: after every tool call, it looks at the result and decides what to do next. This chapter’s numbers are the direct, measured proof of the difference: reused unmodified, the fixed pipeline found nothing on a 3-hop scenario; the policy, given room to keep going, found it at hop 3, and, given too little room, failed in exactly the same way the fixed pipeline did. Adaptivity is not a free upgrade; it’s a different, tunable trade-off, and this chapter measured both sides of that trade honestly.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-yao2022react" class="csl-entry" role="listitem">
+Yao, Shunyu, Jeffrey Zhao, Dian Yu, et al. 2023. <span>“ReAct: Synergizing Reasoning and Acting in Language Models.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+</div>
+</section>

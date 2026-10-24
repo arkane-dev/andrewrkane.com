@@ -27,7 +27,7 @@
 			<h1>{book.title}</h1>
 			<p class="by">{book.author}</p>
 			<p class="lede">{meta.summary}</p>
-			<p class="nd-meta stats">{chapters.length} chapters · {appendices.length} appendices · {Math.round(words / 1000)}k words · {totalQuestions} quiz questions</p>
+			<p class="nd-meta stats">{chapters.length} chapters · {appendices.length} appendices · {Math.round(words / 1000)}k words{#if totalQuestions} · {totalQuestions} quiz questions{/if}</p>
 			<div class="actions">
 				<Button href="/books/{book.slug}/{first.slug}">Read online</Button>
 				{#if meta.pdfHref}<Button variant="outline" href={meta.pdfHref}>Download PDF</Button>{/if}

@@ -1,0 +1,376 @@
+<p>Everything in the first three books of this series lives on a screen. A model reads tokens or pixels from a file, produces a prediction or a completion, and the worst-case failure is a wrong answer in a chat window or a bad recommendation in a dashboard. Physical AI breaks that assumption in a specific, mechanical way: the model’s output now moves something. A wrong prediction doesn’t just sit there. It drives a motor, steers a wheel, closes a gripper. This chapter exists to make that difference concrete before the rest of this track touches any modelling technique, because the difference changes what “correct” even means.</p>
+<section id="motivation" class="level2" data-number="58.1">
+<h2 data-number="58.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">58.1</span> Motivation</h2>
+<p>None of what follows makes physical AI a different <em>kind</em> of machine learning. The models met later in this track, world models, vision-language-action models, RL-trained policies, are built from the same primitives as everything in Books 1-3: neural networks, gradient descent, attention. What’s different is the <em>system</em> around the model: what it senses, how fast it has to act, and what happens when it’s wrong. A recommendation model that’s late by 200ms produces a stale suggestion; a balance controller that’s late by 200ms has already fallen over. That difference in consequence, and in timing budget, is the organizing idea of this entire track, and this chapter lays out its vocabulary and its central loop before any of the later, more sophisticated modules build on it.</p>
+</section>
+<section id="exposition" class="level2" data-number="58.2">
+<h2 data-number="58.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">58.2</span> Exposition</h2>
+<section id="physical-ai-vs.-digital-ai" class="level3" data-number="58.2.1">
+<h3 data-number="58.2.1" class="anchored" data-anchor-id="physical-ai-vs.-digital-ai"><span class="header-section-number">58.2.1</span> Physical AI vs.&nbsp;Digital AI</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>Digital AI (Books 1-3)</th>
+<th>Physical AI (this track)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Input</td>
+<td>Curated dataset or user-submitted text/image</td>
+<td>Continuous, noisy sensor stream</td>
+</tr>
+<tr class="even">
+<td>Output consequence</td>
+<td>Displayed, logged, or fed to another system</td>
+<td>Directly actuates something in the physical world</td>
+</tr>
+<tr class="odd">
+<td>Timing</td>
+<td>Batch or request-response; a few hundred ms of latency is usually fine</td>
+<td>Often hard real-time: a control loop that’s late is a control loop that’s wrong</td>
+</tr>
+<tr class="even">
+<td>Failure mode</td>
+<td>Wrong answer, bad recommendation, embarrassing output</td>
+<td>Collision, dropped payload, injury</td>
+</tr>
+<tr class="odd">
+<td>Observability</td>
+<td>The whole dataset is available; inspectable offline</td>
+<td>Partial and noisy: only what the sensors currently report</td>
+</tr>
+<tr class="even">
+<td>Train/serve gap</td>
+<td>Train/serve skew</td>
+<td>The <strong>sim-to-real gap</strong>: a much harder version of the same problem</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-sense-plan-act-loop" class="level3" data-number="58.2.2">
+<h3 data-number="58.2.2" class="anchored" data-anchor-id="the-sense-plan-act-loop"><span class="header-section-number">58.2.2</span> The Sense-Plan-Act Loop</h3>
+<p>Every physical AI system, no matter how sophisticated, is an instance of one loop: <strong>sense</strong>, turn raw sensor signal into a useful representation of the world (Chapter 59, Perception); <strong>plan</strong>, decide what to do next given that representation (Chapters 60-61, World Models and Vision-Language-Action Models, both of which are, in different ways, methods for turning “here’s what I sense” into “here’s what should happen next”); <strong>act</strong>, turn a decision into motor commands (Chapter 63, Learning Robot Policies, where the thing that actually produces actions gets trained). Chapters 62 (Simulation), 64 (Edge Compute), and 65 (Deployment &amp; Safety) aren’t stages of the loop itself. They’re about where the loop gets practiced before touching hardware (62), what it physically runs on (64), and how it’s operated responsibly once live (65, extending Book 2’s Responsible AI material into a domain where the stakes are physical).</p>
+</section>
+<section id="degrees-of-freedom-sensors-and-actuators" class="level3" data-number="58.2.3">
+<h3 data-number="58.2.3" class="anchored" data-anchor-id="degrees-of-freedom-sensors-and-actuators"><span class="header-section-number">58.2.3</span> Degrees of Freedom, Sensors, and Actuators</h3>
+<p>A robot’s <strong>degrees of freedom (DOF)</strong> is the number of independent ways it can move: a single rotating joint is 1 DOF, a human arm (shoulder, elbow, wrist) has roughly 7. More DOF means more dexterity and a larger <em>workspace</em> (the reachable volume), but also a harder control and planning problem: every DOF is another number a policy has to get right, simultaneously, many times per second.</p>
+<p><strong>Sensors</strong> turn the physical world into numbers:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Sensor</th>
+<th>Measures</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Camera (RGB)</td>
+<td>Visible light, 2D image</td>
+<td>Object recognition, scene understanding</td>
+</tr>
+<tr class="even">
+<td>Depth camera (RGB-D)</td>
+<td>Distance per pixel</td>
+<td>3D scene reconstruction, grasping</td>
+</tr>
+<tr class="odd">
+<td>LiDAR</td>
+<td>Time-of-flight point cloud</td>
+<td>Mapping, obstacle detection at range</td>
+</tr>
+<tr class="even">
+<td>IMU (inertial measurement unit)</td>
+<td>Acceleration + angular velocity</td>
+<td>Orientation, balance, dead-reckoning</td>
+</tr>
+<tr class="odd">
+<td>Joint encoder</td>
+<td>Angle or position of a joint</td>
+<td>Proprioception: knowing the robot’s own pose</td>
+</tr>
+<tr class="even">
+<td>Force/torque sensor</td>
+<td>Contact force</td>
+<td>Safe manipulation, detecting collisions</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Actuators</strong> turn numbers back into motion: motors, servos, hydraulic/pneumatic cylinders, grippers. Every actuator has limits (maximum torque, maximum speed, minimum achievable increment), and part of the sim-to-real gap is that simulated actuators are usually idealised (instant, unlimited, noiseless) in ways real ones never are.</p>
+</section>
+<section id="open-loop-vs.-closed-loop-control" class="level3" data-number="58.2.4">
+<h3 data-number="58.2.4" class="anchored" data-anchor-id="open-loop-vs.-closed-loop-control"><span class="header-section-number">58.2.4</span> Open-Loop vs.&nbsp;Closed-Loop Control</h3>
+<p><strong>Open-loop control</strong> issues commands without checking the result: “drive forward at 1 m/s for 3 seconds.” It’s simple and requires no sensing during execution, but any error (a slightly uneven floor, a slightly under-powered motor) accumulates with nothing to correct it. This is <strong>dead-reckoning</strong>, and it drifts.</p>
+<p><strong>Closed-loop control</strong> measures the actual outcome and corrects for the difference between where the system is and where it should be, continuously:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>error</mtext><mo>=</mo><mtext>target</mtext><mo>−</mo><mtext>measured</mtext><mspace width="2em"></mspace><mtext>command</mtext><mo>=</mo><mi>f</mi><mo stretchy="false">(</mo><mtext>error</mtext><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{error} = \text{target} - \text{measured} \qquad \text{command} = f(\text{error})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord text"><span class="mord">error</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8095em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">target</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">measured</span></span><span class="mspace" style="margin-right:2em;"></span><span class="mord text"><span class="mord">command</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1076em;">f</span><span class="mopen">(</span><span class="mord text"><span class="mord">error</span></span><span class="mclose">)</span></span></span></span></span></p>
+<p>This chapter’s tutorial implements the simplest and most common version of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>f</mi></mrow><annotation encoding="application/x-tex">f</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.1076em;">f</span></span></span></span>: a <strong>PID controller</strong> (Proportional-Integral-Derivative), which computes a command from the current error, the accumulated error over time, and the rate of change of the error:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>output</mtext><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>=</mo><msub><mi>k</mi><mi>p</mi></msub><mtext> </mtext><mi>e</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>k</mi><mi>i</mi></msub><msubsup><mo>∫</mo><mn>0</mn><mi>t</mi></msubsup><mi>e</mi><mo stretchy="false">(</mo><mi>τ</mi><mo stretchy="false">)</mo><mtext> </mtext><mi>d</mi><mi>τ</mi><mo>+</mo><msub><mi>k</mi><mi>d</mi></msub><mfrac><mrow><mi>d</mi><mi>e</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo></mrow><mrow><mi>d</mi><mi>t</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{output}(t) = k_p \, e(t) + k_i \int_0^t e(\tau)\,d\tau + k_d \frac{de(t)}{dt}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">output</span></span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">p</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">e</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.4554em;vertical-align:-0.9119em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop"><span class="mop op-symbol large-op" style="margin-right:0.4445em;position:relative;top:-0.0011em;">∫</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.5435em;"><span style="top:-1.7881em;margin-left:-0.4445em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span><span style="top:-3.8129em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">t</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9119em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">e</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.1132em;">τ</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">d</span><span class="mord mathnormal" style="margin-right:0.1132em;">τ</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.113em;vertical-align:-0.686em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0315em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">d</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="mord mathnormal">t</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="mord mathnormal">e</span><span class="mopen">(</span><span class="mord mathnormal">t</span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+<p>Almost every real-world closed-loop controller, from a robot arm’s joint controller to a thermostat, is either literally a PID controller or a refinement of one.</p>
+</section>
+<section id="why-control-runs-at-fixed-high-frequency" class="level3" data-number="58.2.5">
+<h3 data-number="58.2.5" class="anchored" data-anchor-id="why-control-runs-at-fixed-high-frequency"><span class="header-section-number">58.2.5</span> Why Control Runs at Fixed, High Frequency</h3>
+<p>A chatbot can take 2 seconds to respond and the user barely notices. A balance controller for a two-wheeled robot that takes 2 seconds to respond has already fallen over. Physical control loops typically run at a fixed frequency, commonly 50-1000 Hz depending on the task, for three reasons. First, the physical world doesn’t pause while a model thinks; a late correction is a wrong correction. Second, closed-loop stability analysis generally assumes a fixed, known control-loop period. An inconsistent loop rate can make an otherwise-stable controller oscillate or diverge. Third, downstream components, a learned policy (Chapter 63), a VLA model (Chapter 61), have to fit their inference time inside this loop’s budget, which is exactly why Chapter 64 (Edge Compute) cares so much about inference latency and why models get compressed (quantised, pruned, distilled) to run on-device rather than round-tripping to the cloud.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Task category</th>
+<th>Typical control loop frequency</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>High-level planning / task selection</td>
+<td>1-10 Hz</td>
+</tr>
+<tr class="even">
+<td>Navigation / path following</td>
+<td>10-50 Hz</td>
+</tr>
+<tr class="odd">
+<td>Manipulator joint control</td>
+<td>100-1000 Hz</td>
+</tr>
+<tr class="even">
+<td>Balance / legged locomotion</td>
+<td>200-1000+ Hz</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-sim-to-real-gap" class="level3" data-number="58.2.6">
+<h3 data-number="58.2.6" class="anchored" data-anchor-id="the-sim-to-real-gap"><span class="header-section-number">58.2.6</span> The Sim-to-Real Gap</h3>
+<p>Training or testing directly on physical hardware is slow, expensive, and, critically, unsafe when the policy is still bad. So training happens in simulation instead. But a simulator is a model of physics, not physics, and it’s always wrong in some way: friction coefficients are approximate, sensor noise is idealised, contact dynamics are notoriously hard to simulate accurately. A policy that performs perfectly in simulation can fail on the first real trial because it has implicitly learned to exploit some quirk of the simulator that doesn’t exist in reality. <strong>Domain randomization</strong>, deliberately varying simulated physics, lighting, and textures during training so the policy can’t overfit to any one simulated world, is the primary mitigation, covered in full in Chapter 62.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="58.3">
+<h2 data-number="58.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">58.3</span> Trade-offs and Limits</h2>
+<p><strong>More DOF vs.&nbsp;controllability.</strong> A robot with more degrees of freedom can do more, but every additional DOF adds another dimension a planner or a learned policy has to get right simultaneously. Simple tasks are often best served by the simplest robot that can do them: a 1-2 DOF gripper or pan-tilt mount is fine for a single constrained motion and is cheapest to build and control; a 6-DOF industrial arm is the standard for general manipulation because 6 is exactly enough to reach any position <em>and</em> orientation in 3D space (3 for position, 3 for orientation); 7+ DOF (“redundant”) arms add flexibility to avoid obstacles or awkward configurations for the same end-effector pose, at the cost of infinitely many joint solutions for one target pose.</p>
+<p><strong>Simulation fidelity vs.&nbsp;training speed.</strong> A highly accurate simulator is slow to run, which limits how many training episodes are affordable. A fast, simplified simulator allows more training, but risks a wider sim-to-real gap. Chapter 62 covers this trade-off directly.</p>
+<p><strong>Edge inference vs.&nbsp;model capability.</strong> The biggest, most capable model isn’t an option if it can’t run inside the control loop’s latency budget on the hardware being shipped. Chapter 64 covers the compression techniques that make this trade-off less painful.</p>
+</section>
+<section id="procedures" class="level2" data-number="58.4">
+<h2 data-number="58.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">58.4</span> Procedures</h2>
+<p id="proc-58-1"><strong>Procedure 58.1 (Simulate a Physical Plant with Friction and a Constant Disturbance).</strong> <em>When to use:</em> building any closed-loop control example, real or for teaching, where the system needs sustained control effort to hold a position away from equilibrium.</p>
+<div id="lst-pointmass" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pointmass-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;58.1: A 1D point mass with friction and a constant bias force
+</figcaption>
+<div aria-describedby="lst-pointmass-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">class</span> PointMass1D:</span>
+<span id="cb1-2">    <span class="co">"""A point mass on a slight incline: friction opposes</span></span>
+<span id="cb1-3"><span class="co">    velocity, and a constant bias force (like gravity</span></span>
+<span id="cb1-4"><span class="co">    pulling it back downhill) must be continuously fought</span></span>
+<span id="cb1-5"><span class="co">    to hold any position away from zero."""</span></span>
+<span id="cb1-6"></span>
+<span id="cb1-7">    <span class="kw">def</span> <span class="fu">__init__</span>(</span>
+<span id="cb1-8">        <span class="va">self</span>,</span>
+<span id="cb1-9">        mass<span class="op">=</span><span class="fl">1.0</span>,</span>
+<span id="cb1-10">        friction<span class="op">=</span><span class="fl">0.6</span>,</span>
+<span id="cb1-11">        bias_force<span class="op">=-</span><span class="fl">3.0</span>,</span>
+<span id="cb1-12">        dt<span class="op">=</span><span class="fl">0.01</span>,</span>
+<span id="cb1-13">    ):</span>
+<span id="cb1-14">        <span class="va">self</span>.mass <span class="op">=</span> mass</span>
+<span id="cb1-15">        <span class="va">self</span>.friction <span class="op">=</span> friction</span>
+<span id="cb1-16">        <span class="va">self</span>.bias_force <span class="op">=</span> bias_force</span>
+<span id="cb1-17">        <span class="va">self</span>.dt <span class="op">=</span> dt</span>
+<span id="cb1-18">        <span class="va">self</span>.position <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb1-19">        <span class="va">self</span>.velocity <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb1-20"></span>
+<span id="cb1-21">    <span class="kw">def</span> step(<span class="va">self</span>, commanded_force):</span>
+<span id="cb1-22">        friction_force <span class="op">=</span> <span class="op">-</span><span class="va">self</span>.friction <span class="op">*</span> <span class="va">self</span>.velocity</span>
+<span id="cb1-23">        total_force <span class="op">=</span> (</span>
+<span id="cb1-24">            commanded_force <span class="op">+</span> friction_force <span class="op">+</span> <span class="va">self</span>.bias_force</span>
+<span id="cb1-25">        )</span>
+<span id="cb1-26">        accel <span class="op">=</span> total_force <span class="op">/</span> <span class="va">self</span>.mass</span>
+<span id="cb1-27">        <span class="va">self</span>.velocity <span class="op">+=</span> accel <span class="op">*</span> <span class="va">self</span>.dt</span>
+<span id="cb1-28">        <span class="va">self</span>.position <span class="op">+=</span> <span class="va">self</span>.velocity <span class="op">*</span> <span class="va">self</span>.dt</span>
+<span id="cb1-29">        <span class="cf">return</span> <span class="va">self</span>.position</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-58-2"><strong>Procedure 58.2 (Implement and Tune a PID Controller).</strong> <em>When to use:</em> any closed-loop system, real or simulated, that needs <code>kp</code>, <code>ki</code>, <code>kd</code> chosen.</p>
+<div id="lst-pid" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;58.2: A PID controller computing a command from proportional, integral, and derivative terms
+</figcaption>
+<div aria-describedby="lst-pid-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">class</span> PIDController:</span>
+<span id="cb2-2">    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, kp, ki, kd, dt):</span>
+<span id="cb2-3">        <span class="va">self</span>.kp, <span class="va">self</span>.ki, <span class="va">self</span>.kd <span class="op">=</span> kp, ki, kd</span>
+<span id="cb2-4">        <span class="va">self</span>.dt <span class="op">=</span> dt</span>
+<span id="cb2-5">        <span class="va">self</span>.integral <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb2-6">        <span class="va">self</span>.prev_error <span class="op">=</span> <span class="va">None</span></span>
+<span id="cb2-7"></span>
+<span id="cb2-8">    <span class="kw">def</span> compute(<span class="va">self</span>, error):</span>
+<span id="cb2-9">        <span class="va">self</span>.integral <span class="op">+=</span> error <span class="op">*</span> <span class="va">self</span>.dt</span>
+<span id="cb2-10">        derivative <span class="op">=</span> (</span>
+<span id="cb2-11">            <span class="fl">0.0</span> <span class="cf">if</span> <span class="va">self</span>.prev_error <span class="kw">is</span> <span class="va">None</span></span>
+<span id="cb2-12">            <span class="cf">else</span> (error <span class="op">-</span> <span class="va">self</span>.prev_error) <span class="op">/</span> <span class="va">self</span>.dt</span>
+<span id="cb2-13">        )</span>
+<span id="cb2-14">        <span class="va">self</span>.prev_error <span class="op">=</span> error</span>
+<span id="cb2-15">        <span class="cf">return</span> (</span>
+<span id="cb2-16">            <span class="va">self</span>.kp <span class="op">*</span> error</span>
+<span id="cb2-17">            <span class="op">+</span> <span class="va">self</span>.ki <span class="op">*</span> <span class="va">self</span>.integral</span>
+<span id="cb2-18">            <span class="op">+</span> <span class="va">self</span>.kd <span class="op">*</span> derivative</span>
+<span id="cb2-19">        )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Manual tuning sequence: set <code>ki=0, kd=0</code>; increase <code>kp</code> until the system responds quickly but starts to oscillate, then back off to roughly 50-70% of that value. Add <code>kd</code> gradually. It damps oscillation and reduces overshoot, but too much amplifies sensor noise (the derivative of a noisy measurement is more noise). Add <code>ki</code> only if there’s a persistent steady-state error, and increase it slowly. Too much causes slow oscillation (“integral windup”) that’s hard to damp back out. If windup is a problem, clamp the accumulated integral:</p>
+<div id="lst-antiwindup" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-antiwindup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;58.3: Anti-windup: clamping the integral term so it can’t accumulate without bound
+</figcaption>
+<div aria-describedby="lst-antiwindup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">class</span> PIDWithAntiWindup:</span>
+<span id="cb3-2">    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, kp, ki, kd, dt, integral_limit<span class="op">=</span><span class="fl">10.0</span>):</span>
+<span id="cb3-3">        <span class="va">self</span>.kp, <span class="va">self</span>.ki, <span class="va">self</span>.kd <span class="op">=</span> kp, ki, kd</span>
+<span id="cb3-4">        <span class="va">self</span>.dt, <span class="va">self</span>.integral_limit <span class="op">=</span> dt, integral_limit</span>
+<span id="cb3-5">        <span class="va">self</span>.integral, <span class="va">self</span>.prev_error <span class="op">=</span> <span class="fl">0.0</span>, <span class="va">None</span></span>
+<span id="cb3-6"></span>
+<span id="cb3-7">    <span class="kw">def</span> compute(<span class="va">self</span>, error):</span>
+<span id="cb3-8">        <span class="va">self</span>.integral <span class="op">=</span> np.clip(</span>
+<span id="cb3-9">            <span class="va">self</span>.integral <span class="op">+</span> error <span class="op">*</span> <span class="va">self</span>.dt,</span>
+<span id="cb3-10">            <span class="op">-</span><span class="va">self</span>.integral_limit,</span>
+<span id="cb3-11">            <span class="va">self</span>.integral_limit,</span>
+<span id="cb3-12">        )</span>
+<span id="cb3-13">        derivative <span class="op">=</span> (</span>
+<span id="cb3-14">            <span class="fl">0.0</span> <span class="cf">if</span> <span class="va">self</span>.prev_error <span class="kw">is</span> <span class="va">None</span></span>
+<span id="cb3-15">            <span class="cf">else</span> (error <span class="op">-</span> <span class="va">self</span>.prev_error) <span class="op">/</span> <span class="va">self</span>.dt</span>
+<span id="cb3-16">        )</span>
+<span id="cb3-17">        <span class="va">self</span>.prev_error <span class="op">=</span> error</span>
+<span id="cb3-18">        <span class="cf">return</span> (</span>
+<span id="cb3-19">            <span class="va">self</span>.kp <span class="op">*</span> error</span>
+<span id="cb3-20">            <span class="op">+</span> <span class="va">self</span>.ki <span class="op">*</span> <span class="va">self</span>.integral</span>
+<span id="cb3-21">            <span class="op">+</span> <span class="va">self</span>.kd <span class="op">*</span> derivative</span>
+<span id="cb3-22">        )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-58-3"><strong>Procedure 58.3 (Compute Forward Kinematics for a Serial-Link Arm).</strong> <em>When to use:</em> any time a manipulator’s end-effector position is needed given its current joint angles.</p>
+<div id="lst-fk" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-fk-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;58.4: Forward kinematics for an N-link planar arm, chaining each link onto the last
+</figcaption>
+<div aria-describedby="lst-fk-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb4-2"></span>
+<span id="cb4-3"><span class="kw">def</span> forward_kinematics(thetas, lengths):</span>
+<span id="cb4-4">    <span class="co">"""thetas: list of joint angles (radians), lengths:</span></span>
+<span id="cb4-5"><span class="co">    list of link lengths. Chains each link's</span></span>
+<span id="cb4-6"><span class="co">    rotation+translation onto the end of the previous one."""</span></span>
+<span id="cb4-7">    x, y, cumulative_angle <span class="op">=</span> <span class="fl">0.0</span>, <span class="fl">0.0</span>, <span class="fl">0.0</span></span>
+<span id="cb4-8">    joints <span class="op">=</span> [(x, y)]</span>
+<span id="cb4-9">    <span class="cf">for</span> theta, length <span class="kw">in</span> <span class="bu">zip</span>(thetas, lengths):</span>
+<span id="cb4-10">        cumulative_angle <span class="op">+=</span> theta</span>
+<span id="cb4-11">        x <span class="op">+=</span> length <span class="op">*</span> np.cos(cumulative_angle)</span>
+<span id="cb4-12">        y <span class="op">+=</span> length <span class="op">*</span> np.sin(cumulative_angle)</span>
+<span id="cb4-13">        joints.append((x, y))</span>
+<span id="cb4-14">    <span class="co"># last entry is the end effector</span></span>
+<span id="cb4-15">    <span class="cf">return</span> joints</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting that each joint’s angle is relative to the <em>previous link’s</em> orientation, not a fixed global frame. That’s why <code>cumulative_angle</code> accumulates rather than each <code>theta</code> being used on its own.</p>
+<p id="proc-58-4"><strong>Procedure 58.4 (Reason About Sensor Selection).</strong> <em>When to use:</em> early in scoping a physical AI system, before committing to a hardware bill of materials. For each sensor candidate, ask: what does it directly measure (a camera measures light, not distance; depth is inferred); what’s its update rate (an IMU might run at 1000 Hz, a LiDAR scan might take 50-100ms); what’s its noise characteristic (camera-based depth is noisier at range than dedicated depth sensors); what does it cost in dollars and in compute to process (raw LiDAR point clouds are expensive to process in real time); and does it work in the deployment environment (cameras struggle in low light/glare, some LiDAR struggles outdoors in direct sun). <strong>Common mistake:</strong> picking the sensor with the best headline spec without checking it can be processed fast enough to fit inside the control loop’s latency budget.</p>
+</section>
+<section id="worked-example" class="level2" data-number="58.5">
+<h2 data-number="58.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">58.5</span> Worked Example</h2>
+<p>The chapter’s tutorial builds three things with nothing but numpy: a PID controller fighting a constant disturbance, a head-to-head of open-loop against closed-loop control under model mismatch, and forward kinematics for a 2-link arm. All values below are the actual computed outputs (<code>RANDOM_SEED = 42</code>).</p>
+<p>First, a sanity check on the plant itself (<a href="#lst-pointmass" class="quarto-xref">Listing&nbsp;<span>58.1</span></a>): with zero commanded force, a point mass with <code>friction=0.6</code>, <code>bias_force=-3.0</code> drifts to position <strong>-4.203</strong> after 200 steps at <code>dt=0.01</code>, confirming the bias force alone pulls the system away from the origin, which is exactly the disturbance the controller has to fight.</p>
+<p>Next, full PID (<code>kp=8.0, ki=2.0, kd=4.0</code>) is compared against P-only (<code>kp=8.0, ki=0, kd=0</code>), both driving the plant toward <code>target=5.0</code> over 2000 steps:</p>
+<div id="lst-pid-vs-ponly" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pid-vs-ponly-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;58.5: Full PID eliminates steady-state error; P-only structurally cannot
+</figcaption>
+<div aria-describedby="lst-pid-vs-ponly-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">pos_good, err_good <span class="op">=</span> run_closed_loop(kp<span class="op">=</span><span class="fl">8.0</span>, ki<span class="op">=</span><span class="fl">2.0</span>, kd<span class="op">=</span><span class="fl">4.0</span>)</span>
+<span id="cb5-2"><span class="bu">print</span>(</span>
+<span id="cb5-3">    <span class="ss">f'Full PID  -&gt; final position: </span><span class="sc">{</span>pos_good[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:.4f}</span><span class="ss">'</span></span>
+<span id="cb5-4">    <span class="ss">f'   final error: </span><span class="sc">{</span>err_good[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:.4f}</span><span class="ss">'</span></span>
+<span id="cb5-5">)</span>
+<span id="cb5-6"></span>
+<span id="cb5-7">pos_p_only, err_p_only <span class="op">=</span> run_closed_loop(kp<span class="op">=</span><span class="fl">8.0</span>, ki<span class="op">=</span><span class="fl">0.0</span>, kd<span class="op">=</span><span class="fl">0.0</span>)</span>
+<span id="cb5-8"><span class="bu">print</span>(</span>
+<span id="cb5-9">    <span class="ss">f'P-only    -&gt; final position: </span><span class="sc">{</span>pos_p_only[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:.4f}</span><span class="ss">'</span></span>
+<span id="cb5-10">    <span class="ss">f'   final error: </span><span class="sc">{</span>err_p_only[<span class="op">-</span><span class="dv">1</span>]<span class="sc">:.4f}</span><span class="ss">'</span></span>
+<span id="cb5-11">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Full PID settles at position <strong>5.0016</strong> (error <strong>-0.0016</strong>); P-only settles at <strong>4.6142</strong> (error <strong>0.3857</strong>). The P-only offset is not a tuning mistake. It’s structural: at equilibrium the proportional term <code>kp * error</code> has to exactly balance the bias force, and a smaller error would mean less counter-force, which the bias force would immediately overcome. Only the integral term, which keeps accumulating as long as <em>any</em> error persists, can drive that error to zero.</p>
+<p>The second comparison is the chapter’s central argument. An open-loop controller computes one fixed force at the start (assuming <code>friction=0.3</code>, no bias force) and applies it blindly for the whole run; a closed-loop PID measures and corrects every step. Both are tested with the <em>real</em> friction set to 4x the open-loop controller’s assumption:</p>
+<div id="lst-openloop-result" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-openloop-result-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;58.6: Open-loop drifts under model mismatch; closed-loop reaches target regardless
+</figcaption>
+<div aria-describedby="lst-openloop-result-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># model matches reality</span></span>
+<span id="cb6-2">pos_open_matched <span class="op">=</span> run_open_loop(real_friction<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb6-3"><span class="co"># real world has more friction than modelled</span></span>
+<span id="cb6-4">pos_open_mismatched <span class="op">=</span> run_open_loop(real_friction<span class="op">=</span><span class="fl">1.2</span>)</span>
+<span id="cb6-5">pos_closed, _ <span class="op">=</span> run_closed_loop(</span>
+<span id="cb6-6">    kp<span class="op">=</span><span class="fl">8.0</span>,</span>
+<span id="cb6-7">    ki<span class="op">=</span><span class="fl">2.0</span>,</span>
+<span id="cb6-8">    kd<span class="op">=</span><span class="fl">4.0</span>,</span>
+<span id="cb6-9">    bias_force<span class="op">=</span><span class="fl">0.0</span>,</span>
+<span id="cb6-10">    friction<span class="op">=</span><span class="fl">1.2</span>,</span>
+<span id="cb6-11">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Results: open-loop with a matching model reaches <strong>4.171</strong> (target 5.0), even a <em>correct</em> model only gets close, because friction depends on velocity, which changes throughout the run, so a single fixed force was always an approximation. Open-loop with the real friction 4x higher than assumed reaches only <strong>1.199</strong>. The controller has no way to notice or correct, because it never measures anything. Closed-loop PID, facing the identical friction mismatch, reaches <strong>5.003</strong>, essentially exact, because it needs an accurate <em>measurement</em> of the error, not an accurate <em>model</em> of the world. That asymmetry is the entire case for closed-loop control.</p>
+<p>Finally, forward kinematics for a 2-link arm (<a href="#lst-fk" class="quarto-xref">Listing&nbsp;<span>58.4</span></a>, specialised to two links) with <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>l</mi><mn>1</mn></msub><mo>=</mo><mn>1.0</mn></mrow><annotation encoding="application/x-tex">l_1=1.0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1.0</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>l</mi><mn>2</mn></msub><mo>=</mo><mn>0.8</mn></mrow><annotation encoding="application/x-tex">l_2=0.8</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.8</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>θ</mi><mn>1</mn></msub><mo>=</mo><mn>30</mn><mi mathvariant="normal">°</mi></mrow><annotation encoding="application/x-tex">\theta_1=30°</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord">30°</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>θ</mi><mn>2</mn></msub><mo>=</mo><mn>45</mn><mi mathvariant="normal">°</mi></mrow><annotation encoding="application/x-tex">\theta_2=45°</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord">45°</span></span></span></span>:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>x</mi><mn>1</mn></msub><mo>=</mo><msub><mi>l</mi><mn>1</mn></msub><mi>cos</mi><mo>⁡</mo><msub><mi>θ</mi><mn>1</mn></msub><mo separator="true">,</mo><mspace width="1em"></mspace><msub><mi>y</mi><mn>1</mn></msub><mo>=</mo><msub><mi>l</mi><mn>1</mn></msub><mi>sin</mi><mo>⁡</mo><msub><mi>θ</mi><mn>1</mn></msub><mo separator="true">,</mo><mspace width="1em"></mspace><msub><mi>x</mi><mn>2</mn></msub><mo>=</mo><msub><mi>x</mi><mn>1</mn></msub><mo>+</mo><msub><mi>l</mi><mn>2</mn></msub><mi>cos</mi><mo>⁡</mo><mo stretchy="false">(</mo><msub><mi>θ</mi><mn>1</mn></msub><mo>+</mo><msub><mi>θ</mi><mn>2</mn></msub><mo stretchy="false">)</mo><mo separator="true">,</mo><mspace width="1em"></mspace><msub><mi>y</mi><mn>2</mn></msub><mo>=</mo><msub><mi>y</mi><mn>1</mn></msub><mo>+</mo><msub><mi>l</mi><mn>2</mn></msub><mi>sin</mi><mo>⁡</mo><mo stretchy="false">(</mo><msub><mi>θ</mi><mn>1</mn></msub><mo>+</mo><msub><mi>θ</mi><mn>2</mn></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">x_1 = l_1\cos\theta_1,\quad y_1 = l_1\sin\theta_1,\quad x_2 = x_1 + l_2\cos(\theta_1+\theta_2),\quad y_2 = y_1 + l_2\sin(\theta_1+\theta_2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">cos</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">sin</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">cos</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:1em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0197em;">l</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0197em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">sin</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">θ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></span></p>
+<p>gives an end-effector position of <strong>(1.073, 1.273)</strong>: each joint configuration maps to exactly one end-effector position (forward kinematics), while the reverse problem (inverse kinematics: target position to joint angles) can have zero, one, or two solutions (elbow-up, elbow-down) and is usually solved numerically rather than in closed form for arms with more than two or three links.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="58.6">
+<h2 data-number="58.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">58.6</span> History and Further Reading</h2>
+<p>Siegwart, Nourbakhsh &amp; Scaramuzza’s <em>Introduction to Autonomous Mobile Robots</em> <span class="citation" data-cites="siegwart2011autonomousmobilerobots">(<a href="#ref-siegwart2011autonomousmobilerobots" role="doc-biblioref">Siegwart et al. 2011</a>)</span> gives a deeper, classical-robotics treatment of kinematics and control than this chapter attempts, and is worth having on hand for the rest of this track. Book 1, Chapter 4 (Calculus &amp; Optimization) covers the gradient descent that underlies every learned component met later in this track. Book 2’s Responsible AI chapter is the safety/governance foundation Chapter 65 (Deployment, Fleet Monitoring &amp; Safety) builds on. Book 2, Chapter 35 (RL &amp; RLHF) supplies the reinforcement-learning vocabulary Chapter 63 (Learning Robot Policies) reuses for motor control.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="58.7">
+<h2 data-number="58.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">58.7</span> How This Connects</h2>
+<p>This chapter opens the physical AI track and has no in-track prerequisite. It draws on Book 2’s coverage of gradient-based optimization and reinforcement learning, and on Book 2’s Responsible AI material, which this track’s Chapter 65 extends into a domain with physical safety stakes. It enables every later chapter in this track: Chapter 59 (Perception) is the “sense” stage; Chapters 60-61 (World Models, Vision-Language-Action Models) are ways of “planning”; Chapter 63 (Learning Robot Policies) is how the “act” stage gets trained; Chapter 62 (Simulation) is where all of the above happens safely before touching hardware; Chapters 64-65 (Edge Compute, Deployment &amp; Safety) cover where and how it ships. It’s often confused with “robotics” as a whole field, which includes mechanical design, manufacturing, and classical motion planning well beyond this track’s scope, versus “physical AI” specifically, the narrower slice this track covers: how learned models fit into the sense-plan-act loop.</p>
+</section>
+<section id="exercises" class="level2" data-number="58.8">
+<h2 data-number="58.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">58.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-58-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three stages of the sense-plan-act loop and, for each, name the chapter in this track that covers it.</p></li>
+<li id="ex-58-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in one or two sentences why a P-only controller cannot eliminate steady-state error against a constant disturbance, using the equilibrium argument from this chapter.</p></li>
+<li id="ex-58-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-pid" class="quarto-xref">Listing&nbsp;<span>58.2</span></a>, run the closed-loop simulation with <code>kp=8.0, ki=0.5, kd=4.0</code> (a smaller integral gain than the chapter’s worked example) and describe, without running code if unavailable, whether you’d expect the final error to land between the full-PID value (-0.0016) and the P-only value (0.3857), and why.</p></li>
+<li id="ex-58-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-fk" class="quarto-xref">Listing&nbsp;<span>58.4</span></a> generalised to three links with <code>lengths=[1.0, 0.8, 0.5]</code> and <code>thetas</code> of 30°, -20°, and 45° (in that order, in radians), compute the end-effector position by hand or by tracing the accumulation logic.</p></li>
+<li id="ex-58-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer wants to skip simulation entirely and tune their robot’s PID gains directly on hardware because “it’s faster.” Using this chapter’s sim-to-real material, write the two or three sentences you’d say back, including one concrete risk.</p></li>
+<li id="ex-58-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A robot design review is deciding between a 6-DOF arm and a 7-DOF arm for a fixed pick-and-place task with no obstacles. Using the DOF trade-off discussion, argue for the 6-DOF choice.</p></li>
+<li id="ex-58-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the relevant chapter of Siegwart, Nourbakhsh &amp; Scaramuzza on kinematics. Compare its treatment of inverse kinematics to this chapter’s brief mention, and summarise in a few sentences why closed-form IK becomes impractical past 2-3 links.</p></li>
+<li id="ex-58-8"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A control loop is described as running at “10 Hz” for high-level planning and “500 Hz” for manipulator joint control. Explain why these two numbers are so different, using the control-loop-frequency table from this chapter.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="58.9">
+<h2 data-number="58.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">58.9</span> Mental Model</h2>
+<p>Physical AI is digital AI plus a clock and a body: the same learned components, wrapped in a sense-plan-act loop that has to run fast enough and correct for a world that never matches the model exactly. Closed-loop beats open-loop not because it’s smarter, but because it trades “predict the world correctly” for the much easier “measure the error and correct it.” That trade is the single idea underneath every chapter that follows in this track.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-siegwart2011autonomousmobilerobots" class="csl-entry" role="listitem">
+Siegwart, Roland, Illah R. Nourbakhsh, and Davide Scaramuzza. 2011. <em>Introduction to Autonomous Mobile Robots</em>. 2nd ed. MIT Press.
+</div>
+</div>
+</section>

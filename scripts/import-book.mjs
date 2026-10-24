@@ -50,6 +50,23 @@ const meta = (key) => yml.match(new RegExp(`^\\s+${key}:\\s*"?(.*?)"?\\s*$`, 'm'
 const book = { slug, title: meta('title'), subtitle: meta('subtitle'), author: meta('author'), chapters: [], anchors: {} };
 
 const pageSlug = (file) => file;
+
+// Quarto numbers chapters from 1 in every volume, but the prose uses the series' numbers
+// ("Procedure 41.1", "see Chapter 39"). The file names carry those (ch41-…). Renumber
+// Quarto's own numbers to match: headings, captions and cross-reference text.
+const chapterFiles = files.filter((f) => /^ch\d+/.test(f));
+const seriesNumber = new Map(chapterFiles.map((f, i) => [String(i + 1), String(Number(f.match(/^ch(\d+)/)[1]))]));
+const renumber = (s) => s.replace(/^(\d+)(?=$|\.)/, (n) => seriesNumber.get(n) ?? n);
+function renumberAll($, main) {
+	main.find('.header-section-number, .chapter-number').each((_, el) => { $(el).text(renumber($(el).text().trim())); });
+	main.find('[data-number]').each((_, el) => { $(el).attr('data-number', renumber($(el).attr('data-number'))); });
+	// "Listing 4.2:", "Figure 4.1:" in captions, and "Listing 4.6", "Chapter 2" in cross-reference links
+	main.find('figcaption, a.quarto-xref').each((_, el) => {
+		const node = $(el);
+		node.html(node.html().replace(/\b(Chapter|Section|Listing|Figure|Table|Equation)((?:&nbsp;|\s|<span>)+)(\d+)(?=[.<:\s]|$)/g,
+			(_, kind, gap, n) => `${kind}${gap}${seriesNumber.get(n) ?? n}`));
+	});
+}
 const href = (file, id = '') => `${base}/${pageSlug(file)}${id ? `#${id}` : ''}`;
 
 function math($) {
@@ -72,6 +89,7 @@ for (const file of files) {
 	const main = $('main#quarto-document-content');
 
 	// Title and number come from the title block. The site draws its own heading.
+	renumberAll($, main);
 	const h1 = main.find('header#title-block-header h1');
 	const number = h1.find('.chapter-number').text().trim() || null;
 	const title = (h1.find('.chapter-title').text() || h1.text()).replace(/\s+/g, ' ').trim();

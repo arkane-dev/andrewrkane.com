@@ -1,0 +1,239 @@
+<p>Book 1’s opening chapter mapped the history of AI and data science broadly: rules, statistical ML, deep learning and foundation models. This chapter retraces a narrower, parallel arc: specifically how the field of computer vision answered the same underlying question, <em>how do you turn pixels into something a computer can reason about?</em>, across roughly seventy years. It is this track’s own landscape chapter, not a restatement of Book 1’s, and every module for the rest of this track (CNNs, ResNets, detection and segmentation, Vision Transformers, and, in the chapters after this one, generative and multimodal models) is a stop on the route this chapter lays out.</p>
+<section id="motivation" class="level2" data-number="67.1">
+<h2 data-number="67.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">67.1</span> Motivation</h2>
+<p>The core AI/ML curriculum in Books 1 and 2 never opens an image. Tabular data, text, and sequences dominate the enterprise ML and LLM landscape a Solutions Architect works in day to day, but a meaningful fraction of real deployments involve cameras, scanned documents, medical imagery, satellite photos, or manufacturing defect detection, and those problems have their own history, their own architectural lineage, and their own hard-won lessons about when a simpler approach beats a fashionable one. Understanding that history isn’t nostalgia: it directly informs a decision every vision project eventually has to make (hand-craft features, train a convolutional network, or reach for a transformer) and the wrong choice, made from unfamiliarity with the trade-offs rather than an informed comparison, is a common and expensive mistake.</p>
+</section>
+<section id="exposition" class="level2" data-number="67.2">
+<h2 data-number="67.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">67.2</span> Exposition</h2>
+<section id="the-three-eras-of-turning-pixels-into-meaning" class="level3" data-number="67.2.1">
+<h3 data-number="67.2.1" class="anchored" data-anchor-id="the-three-eras-of-turning-pixels-into-meaning"><span class="header-section-number">67.2.1</span> The Three Eras of Turning Pixels Into Meaning</h3>
+<p>Computer vision’s history divides into three eras, each answering “what should extract meaning from pixels?” differently:</p>
+<ol type="1">
+<li><strong>Hand-crafted features (pre-2012).</strong> A human designs an algorithm that extracts what they believe matters in an image (edges, gradients, corners) and a classical classifier (logistic regression, an SVM) works on top of those extracted features. The feature <em>extractor</em> is fixed at design time; only the classifier on top of it is trained.</li>
+<li><strong>Learned features, discriminative (2012 onward).</strong> A neural network learns, from data, what features to extract, optimising them end-to-end for the task at hand rather than relying on a human’s guess. This is the CNN era this track’s Chapters 68-70 cover in depth, and Chapter 71’s Vision Transformers continue it with a different architectural bet.</li>
+<li><strong>Learned features, generative and multimodal (2014 onward, accelerating sharply from 2020).</strong> Networks that don’t just classify images but <em>produce</em> them, increasingly conditioned on natural language. This track’s later chapters on generative foundations, diffusion models, and multimodal evaluation cover this lineage.</li>
+</ol>
+</section>
+<section id="the-timeline-in-detail" class="level3" data-number="67.2.2">
+<h3 data-number="67.2.2" class="anchored" data-anchor-id="the-timeline-in-detail"><span class="header-section-number">67.2.2</span> The Timeline in Detail</h3>
+<p><strong>Before 2012: hand-crafted features.</strong> Techniques like SIFT (Scale-Invariant Feature Transform) and HOG (Histogram of Oriented Gradients) represented the state of the art. Both encode a human insight: local gradient and edge patterns are more informative, and more robust to lighting and pose variation, than raw pixel intensities. They worked, HOG-based pedestrian detection was genuinely deployed and useful, but had a hard ceiling: a hand-designed feature encodes one person’s guess about what matters for one type of problem, not something the data itself was allowed to determine.</p>
+<p><strong>2012: the AlexNet/ImageNet moment.</strong> Three things converged: a deep (for the time) convolutional network, trained on GPUs, which made a network this large practical to train at all, using ReLU activations (which don’t saturate and vanish as badly as the sigmoid/tanh activations common before) and dropout (a regularisation technique preventing overfitting). Trained on ImageNet, over a million labelled photos spanning a thousand categories, itself a forcing function that only existed because of a deliberate, large-scale, multi-year data-collection and annotation effort, AlexNet beat the next-best hand-crafted-feature approach by a wide margin. This wasn’t an incremental improvement; it was the moment the field’s centre of gravity shifted from “design features” to “design an architecture and let training discover the features,” and it never shifted back.</p>
+<p><strong>The CNN era.</strong> VGG (2014) pushed the “stack learned conv layers” approach to its simplicity-driven extreme (Chapter 68). That approach hit a real wall, vanishing gradients in very deep plain networks, which residual connections resolved (Chapter 69), unlocking genuinely deep, 50-150+ layer networks as a practical, trainable default. CNN-backbone architectures then extended from whole-image classification to localised understanding: object detection and segmentation (Chapter 70).</p>
+<p><strong>The post-CNN split.</strong> Once CNNs were a mature, trainable, well-understood tool, the field split into at least two directions. Better discriminative architectures: Vision Transformers (2020, Chapter 71) apply the transformer architecture, already dominant in NLP by then, covered in Book 2, Chapter 29 (Transformers), directly to images, an architectural bet that turned out to scale extremely well with enough data. Generative architectures: the lineage of models that <em>produce</em> images rather than just classify them (autoencoders, then VAEs (2013), then GANs (2014)) culminating in diffusion models (2020), which became the dominant generative approach by a wide margin.</p>
+<p><strong>The current frontier: multimodal systems.</strong> CLIP (2021) trained a joint embedding space for images and text simultaneously, enabling models to be conditioned on natural language rather than a fixed label set. This is the technical foundation underneath modern text-to-image systems (Stable Diffusion, DALL-E, Midjourney): a diffusion model’s image generation, steered by a CLIP-style text encoder’s understanding of the prompt. It is also the direct connection between this track and Book 2’s LLM and generative-AI content.</p>
+</section>
+<section id="classical-vs.-learned-features-side-by-side" class="level3" data-number="67.2.3">
+<h3 data-number="67.2.3" class="anchored" data-anchor-id="classical-vs.-learned-features-side-by-side"><span class="header-section-number">67.2.3</span> Classical vs.&nbsp;Learned Features, Side by Side</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Aspect</th>
+<th>Hand-crafted (HOG/SIFT)</th>
+<th>Learned (CNN/ViT)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Who decides what matters</td>
+<td>A human, at design time</td>
+<td>The training data, via gradient descent</td>
+</tr>
+<tr class="even">
+<td>Data needed</td>
+<td>Little: no training required for the feature extractor itself</td>
+<td>Moderate to large, depending on model size</td>
+</tr>
+<tr class="odd">
+<td>Compute needed</td>
+<td>Low</td>
+<td>Moderate to high (GPU typically needed beyond toy scale)</td>
+</tr>
+<tr class="even">
+<td>Robust to real-world messiness (lighting/pose/occlusion)</td>
+<td>Moderate, by design</td>
+<td>High, given enough training data</td>
+</tr>
+<tr class="odd">
+<td>Best on small/clean/controlled data</td>
+<td>Often competitive or better</td>
+<td>Can overfit without enough data</td>
+</tr>
+<tr class="even">
+<td>Interpretability</td>
+<td>High: exactly what’s measured is known</td>
+<td>Low: features are learned, not designed</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="67.3">
+<h2 data-number="67.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">67.3</span> Trade-offs and Limits</h2>
+<p><strong>Classical vs.&nbsp;learned features are not a strict hierarchy.</strong> This chapter’s Worked Example demonstrates, with real measured numbers, that HOG features can underperform even raw pixels on a small, clean dataset. Hand-crafted features earn their keep specifically on the kind of large, messy, real-world data that made the 2012 moment matter, not universally.</p>
+<p><strong>Bigger or newer is not always the right tool.</strong> A classical approach with cheap, fast, interpretable features is sometimes the correct engineering choice: a small dataset, no GPU, a need for interpretability (a regulator or stakeholder wants to know exactly what the model is keying off, not “the CNN learned it”), or, as this chapter’s own result shows, data clean enough that feature engineering has nothing to add. One of the most common mistakes in a vision project is reaching for the newest architecture without first running the cheapest possible baseline to see whether it was ever necessary.</p>
+</section>
+<section id="procedures" class="level2" data-number="67.4">
+<h2 data-number="67.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">67.4</span> Procedures</h2>
+<p id="proc-67-1"><strong>Procedure 67.1 (Decide Between Classical CV Features and a Learned Model).</strong> <em>When to use:</em> starting a new vision task and deciding where to begin.</p>
+<p>Lean classical (HOG/SIFT plus a simple classifier) when the dataset is small (dozens to low hundreds of examples) and a deep model would badly overfit, there is no GPU and training time matters, an interpretable pipeline is required, or, per this chapter’s own tutorial result, the images are already clean, controlled, low-resolution, or synthetic. Lean learned (CNN, ViT) when images are large-scale, high-resolution, and have real lighting, pose, occlusion, or clutter variation, exactly the regime hand-crafted features struggle with, and exactly where the 2012 moment’s advantage was decisive. Whichever direction is chosen, run the cheapest possible baseline first.</p>
+<p id="proc-67-2"><strong>Procedure 67.2 (Benchmark a Classical Baseline Before Committing to Deep Learning).</strong> <em>When to use:</em> before spending engineering time on a deep learning pipeline.</p>
+<div id="lst-quick-baseline" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-quick-baseline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;67.1: A two-line sanity check: how well does the simplest possible approach do?
+</figcaption>
+<div aria-describedby="lst-quick-baseline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression</span>
+<span id="cb1-2"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> cross_val_score</span>
+<span id="cb1-3"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-4"></span>
+<span id="cb1-5"><span class="kw">def</span> quick_baseline(images, labels):</span>
+<span id="cb1-6">    X_flat <span class="op">=</span> images.reshape(<span class="bu">len</span>(images), <span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb1-7">    scores <span class="op">=</span> cross_val_score(</span>
+<span id="cb1-8">        LogisticRegression(max_iter<span class="op">=</span><span class="dv">2000</span>),</span>
+<span id="cb1-9">        X_flat,</span>
+<span id="cb1-10">        labels,</span>
+<span id="cb1-11">        cv<span class="op">=</span><span class="dv">5</span>,</span>
+<span id="cb1-12">    )</span>
+<span id="cb1-13">    <span class="cf">return</span> scores.mean(), scores.std()</span>
+<span id="cb1-14"></span>
+<span id="cb1-15"><span class="co"># mean_acc, std_acc = quick_baseline(my_images, my_labels)</span></span>
+<span id="cb1-16"><span class="co"># If this baseline is already close to what's needed, a deep model</span></span>
+<span id="cb1-17"><span class="co"># may not be</span></span>
+<span id="cb1-18"><span class="co"># worth the added complexity and compute: or it reveals exactly</span></span>
+<span id="cb1-19"><span class="co"># how much</span></span>
+<span id="cb1-20"><span class="co"># headroom a more sophisticated approach actually has to gain.</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-67-3"><strong>Procedure 67.3 (Extract HOG Features for a Classical Pipeline).</strong> <em>When to use:</em> building a hand-crafted-feature baseline for comparison against raw pixels or a learned model.</p>
+<div id="lst-hog-extract" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-hog-extract-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;67.2: Extracting HOG features with skimage, and training a linear classifier on top
+</figcaption>
+<div aria-describedby="lst-hog-extract-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> skimage.feature <span class="im">import</span> hog</span>
+<span id="cb2-2"><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression</span>
+<span id="cb2-3"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-4"></span>
+<span id="cb2-5"><span class="kw">def</span> extract_hog_features(images):</span>
+<span id="cb2-6">    <span class="cf">return</span> np.array([</span>
+<span id="cb2-7">        hog(img, orientations<span class="op">=</span><span class="dv">8</span>, pixels_per_cell<span class="op">=</span>(<span class="dv">4</span>, <span class="dv">4</span>),</span>
+<span id="cb2-8">            cells_per_block<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">1</span>), feature_vector<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-9">        <span class="cf">for</span> img <span class="kw">in</span> images</span>
+<span id="cb2-10">    ])</span>
+<span id="cb2-11"></span>
+<span id="cb2-12">X_train_hog <span class="op">=</span> extract_hog_features(X_train)</span>
+<span id="cb2-13">X_test_hog <span class="op">=</span> extract_hog_features(X_test)</span>
+<span id="cb2-14"></span>
+<span id="cb2-15">clf_hog <span class="op">=</span> LogisticRegression(max_iter<span class="op">=</span><span class="dv">2000</span>)</span>
+<span id="cb2-16">clf_hog.fit(X_train_hog, y_train)</span>
+<span id="cb2-17">hog_acc <span class="op">=</span> clf_hog.score(X_test_hog, y_test)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming HOG or SIFT features will automatically outperform raw pixels. Their value proposition is specifically robustness to lighting and pose variation in messy, real-world photographs. On data that is already clean, small, and controlled, the gradient-histogram step can throw away information rather than distilling it. Measure, don’t assume.</p>
+</section>
+<section id="worked-example" class="level2" data-number="67.5">
+<h2 data-number="67.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">67.5</span> Worked Example</h2>
+<p>The companion notebook runs a genuine head-to-head comparison on <code>sklearn</code>’s handwritten-digit dataset (8x8 greyscale images, 10 classes, 1,437 training examples and 360 test examples after an 80/20 stratified split): raw pixels flattened into a logistic regression, HOG features into both a logistic regression and an SVM, and a small learned CNN, all on the exact same train/test split.</p>
+<div id="lst-comparison-table" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-comparison-table-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;67.3: Four pipelines, one task, real measured test accuracy
+</figcaption>
+<div aria-describedby="lst-comparison-table-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="st">'Approach'</span><span class="sc">:&lt;28s}{</span><span class="st">'Test accuracy'</span><span class="sc">:&gt;15s}</span><span class="ss">"</span>)</span>
+<span id="cb3-2"><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="st">'Raw pixels + LogReg'</span><span class="sc">:&lt;28s}{</span>raw_acc<span class="sc">:&gt;15.3f}</span><span class="ss">"</span>)</span>
+<span id="cb3-3"><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="st">'HOG + LogReg'</span><span class="sc">:&lt;28s}{</span>hog_acc<span class="sc">:&gt;15.3f}</span><span class="ss">"</span>)</span>
+<span id="cb3-4"><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="st">'HOG + SVM'</span><span class="sc">:&lt;28s}{</span>hog_svm_acc<span class="sc">:&gt;15.3f}</span><span class="ss">"</span>)</span>
+<span id="cb3-5"><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="st">'Learned CNN'</span><span class="sc">:&lt;28s}{</span>cnn_acc<span class="sc">:&gt;15.3f}</span><span class="ss">"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The measured result:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Approach</th>
+<th>Test accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Raw pixels + Logistic Regression</td>
+<td>0.958</td>
+</tr>
+<tr class="even">
+<td>HOG + Logistic Regression</td>
+<td>0.819</td>
+</tr>
+<tr class="odd">
+<td>HOG + SVM (RBF kernel)</td>
+<td>0.861</td>
+</tr>
+<tr class="even">
+<td>Learned CNN</td>
+<td>0.964</td>
+</tr>
+</tbody>
+</table>
+<p>This is genuinely not the story the “2012 ImageNet moment” narrative might predict. Raw pixels fed straight into logistic regression, no feature engineering at all, scored 0.958, beating <em>both</em> hand-crafted HOG pipelines (0.819 and 0.861). The learned CNN won overall at 0.964, but only by a modest 0.6 percentage points over the raw-pixel baseline, not the dramatic gap that narrative might suggest.</p>
+<p>The explanation lies in the dataset itself. HOG’s entire value proposition is robustness to lighting and pose variation, the kind found in real, messy, uncontrolled photographs. This dataset is neither of those things: 8x8 pixels, already tightly cropped, centred, and normalised digit glyphs, with no lighting or pose variation to be robust to. HOG’s spatial-gradient-histogram step, on data this clean and this small, throws away information rather than distilling it, hence worse than doing nothing at all (raw pixels). The real lesson isn’t “classical CV is bad.” It’s that the 2012 AlexNet moment mattered specifically because ImageNet is large-scale, high-resolution, and genuinely messy: millions of real photos with real lighting, pose, occlusion, and clutter. That is exactly the regime where hand-crafted features hit a ceiling and learned features pulled dramatically ahead, in a way a small, clean digit dataset is too tidy to reproduce. Every architecture covered from Chapter 68 onward was built to solve problems at a scale and messiness this chapter’s toy dataset does not have.</p>
+</section>
+<section id="aws-sagemaker-notes" class="level2" data-number="67.6">
+<h2 data-number="67.6" class="anchored" data-anchor-id="aws-sagemaker-notes"><span class="header-section-number">67.6</span> AWS SageMaker Notes</h2>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS Rekognition vs. SageMaker</div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> boto3</span>
+<span id="cb4-2"></span>
+<span id="cb4-3">rekognition <span class="op">=</span> boto3.client(<span class="st">"rekognition"</span>)</span>
+<span id="cb4-4"><span class="co"># response = rekognition.detect_labels(</span></span>
+<span id="cb4-5"><span class="co"># Image={"S3Object": {"Bucket": bucket, "Name": key}})</span></span></code></pre></div>
+<p><strong>When a managed API (Rekognition) beats building your own:</strong> the task fits a common, well-covered use case (general object or scene labels, celebrity recognition, text-in-image, moderation), no custom taxonomy specific to the business is needed, and time-to-first-result matters more than owning the model.</p>
+<p><strong>When to build your own instead (SageMaker, or self-hosted: the rest of this track):</strong> classes are domain-specific and not covered by a general API, the model needs to be understood, debugged, or improved directly, or cost at scale favours a model that is owned and can be optimised.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="67.7">
+<h2 data-number="67.7" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">67.7</span> History and Further Reading</h2>
+<p>Dalal and Triggs’ “Histograms of Oriented Gradients for Human Detection” <span class="citation" data-cites="dalal2005hog">(<a href="#ref-dalal2005hog" role="doc-biblioref">Dalal and Triggs 2005</a>)</span> is the original HOG paper, and worth reading to see how much careful engineering went into a feature extractor that this chapter’s own tutorial found underperforming raw pixels on a small, clean dataset, a genuinely useful lesson in matching technique to data regime. Krizhevsky, Sutskever, and Hinton’s “ImageNet Classification with Deep Convolutional Neural Networks” <span class="citation" data-cites="krizhevsky2012alexnet">(<a href="#ref-krizhevsky2012alexnet" role="doc-biblioref">Krizhevsky et al. 2012</a>)</span> is the AlexNet paper, the field’s inflection point. Deng et al.’s “ImageNet: A Large-Scale Hierarchical Image Database” <span class="citation" data-cites="deng2009imagenet">(<a href="#ref-deng2009imagenet" role="doc-biblioref">Deng et al. 2009</a>)</span> documents the dataset and benchmark that made the 2012 moment possible in the first place. Without a large, labelled, diverse dataset, AlexNet’s architectural advances would have had nothing to prove themselves against.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="67.8">
+<h2 data-number="67.8" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">67.8</span> How This Connects</h2>
+<p>This chapter builds on Book 2, Chapter 28 (Intro to Neural Networks), which supplies the backpropagation and gradient-descent foundation every architecture in this track trains with, and it deliberately parallels Book 1, Chapter 1’s own history-and-landscape framing: same convention, different, narrower lineage. It enables every subsequent chapter in this track: Chapter 68 (CNN Fundamentals) and Chapter 69 (ResNet &amp; Deep Architectures) cover the discriminative CNN era in depth, Chapter 70 covers detection and segmentation, and Chapter 71 covers Vision Transformers, this track’s non-convolutional continuation of the discriminative lineage. It is often confused with the assumption that “newer” or “learned” is strictly better than “older” or “hand-crafted.” This chapter’s own Worked Example is a direct, measured counterexample worth carrying forward through the rest of the track.</p>
+</section>
+<section id="exercises" class="level2" data-number="67.9">
+<h2 data-number="67.9" class="anchored" data-anchor-id="exercises"><span class="header-section-number">67.9</span> Exercises</h2>
+<ol type="1">
+<li id="ex-67-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the era (hand-crafted features / learned discriminative / learned generative and multimodal) each of the following belongs to, and give one reason: (a) HOG; (b) ResNet; (c) CLIP.</p></li>
+<li id="ex-67-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in one or two sentences why the 2012 AlexNet result was a discontinuity rather than an incremental improvement, using this chapter’s three converging factors.</p></li>
+<li id="ex-67-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-quick-baseline" class="quarto-xref">Listing&nbsp;<span>67.1</span></a> as a starting point, run the raw-pixel baseline on a dataset of your choosing (or the <code>sklearn</code> digits dataset if none is available) and report the mean and standard deviation of 5-fold cross-validated accuracy.</p></li>
+<li id="ex-67-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-hog-extract" class="quarto-xref">Listing&nbsp;<span>67.2</span></a>, vary the <code>pixels_per_cell</code> parameter to <code>(2, 2)</code> and <code>(8, 8)</code> and report how HOG feature vector length and test accuracy change relative to the <code>(4, 4)</code> setting used in this chapter’s Worked Example.</p></li>
+<li id="ex-67-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer wants a vision model to sort defective from non-defective parts on a production line, using cropped, well-lit, top-down camera images against a fixed background. Using Procedure 67.1, write the two or three sentences you would actually say about whether to start with a classical or learned approach.</p></li>
+<li id="ex-67-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s Worked Example found HOG underperforming raw pixels. Propose one change to the dataset (not the algorithm) that the chapter’s own reasoning predicts would make HOG the stronger choice, and justify it.</p></li>
+<li id="ex-67-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Dalal and Triggs HOG paper cited above. Identify one design decision in the original pedestrian-detection pipeline that this chapter’s simplified digit-classification pipeline omits, and explain what problem that omitted piece was solving.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="67.10">
+<h2 data-number="67.10" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">67.10</span> Mental Model</h2>
+<p>Every era in computer vision’s history is an answer to the same question: what should extract meaning from pixels, a human’s design, or the data itself? The pendulum swings further toward “the data itself” over time, but the scale and messiness of available data and compute is the actual thing that determines when each swing becomes possible, not cleverer ideas arriving out of nowhere. Keep this chapter’s own measured counterexample in mind: newer and learned is not automatically better than older and hand-crafted; it is better specifically when the data has the scale and messiness that makes a fixed human-designed feature a bottleneck.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-dalal2005hog" class="csl-entry" role="listitem">
+Dalal, Navneet, and Bill Triggs. 2005. <span>“Histograms of Oriented Gradients for Human Detection.”</span> <em>IEEE Computer Society Conference on Computer Vision and Pattern Recognition (CVPR)</em>, 886–93.
+</div>
+<div id="ref-deng2009imagenet" class="csl-entry" role="listitem">
+Deng, Jia, Wei Dong, Richard Socher, Li-Jia Li, Kai Li, and Li Fei-Fei. 2009. <span>“ImageNet: A Large-Scale Hierarchical Image Database.”</span> <em>IEEE Conference on Computer Vision and Pattern Recognition (CVPR)</em>, 248–55.
+</div>
+<div id="ref-krizhevsky2012alexnet" class="csl-entry" role="listitem">
+Krizhevsky, Alex, Ilya Sutskever, and Geoffrey E. Hinton. 2012. <span>“ImageNet Classification with Deep Convolutional Neural Networks.”</span> <em>Advances in Neural Information Processing Systems</em> 25: 1097–105.
+</div>
+</div>
+</section>

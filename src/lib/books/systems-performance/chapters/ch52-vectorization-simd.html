@@ -1,0 +1,346 @@
+<p>Chapter 51 showed that memory layout affects performance independently of algorithmic complexity: two <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> implementations can differ by two orders of magnitude because of how they touch cache. This chapter explains the other half of “why is NumPy so much faster than a Python loop doing the exact same arithmetic”: SIMD (Single Instruction, Multiple Data), a CPU feature that applies one instruction to several values in a single cycle instead of one value per instruction. Knowing <em>when</em> this applies, and just as importantly, when it structurally cannot, is the difference between correctly reaching for “vectorize this” as a fix and burning an afternoon trying to vectorize something with no shared structure to exploit.</p>
+<section id="motivation" class="level2" data-number="52.1">
+<h2 data-number="52.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">52.1</span> Motivation</h2>
+<p>Three ideas anchor this chapter. First, SIMD lets one CPU instruction process multiple data elements at once, four <code>float64</code> values in a single 256-bit AVX2 register, for example, instead of the one-value-per-instruction model a naive loop uses. Second, NumPy’s speed comes from vectorized, compiled loops, often dispatched through a BLAS library such as OpenBLAS, that use SIMD directly, not from NumPy being “faster Python” in some general sense. Third, vectorization requires the same operation applied uniformly across elements, with no data-dependent branching or data-dependent iteration count. Where that condition doesn’t hold, vectorization gives no benefit at all. This is not a tuning problem to be solved with more effort, it’s a structural mismatch between the workload and what SIMD hardware can do.</p>
+</section>
+<section id="exposition" class="level2" data-number="52.2">
+<h2 data-number="52.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">52.2</span> Exposition</h2>
+<p>This chapter’s measured numbers<span class="ref-rig-mark">†</span> come from this book’s reference rig (see the preface): specifically its AMD Ryzen 9 5950X, 16C/32T, with a 64MB L3 cache.</p>
+<section id="the-basic-speedup-and-why-it-isnt-constant" class="level3" data-number="52.2.1">
+<h3 data-number="52.2.1" class="anchored" data-anchor-id="the-basic-speedup-and-why-it-isnt-constant"><span class="header-section-number">52.2.1</span> The Basic Speedup, and Why It Isn’t Constant</h3>
+<p>Timing an identical elementwise operation (<code>x * 2.0 + 1.0</code>) as a pure Python list comprehension versus a NumPy array expression, at four sizes:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>n</th>
+<th>Python (median)</th>
+<th>NumPy (median)</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>10,000</td>
+<td>0.528 ms<span class="ref-rig-mark">†</span></td>
+<td>0.0060 ms</td>
+<td>87.8x</td>
+</tr>
+<tr class="even">
+<td>100,000</td>
+<td>3.294 ms</td>
+<td>0.0258 ms</td>
+<td>127.7x</td>
+</tr>
+<tr class="odd">
+<td>1,000,000</td>
+<td>34.859 ms</td>
+<td>0.2357 ms</td>
+<td>147.9x</td>
+</tr>
+<tr class="even">
+<td>10,000,000</td>
+<td>406.618 ms</td>
+<td>36.194 ms</td>
+<td>11.2x</td>
+</tr>
+</tbody>
+</table>
+<p>The speedup grows across the first three sizes, then collapses at the fourth. This is not measurement noise. It’s Chapter 49’s cache hierarchy resurfacing in a new context, and the next measurement isolates exactly where the collapse happens.</p>
+</section>
+<section id="the-cache-cliff-vectorizations-speed-ceiling-is-memory-bandwidth" class="level3" data-number="52.2.2">
+<h3 data-number="52.2.2" class="anchored" data-anchor-id="the-cache-cliff-vectorizations-speed-ceiling-is-memory-bandwidth"><span class="header-section-number">52.2.2</span> The Cache Cliff: Vectorization’s Speed Ceiling Is Memory Bandwidth</h3>
+<p>Measuring the same NumPy expression across a finer range of sizes and computing the implied memory bandwidth (bytes moved divided by time):</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>n</th>
+<th>Working set</th>
+<th>Time</th>
+<th>Implied bandwidth</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1,000,000</td>
+<td>16.0 MB</td>
+<td>0.2486 ms</td>
+<td>64.4 GB/s</td>
+</tr>
+<tr class="even">
+<td>2,000,000</td>
+<td>32.0 MB</td>
+<td>0.7134 ms</td>
+<td>44.9 GB/s</td>
+</tr>
+<tr class="odd">
+<td>4,000,000</td>
+<td>64.0 MB</td>
+<td>2.6069 ms</td>
+<td>24.6 GB/s</td>
+</tr>
+<tr class="even">
+<td>6,000,000</td>
+<td>96.0 MB</td>
+<td>21.7291 ms</td>
+<td>4.4 GB/s</td>
+</tr>
+<tr class="odd">
+<td>8,000,000</td>
+<td>128.0 MB</td>
+<td>29.7712 ms</td>
+<td>4.3 GB/s</td>
+</tr>
+<tr class="even">
+<td>10,000,000</td>
+<td>160.0 MB</td>
+<td>38.7251 ms</td>
+<td>4.1 GB/s</td>
+</tr>
+</tbody>
+</table>
+<p>The cliff falls precisely between 64MB and 96MB working set: this hardware’s 64MB L3 boundary. Below it, the read-plus-write working set still fits in L3, and throughput is limited mainly by how fast the SIMD units can issue instructions. Above it, every operation is a genuine round-trip to DRAM, and throughput flattens to a steady ~4GB/s regardless of how much bigger the array grows. SIMD makes the compute side faster. It does nothing to make DRAM faster. Past a certain size, an operation that was compute-bound becomes memory-bound, and vectorization’s benefit is capped by a completely different resource than the one it improves.</p>
+</section>
+<section id="separating-simd-from-multi-core-the-matmul-breakdown" class="level3" data-number="52.2.3">
+<h3 data-number="52.2.3" class="anchored" data-anchor-id="separating-simd-from-multi-core-the-matmul-breakdown"><span class="header-section-number">52.2.3</span> Separating SIMD From Multi-Core: The Matmul Breakdown</h3>
+<p>A pure Python triple-nested-loop matrix multiply (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>100</mn></mrow><annotation encoding="application/x-tex">n=100</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">100</span></span></span></span>) took 39.77ms; the identical computation via NumPy’s <code>@</code> operator, backed by OpenBLAS, took 0.0446ms, an 891x speedup for mathematically identical work. That gap is too large to be SIMD alone. It combines SIMD, multi-threading, and cache-blocking. Isolating just the SIMD contribution by forcing OpenBLAS to a single thread (<code>OPENBLAS_NUM_THREADS=1</code>):</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Matrix size</th>
+<th>Single-threaded (SIMD only)</th>
+<th>Default multi-threaded (SIMD + 16 cores)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>500×500</td>
+<td>69.6 GFLOPS</td>
+<td>378.1 GFLOPS</td>
+</tr>
+<tr class="even">
+<td>1000×1000</td>
+<td>68.5 GFLOPS</td>
+<td>257.4 GFLOPS</td>
+</tr>
+<tr class="odd">
+<td>2000×2000</td>
+<td>67.9 GFLOPS</td>
+<td>495.5 GFLOPS</td>
+</tr>
+</tbody>
+</table>
+<p>Single-threaded NumPy holds a remarkably consistent ~68 GFLOPS across all three sizes. That consistent number is the SIMD contribution alone. The multi-threaded numbers (250-500 GFLOPS, varying with size due to cache-blocking and thread-scheduling effects at different problem sizes) add another 4-7x on top. That additional gain is Chapter 53’s territory (parallelism across cores), stacked on this chapter’s SIMD gain, not a replacement for it. <code>numpy.show_config()</code> confirms the mechanism directly: this build links against OpenBLAS with <code>DYNAMIC_ARCH</code>, which detects this exact CPU (reported as a <code>SkylakeX</code>-class target) and dispatches to AVX2/AVX-512 code paths at runtime, rather than falling back to a generic scalar implementation.</p>
+</section>
+<section id="the-honest-counter-example-data-dependent-control-flow-defeats-vectorization" class="level3" data-number="52.2.4">
+<h3 data-number="52.2.4" class="anchored" data-anchor-id="the-honest-counter-example-data-dependent-control-flow-defeats-vectorization"><span class="header-section-number">52.2.4</span> The Honest Counter-Example: Data-Dependent Control Flow Defeats Vectorization</h3>
+<p>Computing the Collatz sequence length for each of the numbers 1 through 20,000 (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>→</mo><mi>n</mi><mi mathvariant="normal">/</mi><mn>2</mn></mrow><annotation encoding="application/x-tex">n \to n/2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">n</span><span class="mord">/2</span></span></span></span> if even, else <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>→</mo><mn>3</mn><mi>n</mi><mo>+</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n \to 3n+1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">3</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span>, counting steps until reaching 1) as a pure Python loop took 77.57 ms. Wrapping the identical per-element logic in a list comprehension over a NumPy array took 79.16 ms, a 0.98x “speedup,” meaning no benefit at all, and technically marginally slower from the added overhead.</p>
+<p>This is not a failed demo. It’s the point. Each element requires a genuinely different number of iterations and a genuinely different sequence of branches, decided entirely by the data itself. There is no SIMD instruction that means “loop an unpredictable number of times depending on the value.” Vectorization requires a single shared operation applicable to all elements simultaneously, and this workload structurally has none. Wrapping a Python-level loop in a NumPy array call does not vectorize it. Both <code>np.vectorize</code> and a list comprehension over a NumPy array still call back into the Python interpreter once per element.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="52.3">
+<h2 data-number="52.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">52.3</span> Trade-offs and Limits</h2>
+<p>Reach for NumPy vectorization when the same operation applies uniformly to every element with no data-dependent branching or per-element iteration count, and when the working set fits comfortably within cache for the hot inner loop if latency, not just throughput, matters. Vectorization will not help, and profiling time is better spent elsewhere, when the operation’s control flow or iteration count is genuinely data-dependent per element (this chapter’s Collatz example; also common in graph traversal, parsing, and recursive algorithms), or when the workload is already memory-bandwidth-bound (this chapter’s cache-cliff finding). In the latter case, reach for reducing data movement instead of expecting a compute-side fix to help: better layout (Chapter 51), smaller dtypes, or streaming and chunking (Chapter 54).</p>
+</section>
+<section id="procedures" class="level2" data-number="52.4">
+<h2 data-number="52.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">52.4</span> Procedures</h2>
+<p id="proc-52-1"><strong>Procedure 52.1 (Replace a Python Loop With a Vectorized NumPy Expression).</strong> <em>When to use:</em> the same arithmetic operation is being applied element-by-element in a Python <code>for</code> loop or list comprehension over numeric data.</p>
+<div id="lst-vectorize-loop" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vectorize-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;52.1: Converting a per-element Python loop to whole-array NumPy arithmetic
+</figcaption>
+<div aria-describedby="lst-vectorize-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="co"># Before: pure Python loop</span></span>
+<span id="cb1-4">data <span class="op">=</span> <span class="bu">list</span>(<span class="bu">range</span>(<span class="dv">1_000_000</span>))</span>
+<span id="cb1-5">result <span class="op">=</span> [x <span class="op">*</span> <span class="fl">2.0</span> <span class="op">+</span> <span class="fl">1.0</span> <span class="cf">for</span> x <span class="kw">in</span> data]</span>
+<span id="cb1-6"></span>
+<span id="cb1-7"><span class="co"># After: vectorized NumPy</span></span>
+<span id="cb1-8">arr <span class="op">=</span> np.arange(<span class="dv">1_000_000</span>, dtype<span class="op">=</span>np.float64)</span>
+<span id="cb1-9">result <span class="op">=</span> arr <span class="op">*</span> <span class="fl">2.0</span> <span class="op">+</span> <span class="fl">1.0</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> converting to a NumPy array but then still looping over it in Python (<code>[f(x) for x in arr]</code>). This keeps every element passing through the Python interpreter and captures none of the SIMD benefit. The vectorized form must express the operation as whole-array arithmetic, not a Python-level loop over array elements.</p>
+<p id="proc-52-2"><strong>Procedure 52.2 (Check Whether a Workload Is Compute-Bound or Memory-Bound Before Optimizing Further).</strong> <em>When to use:</em> before spending time trying to vectorize something further. Confirm compute speed is actually the bottleneck first.</p>
+<div id="lst-implied-bandwidth" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-implied-bandwidth-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;52.2: Computing implied memory bandwidth to test for a memory-bound ceiling
+</figcaption>
+<div aria-describedby="lst-implied-bandwidth-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> implied_bandwidth_gb_s(</span>
+<span id="cb2-2">    n_elements,</span>
+<span id="cb2-3">    bytes_per_element,</span>
+<span id="cb2-4">    n_arrays_touched,</span>
+<span id="cb2-5">    seconds,</span>
+<span id="cb2-6">):</span>
+<span id="cb2-7">    total_bytes <span class="op">=</span> n_elements <span class="op">*</span> bytes_per_element <span class="op">*</span> n_arrays_touched</span>
+<span id="cb2-8">    <span class="cf">return</span> (total_bytes <span class="op">/</span> <span class="fl">1e9</span>) <span class="op">/</span> seconds</span>
+<span id="cb2-9"></span>
+<span id="cb2-10"><span class="co"># Example: measure your own operation's time, then:</span></span>
+<span id="cb2-11">gbps <span class="op">=</span> implied_bandwidth_gb_s(</span>
+<span id="cb2-12">    n_elements<span class="op">=</span><span class="dv">10_000_000</span>,</span>
+<span id="cb2-13">    bytes_per_element<span class="op">=</span><span class="dv">8</span>,</span>
+<span id="cb2-14">    n_arrays_touched<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb2-15">    seconds<span class="op">=</span><span class="fl">0.0387</span>,</span>
+<span id="cb2-16">)</span>
+<span id="cb2-17"><span class="bu">print</span>(<span class="ss">f'</span><span class="sc">{</span>gbps<span class="sc">:.1f}</span><span class="ss"> GB/s'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming a slow vectorized operation needs “better” vectorization when it’s actually already memory-bandwidth-bound. This chapter’s own measurement found NumPy throughput on this hardware flattens to ~4GB/s once the working set exceeds the 64MB L3 cache. No amount of further compute optimization moves that ceiling, since the bottleneck has shifted to DRAM bandwidth. Check the implied bandwidth against realistic DRAM bandwidth (tens of GB/s for typical dual/quad-channel systems) before assuming there’s compute headroom left to capture.</p>
+<p id="proc-52-3"><strong>Procedure 52.3 (Separate SIMD Gains From Multi-Core Gains in a BLAS-Backed Operation).</strong> <em>When to use:</em> understanding how much of NumPy’s speed on a given machine comes from vectorization (single core) versus parallelism (Chapter 53). Useful when deciding whether adding more cores would help further.</p>
+<div id="lst-simd-vs-multicore" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-simd-vs-multicore-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;52.3: Isolating SIMD-only performance by forcing OpenBLAS to a single thread
+</figcaption>
+<div aria-describedby="lst-simd-vs-multicore-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> subprocess, sys, os</span>
+<span id="cb3-2"></span>
+<span id="cb3-3">script <span class="op">=</span> (</span>
+<span id="cb3-4">    <span class="st">"import time, numpy as np; "</span></span>
+<span id="cb3-5">    <span class="st">"A=np.random.randn(1000,1000); "</span></span>
+<span id="cb3-6">    <span class="st">"B=np.random.randn(1000,1000); "</span></span>
+<span id="cb3-7">    <span class="st">"A@B; t0=time.perf_counter(); A@B; "</span></span>
+<span id="cb3-8">    <span class="st">"print(time.perf_counter()-t0)"</span></span>
+<span id="cb3-9">)</span>
+<span id="cb3-10"></span>
+<span id="cb3-11"><span class="co"># Default: OpenBLAS uses all available cores</span></span>
+<span id="cb3-12">subprocess.run([sys.executable, <span class="st">"-c"</span>, script])</span>
+<span id="cb3-13"></span>
+<span id="cb3-14"><span class="co"># Force single-threaded: isolates the SIMD-only contribution</span></span>
+<span id="cb3-15">env <span class="op">=</span> <span class="bu">dict</span>(os.environ, OPENBLAS_NUM_THREADS<span class="op">=</span><span class="st">"1"</span>)</span>
+<span id="cb3-16">subprocess.run([sys.executable, <span class="st">"-c"</span>, script], env<span class="op">=</span>env)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> running both versions in the <em>same</em> process or import. NumPy/OpenBLAS typically reads thread-count environment variables once, at library initialization. Set the environment variable before the process starts (or at least before NumPy’s BLAS backend initializes), which is why this recipe uses separate subprocesses rather than toggling within one running Python session.</p>
+<p id="proc-52-4"><strong>Procedure 52.4 (Confirm What SIMD/BLAS Backend NumPy Is Actually Using).</strong> <em>When to use:</em> diagnosing unexpectedly slow NumPy performance, or confirming a deployment environment has a properly optimized NumPy build rather than a generic, unoptimized fallback.</p>
+<div id="lst-show-config" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-show-config-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;52.4: Confirming NumPy’s BLAS backend and CPU dispatch
+</figcaption>
+<div aria-describedby="lst-show-config-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb4-2">np.show_config()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Look for the <code>blas</code>/<code>lapack</code> sections: a name like <code>openblas</code> or <code>mkl</code> with a <code>DYNAMIC_ARCH</code> or CPU-specific dispatch note (e.g.&nbsp;<code>SkylakeX</code>) means NumPy is using a properly vectorized, hardware-aware backend. A generic reference BLAS (no such library, or an unoptimized fallback) can be one to two orders of magnitude slower for linear-algebra-heavy code. <strong>Common mistake:</strong> assuming all NumPy installations are equally fast. <code>pip install numpy</code> on an unusual platform, or a container image built without a proper BLAS, can silently fall back to a much slower reference implementation with no error or warning. <code>np.show_config()</code> is the way to catch this before it costs a debugging session.</p>
+</section>
+<section id="worked-example" class="level2" data-number="52.5">
+<h2 data-number="52.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">52.5</span> Worked Example</h2>
+<p>The companion notebook reproduces all four measured effects above directly on this book’s reference rig, and the numbers reported through this chapter are exactly what it produces. The elementwise section times the same operation four ways at increasing <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span>:</p>
+<div id="lst-elementwise-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-elementwise-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;52.5: Benchmarking elementwise arithmetic, Python loop vs NumPy, across four orders of magnitude
+</figcaption>
+<div aria-describedby="lst-elementwise-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">import</span> timeit</span>
+<span id="cb5-2"></span>
+<span id="cb5-3"><span class="cf">for</span> n <span class="kw">in</span> [<span class="dv">10_000</span>, <span class="dv">100_000</span>, <span class="dv">1_000_000</span>, <span class="dv">10_000_000</span>]:</span>
+<span id="cb5-4">    data <span class="op">=</span> <span class="bu">list</span>(<span class="bu">range</span>(n))</span>
+<span id="cb5-5">    arr <span class="op">=</span> np.arange(n, dtype<span class="op">=</span>np.float64)</span>
+<span id="cb5-6"></span>
+<span id="cb5-7">    py_time <span class="op">=</span> timeit.timeit(</span>
+<span id="cb5-8">        <span class="kw">lambda</span>: [x <span class="op">*</span> <span class="fl">2.0</span> <span class="op">+</span> <span class="fl">1.0</span> <span class="cf">for</span> x <span class="kw">in</span> data],</span>
+<span id="cb5-9">        number<span class="op">=</span><span class="dv">5</span>,</span>
+<span id="cb5-10">    ) <span class="op">/</span> <span class="dv">5</span></span>
+<span id="cb5-11">    np_time <span class="op">=</span> timeit.timeit(<span class="kw">lambda</span>: arr <span class="op">*</span> <span class="fl">2.0</span> <span class="op">+</span> <span class="fl">1.0</span>, number<span class="op">=</span><span class="dv">5</span>) <span class="op">/</span> <span class="dv">5</span></span>
+<span id="cb5-12">    speedup <span class="op">=</span> py_time <span class="op">/</span> np_time</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>At <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>1,000,000</mn></mrow><annotation encoding="application/x-tex">n=1{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span> this produces <code>Python: 34.859ms</code>, <code>NumPy: 0.2357ms</code>, a 147.9x speedup, the peak of the four sizes tested, immediately before the cache cliff pulls the ratio down to 11.2x at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>10,000,000</mn></mrow><annotation encoding="application/x-tex">n=10{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">10</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span>.</p>
+<p>The cache-cliff section reruns the same NumPy expression at finer-grained sizes and converts elapsed time into implied bandwidth:</p>
+<div id="lst-bandwidth-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-bandwidth-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;52.6: Computing implied bandwidth across the L3 cache boundary
+</figcaption>
+<div aria-describedby="lst-bandwidth-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="cf">for</span> n <span class="kw">in</span> [</span>
+<span id="cb6-2">    <span class="dv">1_000_000</span>,</span>
+<span id="cb6-3">    <span class="dv">2_000_000</span>,</span>
+<span id="cb6-4">    <span class="dv">4_000_000</span>,</span>
+<span id="cb6-5">    <span class="dv">6_000_000</span>,</span>
+<span id="cb6-6">    <span class="dv">8_000_000</span>,</span>
+<span id="cb6-7">    <span class="dv">10_000_000</span>,</span>
+<span id="cb6-8">]:</span>
+<span id="cb6-9">    arr <span class="op">=</span> np.arange(n, dtype<span class="op">=</span>np.float64)</span>
+<span id="cb6-10">    t <span class="op">=</span> timeit.timeit(<span class="kw">lambda</span>: arr <span class="op">*</span> <span class="fl">2.0</span> <span class="op">+</span> <span class="fl">1.0</span>, number<span class="op">=</span><span class="dv">10</span>) <span class="op">/</span> <span class="dv">10</span></span>
+<span id="cb6-11">    <span class="co"># read arr, write result, plus one temp</span></span>
+<span id="cb6-12">    working_set_mb <span class="op">=</span> (n <span class="op">*</span> <span class="dv">8</span> <span class="op">*</span> <span class="dv">3</span>) <span class="op">/</span> <span class="fl">1e6</span></span>
+<span id="cb6-13">    bandwidth_gbps <span class="op">=</span> implied_bandwidth_gb_s(n, <span class="dv">8</span>, <span class="dv">3</span>, t)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The cliff, 64.4 GB/s at a 16MB working set, down to 4.1 GB/s at 160MB, lands exactly where Chapter 49 predicts, at this rig’s 64MB L3 boundary.</p>
+<p>The matmul section runs the same <code>@</code> operation twice per matrix size, once with the process’s default thread count and once with <code>OPENBLAS_NUM_THREADS=1</code> set before NumPy is imported in a subprocess, converting each timing to GFLOPS (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><msup><mi>n</mi><mn>3</mn></msup></mrow><annotation encoding="application/x-tex">2n^3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">2</span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span></span></span></span></span></span></span></span> floating-point operations for an <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>×</mo><mi>n</mi><mo>×</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \times n \times n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> matmul). The 500×500 case produces 69.6 GFLOPS single-threaded against 378.1 GFLOPS multi-threaded. The same ~68 GFLOPS single-threaded figure recurs at 1000×1000 (68.5 GFLOPS) and 2000×2000 (67.9 GFLOPS), confirming that number is a property of this CPU’s SIMD throughput, not of any particular matrix size.</p>
+<p>The Collatz section runs the counter-example last, deliberately after three sections that all show large speedups, so the reader hits the 0.98x result with the compute-bound/memory-bound distinction already fresh:</p>
+<div id="lst-collatz-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-collatz-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;52.7: The workload vectorization cannot help: data-dependent iteration count
+</figcaption>
+<div aria-describedby="lst-collatz-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="kw">def</span> collatz_len(n):</span>
+<span id="cb7-2">    steps <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb7-3">    <span class="cf">while</span> n <span class="op">!=</span> <span class="dv">1</span>:</span>
+<span id="cb7-4">        n <span class="op">=</span> n <span class="op">//</span> <span class="dv">2</span> <span class="cf">if</span> n <span class="op">%</span> <span class="dv">2</span> <span class="op">==</span> <span class="dv">0</span> <span class="cf">else</span> <span class="dv">3</span> <span class="op">*</span> n <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb7-5">        steps <span class="op">+=</span> <span class="dv">1</span></span>
+<span id="cb7-6">    <span class="cf">return</span> steps</span>
+<span id="cb7-7"></span>
+<span id="cb7-8">numbers <span class="op">=</span> <span class="bu">list</span>(<span class="bu">range</span>(<span class="dv">1</span>, <span class="dv">20_001</span>))</span>
+<span id="cb7-9">py_time <span class="op">=</span> timeit.timeit(</span>
+<span id="cb7-10">    <span class="kw">lambda</span>: [collatz_len(n) <span class="cf">for</span> n <span class="kw">in</span> numbers],</span>
+<span id="cb7-11">    number<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb7-12">) <span class="op">/</span> <span class="dv">3</span></span>
+<span id="cb7-13">np_time <span class="op">=</span> timeit.timeit(</span>
+<span id="cb7-14">    <span class="kw">lambda</span>: np.array(</span>
+<span id="cb7-15">        [collatz_len(<span class="bu">int</span>(n)) <span class="cf">for</span> n <span class="kw">in</span> np.arange(<span class="dv">1</span>, <span class="dv">20_001</span>)]</span>
+<span id="cb7-16">    ),</span>
+<span id="cb7-17">    number<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb7-18">) <span class="op">/</span> <span class="dv">3</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>77.57 ms versus 79.16 ms, reproduced here exactly as measured. The “vectorized” version is marginally slower, not faster, because there was never any shared structure across elements for a SIMD instruction to exploit.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="52.6">
+<h2 data-number="52.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">52.6</span> History and Further Reading</h2>
+<p>Intel’s “Intrinsics Guide” is the canonical reference for the actual AVX2/AVX-512 instructions that implement SIMD on modern x86 hardware, worth a skim once the matmul breakdown above has made the abstraction concrete. The OpenBLAS project’s own documentation covers how <code>DYNAMIC_ARCH</code> runtime CPU detection and multi-threading interact inside the BLAS library NumPy delegates to here. Daniel Lemire’s blog posts on fast SIMD-based algorithms (lemire.me) are a practical, measured treatment of when vectorization does and doesn’t help on real workloads, in the same empirical spirit as this chapter. Chapter 38’s treatment of GPU architecture is the same principle at a different scale: a GPU is, structurally, thousands of SIMD-style lanes applying the same instruction to many data elements at once, and this chapter’s “same operation, no data-dependent branching” condition is exactly the condition that makes a workload GPU-friendly, revisited directly in Chapter 55.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="52.7">
+<h2 data-number="52.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">52.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 49’s cache-hierarchy material (the cache cliff above is the same L3 boundary, seen through vectorization instead of raw memory access) and on Chapter 51’s layout argument, since struct-of-arrays is exactly the layout that lets SIMD instructions load contiguous, uniform data efficiently in the first place. It enables Chapter 53’s parallelism material, which picks up exactly where this chapter’s matmul breakdown leaves off: multi-core scaling stacked on top of the SIMD gain measured here. It also sets up Chapter 55’s compute-bound/memory-bound distinction, first established in this chapter’s cache-cliff finding, which becomes one of the deciding factors in whether a workload is worth moving to a GPU at all. It is often confused with “NumPy is just fast” as an unexamined fact. This chapter shows precisely where that speed comes from (SIMD plus BLAS plus cache-friendly layout) and, via the Collatz counter-example, exactly where it stops applying.</p>
+</section>
+<section id="exercises" class="level2" data-number="52.8">
+<h2 data-number="52.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">52.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-52-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In your own words, explain why the Python-vs-NumPy speedup in <a href="#lst-elementwise-bench" class="quarto-xref">Listing&nbsp;<span>52.5</span></a> grows across the first three sizes but collapses at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>10,000,000</mn></mrow><annotation encoding="application/x-tex">n=10{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">10</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span>. Name the specific hardware boundary responsible.</p></li>
+<li id="ex-52-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A colleague says “vectorization always makes code faster.” Using the Collatz result from <a href="#lst-collatz-bench" class="quarto-xref">Listing&nbsp;<span>52.7</span></a>, write two or three sentences correcting this claim precisely.</p></li>
+<li id="ex-52-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 52.2’s <code>implied_bandwidth_gb_s</code> function, compute the implied bandwidth for an operation touching two <code>float32</code> arrays of 5,000,000 elements each (read one, write the other) that takes 8.5 ms. State whether this looks compute-bound or memory-bound given this chapter’s ~4-64 GB/s range.</p></li>
+<li id="ex-52-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 52.4, run <code>np.show_config()</code> in your own environment and report which BLAS backend is in use. If it isn’t OpenBLAS or MKL, propose one concrete next step before trusting any NumPy performance numbers from that environment.</p></li>
+<li id="ex-52-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The matmul breakdown shows single-threaded NumPy holding ~68 GFLOPS across three matrix sizes while multi-threaded performance varies from 257 to 495 GFLOPS. Propose a reason the multi-threaded number doesn’t scale as cleanly with size as the single-threaded number does.</p></li>
+<li id="ex-52-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate proposes wrapping a recursive tree-traversal function in <code>np.vectorize</code> to “vectorize” it. Using Procedure 52.1’s common mistake and this chapter’s Collatz example, explain why this will not produce a SIMD speedup, and propose what question to ask about the workload before attempting any vectorization.</p></li>
+<li id="ex-52-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A production service processes a working set of about 200MB per request on hardware similar to this chapter’s reference rig. Using the cache-cliff table, predict roughly what implied bandwidth this request should see, and state one architectural change (not a NumPy trick) that could improve it.</p></li>
+<li id="ex-52-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read enough of Intel’s Intrinsics Guide to find the AVX2 instruction for a 256-bit packed double-precision multiply. Explain, at a level a colleague without an assembly background could follow, how that single instruction relates to the “4 <code>float64</code>s in one register” claim this chapter opens with.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="52.9">
+<h2 data-number="52.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">52.9</span> Mental Model</h2>
+<p>A pure Python loop is a single checkout clerk scanning one item at a time. NumPy running on SIMD hardware is the same clerk, but now sweeping four identical items past the scanner in one motion, a genuine win, but only for a cart full of the <em>same</em> product. The moment every item needs its own unpredictable lookup procedure, as in the Collatz example, there’s nothing left to batch, and the four-at-a-time scanner offers no advantage over the original. And even the fast scanner has a loading dock behind it with a fixed truck-unloading rate. Once the cart is bigger than what’s already stocked on the shelf (the cache-cliff finding), the checkout speed stops mattering, because the bottleneck moved to the dock.</p>
+
+
+</section>

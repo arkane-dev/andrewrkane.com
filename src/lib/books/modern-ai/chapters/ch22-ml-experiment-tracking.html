@@ -1,0 +1,208 @@
+<p>Fifty experiments over two weeks: tweaked hyperparameters, different feature sets, two model architectures tried. The last run gets 87% accuracy, but there’s no record of which combination of parameters produced it. A run’s output folder gets deleted by accident. A colleague asks which model is in production and whether it can be reproduced, and there’s no good answer. This is the default state of untracked ML work. It’s one of the leading causes of ML projects failing to reach production. Experiment tracking fixes it by making every run a first-class, logged, reproducible, queryable artefact.</p>
+<section id="motivation" class="level2" data-number="22.1">
+<h2 data-number="22.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">22.1</span> Motivation</h2>
+<p>An ML experiment is a run of code that takes inputs (data, hyperparameters, code version) and produces outputs (a trained model, metrics, plots). Experiment tracking records both sides of that equation, persistently and automatically. A previous result can be reproduced exactly. Dozens of runs can be compared on any metric at once. A production model can be traced back to the exact training run that produced it. Colleagues can see what’s already been tried, rather than re-discovering it. It’s version control for models. Git tracks code changes. MLflow tracks experiment changes.</p>
+</section>
+<section id="exposition" class="level2" data-number="22.2">
+<h2 data-number="22.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">22.2</span> Exposition</h2>
+<section id="what-to-track" class="level3" data-number="22.2.1">
+<h3 data-number="22.2.1" class="anchored" data-anchor-id="what-to-track"><span class="header-section-number">22.2.1</span> What to Track</h3>
+<p>Six categories matter. Parameters: learning rate, <code>max_depth</code>, <code>n_estimators</code>. Metrics: accuracy, F1, RMSE, ideally per epoch or iteration, not just the final value. Artefacts: the model file, feature importance plot, confusion matrix. Code version: the git commit hash at training time. Data version: dataset hash or versioned S3 path. Environment: Python and library versions. Missing any one of these breaks full reproducibility. MLflow’s <code>autolog()</code> captures the first four automatically. Data versioning is handled separately (Chapter 24 covers this).</p>
+</section>
+<section id="mlflow-components" class="level3" data-number="22.2.2">
+<h3 data-number="22.2.2" class="anchored" data-anchor-id="mlflow-components"><span class="header-section-number">22.2.2</span> MLflow Components</h3>
+<p>MLflow has four integrated pieces. Tracking is the core logging layer. Every run lives inside an experiment (a logical grouping), carrying parameters, metrics, and artefacts that can be sorted, filtered, and plotted side by side in the UI. Projects is a packaging convention, an <code>MLproject</code> file specifying entry point, parameters, and environment, for running ML code reproducibly on any machine. Models is a standard save format. Any model saved this way loads back with <code>mlflow.pyfunc.load_model()</code>, regardless of whether it was originally sklearn, XGBoost, or PyTorch. The Model Registry is a central catalogue with an explicit lifecycle, <code>None → Staging → Production → Archived</code>. It’s the promotion gate between experimentation and deployment, answering “which model is in production right now, and what run produced it?” with a definitive, auditable trail.</p>
+</section>
+<section id="weights-biases" class="level3" data-number="22.2.3">
+<h3 data-number="22.2.3" class="anchored" data-anchor-id="weights-biases"><span class="header-section-number">22.2.3</span> Weights &amp; Biases</h3>
+<p>W&amp;B is MLflow’s main alternative, with a stronger deep-learning focus and a hosted cloud dashboard rather than a self-hosted tracking server. For most enterprise and Solutions Architect contexts, MLflow remains the default. It’s open source. It runs on any infrastructure. It has tight SageMaker integration via a managed tracking server that requires no server management at all.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="22.3">
+<h2 data-number="22.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">22.3</span> Trade-offs and Limits</h2>
+<p>Tracking doesn’t solve data versioning. MLflow records <em>which data path</em> was used, not whether the data at that path later changed underneath the run. DVC or S3 versioning covers that separately. It adds a small logging overhead per call, which matters for very tight training loops (per-batch logging at millisecond scale needs to be selective about frequency). What’s lost by skipping it entirely is larger: reproducibility of deleted or forgotten runs, organisational memory about what was already tried, and, in regulated industries, the ability to explain which model made a specific decision. That can be a legal requirement, not just good practice.</p>
+</section>
+<section id="procedures" class="level2" data-number="22.4">
+<h2 data-number="22.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">22.4</span> Procedures</h2>
+<p id="proc-22-1"><strong>Procedure 22.1 (Start MLflow Tracking in a Script).</strong> <em>When to use:</em> every model training run.</p>
+<div id="lst-mlflow-start" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mlflow-start-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;22.1: Setting a tracking URI, experiment, and starting a run
+</figcaption>
+<div aria-describedby="lst-mlflow-start-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> mlflow</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="co"># or a remote/SageMaker tracking server</span></span>
+<span id="cb1-4">mlflow.set_tracking_uri(<span class="st">"sqlite:///mlflow.db"</span>)</span>
+<span id="cb1-5">mlflow.set_experiment(<span class="st">"my-project-name"</span>)</span>
+<span id="cb1-6"></span>
+<span id="cb1-7"><span class="cf">with</span> mlflow.start_run(run_name<span class="op">=</span><span class="st">"descriptive-name"</span>) <span class="im">as</span> run:</span>
+<span id="cb1-8">    <span class="bu">print</span>(<span class="ss">f"Run ID: </span><span class="sc">{</span>run<span class="sc">.</span>info<span class="sc">.</span>run_id<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb1-9">    <span class="co"># ... training code here</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-22-2"><strong>Procedure 22.2 (Log Parameters, Metrics, and Artefacts).</strong> <em>When to use:</em> inside a <code>with mlflow.start_run()</code> block.</p>
+<div id="lst-mlflow-log" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mlflow-log-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;22.2: Logging the full picture of a run
+</figcaption>
+<div aria-describedby="lst-mlflow-log-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">mlflow.log_params({<span class="st">"n_estimators"</span>: <span class="dv">100</span>, <span class="st">"max_depth"</span>: <span class="dv">5</span>})</span>
+<span id="cb2-2">mlflow.log_metric(<span class="st">"accuracy"</span>, <span class="fl">0.94</span>)</span>
+<span id="cb2-3"><span class="cf">for</span> epoch, loss <span class="kw">in</span> <span class="bu">enumerate</span>(loss_history):</span>
+<span id="cb2-4">    mlflow.log_metric(<span class="st">"train_loss"</span>, loss, step<span class="op">=</span>epoch)</span>
+<span id="cb2-5">mlflow.log_artifact(<span class="st">"feature_importance.png"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-22-3"><strong>Procedure 22.3 (Use Autolog for Quick Sweeps).</strong> <em>When to use:</em> rapid experimentation where custom logging isn’t needed.</p>
+<div id="lst-mlflow-autolog" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mlflow-autolog-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;22.3: Automatic capture for sklearn
+</figcaption>
+<div aria-describedby="lst-mlflow-autolog-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># enable BEFORE creating the model</span></span>
+<span id="cb3-2">mlflow.sklearn.autolog()</span>
+<span id="cb3-3">model <span class="op">=</span> RandomForestClassifier(n_estimators<span class="op">=</span><span class="dv">100</span>)</span>
+<span id="cb3-4"><span class="co"># parameters + metrics logged automatically</span></span>
+<span id="cb3-5">model.fit(X_train, y_train)</span>
+<span id="cb3-6"><span class="co"># disable so it doesn't capture unintended runs</span></span>
+<span id="cb3-7">mlflow.sklearn.autolog(disable<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-22-4"><strong>Procedure 22.4 (Compare Experiments Programmatically).</strong> <em>When to use:</em> finding the best run after a sweep, without opening the UI.</p>
+<div id="lst-mlflow-search" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mlflow-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;22.4: Querying runs as a DataFrame
+</figcaption>
+<div aria-describedby="lst-mlflow-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">runs <span class="op">=</span> mlflow.search_runs(</span>
+<span id="cb4-2">    experiment_names<span class="op">=</span>[<span class="st">"my-experiment"</span>],</span>
+<span id="cb4-3">    order_by<span class="op">=</span>[<span class="st">"metrics.f1 DESC"</span>],</span>
+<span id="cb4-4">)</span>
+<span id="cb4-5">best_run_id <span class="op">=</span> runs.iloc[<span class="dv">0</span>][<span class="st">'run_id'</span>]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-22-5"><strong>Procedure 22.5 (Register and Promote a Model).</strong> <em>When to use:</em> a run produces a model good enough for production.</p>
+<div id="lst-mlflow-register" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mlflow-register-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;22.5: Registry lifecycle: register, then promote
+</figcaption>
+<div aria-describedby="lst-mlflow-register-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">from</span> mlflow.tracking <span class="im">import</span> MlflowClient</span>
+<span id="cb5-2"></span>
+<span id="cb5-3">result <span class="op">=</span> mlflow.register_model(</span>
+<span id="cb5-4">    model_uri<span class="op">=</span><span class="ss">f"runs:/</span><span class="sc">{</span>best_run_id<span class="sc">}</span><span class="ss">/model"</span>,</span>
+<span id="cb5-5">    name<span class="op">=</span><span class="st">"my-model-name"</span>,</span>
+<span id="cb5-6">)</span>
+<span id="cb5-7">MlflowClient().transition_model_version_stage(</span>
+<span id="cb5-8">    name<span class="op">=</span><span class="st">"my-model-name"</span>,</span>
+<span id="cb5-9">    version<span class="op">=</span>result.version,</span>
+<span id="cb5-10">    stage<span class="op">=</span><span class="st">"Staging"</span>,</span>
+<span id="cb5-11">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> leaving <code>autolog()</code> enabled after a sweep finishes. It silently captures every subsequent training call, cluttering the experiment with unintended runs.</p>
+</section>
+<section id="worked-example" class="level2" data-number="22.5">
+<h2 data-number="22.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">22.5</span> Worked Example</h2>
+<p>Sweeping four Random Forest configurations (<code>n_estimators</code> in {50, 200}, <code>max_depth</code> in {3, 6}) on the Breast Cancer Wisconsin dataset, each logged as its own MLflow run against a local SQLite-backed tracking store:</p>
+<div id="lst-mlflow-sweep" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mlflow-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;22.6: A 4-run sweep, each logged as its own MLflow run
+</figcaption>
+<div aria-describedby="lst-mlflow-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="cf">for</span> cfg <span class="kw">in</span> configs:</span>
+<span id="cb6-2">    run_name <span class="op">=</span> <span class="ss">f"n</span><span class="sc">{</span>cfg[<span class="st">'n_estimators'</span>]<span class="sc">}</span><span class="ss">_d</span><span class="sc">{</span>cfg[<span class="st">'max_depth'</span>]<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb6-3">    <span class="cf">with</span> mlflow.start_run(run_name<span class="op">=</span>run_name):</span>
+<span id="cb6-4">        mlflow.log_params(cfg)</span>
+<span id="cb6-5">        model <span class="op">=</span> RandomForestClassifier(</span>
+<span id="cb6-6">            <span class="op">**</span>cfg,</span>
+<span id="cb6-7">            random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb6-8">        ).fit(X_train, y_train)</span>
+<span id="cb6-9">        mlflow.log_metric(</span>
+<span id="cb6-10">            <span class="st">"f1"</span>,</span>
+<span id="cb6-11">            f1_score(y_test, model.predict(X_test)),</span>
+<span id="cb6-12">        )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Measured F1 across the sweep: <code>n_estimators=50, max_depth=3</code> → 0.9583; <code>n_estimators=50, max_depth=6</code> → 0.9655; <code>n_estimators=200, max_depth=3</code> → 0.9655; <code>n_estimators=200, max_depth=6</code> → 0.9583. Two configurations tie for the best score (0.9655) despite using very different amounts of compute. 50 trees at depth 6 matches 200 trees at depth 3 exactly on this metric. That’s a genuinely useful thing to discover from a tracked sweep rather than assume, since “more trees” alone doesn’t explain the ranking here.</p>
+<p>Querying the tracking store back programmatically, without opening any UI, confirms the same ranking:</p>
+<div id="lst-mlflow-query-result" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mlflow-query-result-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;22.7: Reproducing the ranking via search_runs, no UI needed
+</figcaption>
+<div aria-describedby="lst-mlflow-query-result-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">runs <span class="op">=</span> mlflow.search_runs(</span>
+<span id="cb7-2">    experiment_names<span class="op">=</span>[<span class="st">"hiring-classifier-demo"</span>],</span>
+<span id="cb7-3">    order_by<span class="op">=</span>[<span class="st">"metrics.f1 DESC"</span>],</span>
+<span id="cb7-4">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This returns the two 0.9655 runs (<code>n_estimators=200/max_depth=3</code> and <code>n_estimators=50/max_depth=6</code>) tied at the top, followed by the two 0.9583 runs: exactly the four logged results, sorted, queryable as an ordinary DataFrame months after the sweep ran, with every parameter that produced each score still attached. This is the entire point of tracking made concrete. Nothing about “which config won” depends on anyone’s memory of running the sweep.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><span class="im">import</span> mlflow</span>
+<span id="cb8-2"></span>
+<span id="cb8-3"><span class="co"># Point to SageMaker's managed MLflow tracking server</span></span>
+<span id="cb8-4"><span class="co"># (no server to run yourself)</span></span>
+<span id="cb8-5">mlflow.set_tracking_uri(</span>
+<span id="cb8-6">    <span class="st">"https://&lt;server-id&gt;.studio.us-east-1"</span></span>
+<span id="cb8-7">    <span class="st">".sagemaker.aws/mlflow"</span></span>
+<span id="cb8-8">)</span>
+<span id="cb8-9"></span>
+<span id="cb8-10"><span class="co"># Logging code is otherwise IDENTICAL to local MLflow</span></span>
+<span id="cb8-11"><span class="cf">with</span> mlflow.start_run():</span>
+<span id="cb8-12">    mlflow.log_params({<span class="st">"n_estimators"</span>: <span class="dv">100</span>})</span>
+<span id="cb8-13">    <span class="co"># artefacts automatically stored in S3</span></span>
+<span id="cb8-14">    mlflow.log_metric(<span class="st">"accuracy"</span>, <span class="fl">0.97</span>)</span></code></pre></div>
+<p><strong>When to prefer SageMaker’s managed MLflow:</strong> when the tracking server itself shouldn’t be something the team operates. SageMaker MLflow runs in your VPC with S3-backed artifacts and no server to patch or scale, while the logging code in every training script stays exactly the same as local MLflow.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="22.6">
+<h2 data-number="22.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">22.6</span> History and Further Reading</h2>
+<p>MLflow’s own documentation (mlflow.org) is the complete API and architecture reference. Thakur, Ch. 10, covers practical Python project structure for reproducible ML work <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Sculley et al.’s “Hidden Technical Debt in Machine Learning Systems” (sometimes cited alongside “Continuous Delivery for ML”) is the paper that helped define MLOps, with tracking central to its argument <span class="citation" data-cites="sculley2015hiddentechnicaldebt">(<a href="#ref-sculley2015hiddentechnicaldebt" role="doc-biblioref">Sculley et al. 2015</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="22.7">
+<h2 data-number="22.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">22.7</span> How This Connects</h2>
+<p>This chapter builds on every prior modelling chapter. Tracking is the wrapper around all of them, not a technique specific to one model type. It enables Chapter 24’s MLOps, where the model registry is the literal handoff point between data science and production. It’s often confused with Chapter 25’s monitoring: tracking is training-time observability (what happened while building the model), monitoring is inference-time observability (what’s happening while the model serves live traffic). Both are needed. Neither substitutes for the other.</p>
+</section>
+<section id="exercises" class="level2" data-number="22.8">
+<h2 data-number="22.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">22.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-22-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> List the six categories of information needed for full reproducibility of a training run, and state which of the six MLflow’s <code>autolog()</code> does NOT capture automatically.</p></li>
+<li id="ex-22-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain the difference between MLflow Tracking and the MLflow Model Registry in one or two sentences.</p></li>
+<li id="ex-22-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-mlflow-sweep" class="quarto-xref">Listing&nbsp;<span>22.6</span></a>’s measured results, explain why <code>n_estimators=200, max_depth=6</code> (0.9583) scored <em>lower</em> than <code>n_estimators=50, max_depth=6</code> (0.9655) despite using 4x more trees at the same depth. What does this suggest about this configuration relative to the dataset’s actual complexity?</p></li>
+<li id="ex-22-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-mlflow-query-result" class="quarto-xref">Listing&nbsp;<span>22.7</span></a>’s pattern, write a <code>filter_string</code> for <code>mlflow.search_runs</code> that would return only runs with <code>max_depth=6</code> and F1 above 0.96, and state which of this chapter’s four logged runs would match.</p></li>
+<li id="ex-22-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team says “we don’t need MLflow, we just name our output files carefully like <code>model_v3_final_FINAL.pkl</code>.” Using this chapter’s Motivation section, write the two or three sentences you’d say about what that convention doesn’t solve.</p></li>
+<li id="ex-22-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague enables <code>mlflow.sklearn.autolog()</code> at the top of a long notebook and never disables it. Using this chapter’s Troubleshooting guidance, predict what will go wrong by the end of the session.</p></li>
+<li id="ex-22-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the MLflow documentation’s description of the Model Registry stage transition API. Identify what <code>archive_existing_versions=True</code> does when promoting a new version to Production, and explain why that default matters for the registry’s “which model is in production right now” guarantee.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="22.9">
+<h2 data-number="22.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">22.9</span> Mental Model</h2>
+<p>An untracked experiment is like writing code without ever committing to Git. It works fine until the moment there’s a need to go back, and by then it’s gone. Experiment tracking is the <code>git commit</code> for ML runs: every run should be a commit. The model registry is the <code>main</code> branch. Only promoted, reviewed models live there. Everything else stays a candidate until someone explicitly says otherwise.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-sculley2015hiddentechnicaldebt" class="csl-entry" role="listitem">
+Sculley, D., Gary Holt, Daniel Golovin, et al. 2015. <span>“Hidden Technical Debt in Machine Learning Systems.”</span> <em>Advances in Neural Information Processing Systems</em> 28.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

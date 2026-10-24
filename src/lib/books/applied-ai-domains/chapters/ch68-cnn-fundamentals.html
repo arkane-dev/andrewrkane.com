@@ -1,0 +1,190 @@
+<p>A fully-connected layer treats every pixel as an independent input with its own set of weights to every output. For a modest 224x224 colour image, that’s 150,528 inputs. A single fully-connected layer with even 1,000 hidden units needs over 150 million weights, all learned independently, none of them sharing what they learn about “what an edge looks like” with any other part of the image. Convolutional neural networks fix this by building in a structural assumption fully-connected layers ignore: what makes a feature useful doesn’t depend on where it appears in the frame. A cat’s ear looks like a cat’s ear whether it’s in the top-left or bottom-right of the photo.</p>
+<section id="motivation" class="level2" data-number="68.1">
+<h2 data-number="68.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">68.1</span> Motivation</h2>
+<p>A convolution layer applies the same small set of weights, a kernel, at every position in the image, sliding across it. This weight sharing does two things at once: it makes the layer dramatically cheaper (a 3x3 kernel has 9 weights, not one weight per pixel pair), and it gives the network translation equivariance: if the input shifts, the feature map shifts with it, rather than the network relearning the same pattern separately for every possible position. Pooling (usually max-pooling) then does something subtly different: it discards exact position within a small window, keeping only the strongest response, converting convolution’s equivariance into translation invariance for classification purposes. After enough pooling, the network’s final answer stops caring exactly where in the image the relevant features fired. Getting these two words right matters: equivariant means “shifts with the input”; invariant means “doesn’t change when the input shifts.” Convolution alone is equivariant; convolution plus pooling, applied a few times, becomes progressively closer to invariant.</p>
+</section>
+<section id="exposition" class="level2" data-number="68.2">
+<h2 data-number="68.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">68.2</span> Exposition</h2>
+<section id="weight-sharing-as-an-inductive-bias" class="level3" data-number="68.2.1">
+<h3 data-number="68.2.1" class="anchored" data-anchor-id="weight-sharing-as-an-inductive-bias"><span class="header-section-number">68.2.1</span> Weight Sharing as an Inductive Bias</h3>
+<p>Every architecture makes some assumption about the structure of its input, stated or not. A fully-connected layer’s implicit assumption is “any input feature could matter for any output, in any position-specific way,” enormously flexible, but it has to learn spatial structure from scratch, from data, using far more parameters than the problem actually requires. A CNN’s implicit assumption, local patterns matter, and mean the same thing everywhere, happens to be true for natural images, so building it in for free, rather than making the network learn it, is a large efficiency win. Worked Example 68 below makes this concrete: a roughly 1,900-parameter CNN reaches real, measured 94.4% test accuracy on handwritten digits.</p>
+</section>
+<section id="the-classic-architecture-lineage" class="level3" data-number="68.2.2">
+<h3 data-number="68.2.2" class="anchored" data-anchor-id="the-classic-architecture-lineage"><span class="header-section-number">68.2.2</span> The Classic Architecture Lineage</h3>
+<p>LeNet (1989/1998, LeCun) is the original: a small number of conv+pool blocks followed by fully-connected layers, the blueprint every CNN since has followed at some level. AlexNet (2012) went deeper, swapped sigmoid/tanh for ReLU activations (which don’t saturate and vanish as badly, connects to Book 2’s intro-to-neural-networks chapter and its gradient discussion), added dropout for regularisation, and, critically, trained on GPUs, making a network this size practical for the first time. VGG (2014) pushed depth further with a simple, uniform design: stack many small 3x3 convolutions instead of a few large ones. Stacking small kernels grows the receptive field just as effectively as a few large kernels, at lower parameter cost, and VGG’s insight was to lean into that fully.</p>
+</section>
+<section id="where-this-hits-a-wall" class="level3" data-number="68.2.3">
+<h3 data-number="68.2.3" class="anchored" data-anchor-id="where-this-hits-a-wall"><span class="header-section-number">68.2.3</span> Where This Hits a Wall</h3>
+<p>VGG-style “just stack more 3x3 layers” doesn’t scale indefinitely. Push a plain (no skip connections) CNN much past roughly 20 layers and something counterintuitive happens: it doesn’t just get harder to train, it gets outright worse, even on the training set, where more capacity should help, not hurt. That’s the vanishing-gradient problem specifically as it hits stacked convolutions, and it’s the exact problem Chapter 69 exists to solve. This chapter’s job is building the CNN vocabulary; Chapter 69 explains why depth alone stops helping and what residual connections do about it.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="68.3">
+<h2 data-number="68.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">68.3</span> Trade-offs and Limits</h2>
+<p>Kernel size versus depth: a single large kernel (7x7) covers more of the image per layer than a small one (3x3), but costs more parameters per layer for the same receptive field. Stacking small kernels (VGG’s approach) usually wins on parameter efficiency, at the cost of needing more layers, and eventually running into the vanishing-gradient wall. Pooling versus strided convolution: max-pooling is a fixed, non-learned downsampling operation; a strided convolution (stride &gt; 1) downsamples and learns what to keep in the process. Modern architectures increasingly prefer strided convolutions or learned downsampling, though pooling remains simple, cheap, and effective enough to still show up everywhere. Data augmentation isn’t free, and Worked Example 68 measures this directly rather than assuming it: augmentation’s benefit has to be calibrated to the data’s actual scale, not applied by default because a tutorial said so.</p>
+</section>
+<section id="procedures" class="level2" data-number="68.4">
+<h2 data-number="68.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">68.4</span> Procedures</h2>
+<p id="proc-68-1"><strong>Procedure 68.1 (Calculate Conv/Pooling Output Dimensions).</strong> <em>When to use:</em> designing a CNN architecture, to know what spatial size each layer produces before the final flatten/fully-connected layer.</p>
+<div id="lst-cnn-output-size" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cnn-output-size-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;68.1: Output size formula, applied to same-padding, no-padding, and pooling cases
+</figcaption>
+<div aria-describedby="lst-cnn-output-size-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> conv_output_size(input_size, kernel_size, padding<span class="op">=</span><span class="dv">0</span>, stride<span class="op">=</span><span class="dv">1</span>):</span>
+<span id="cb1-2">    <span class="cf">return</span> (input_size <span class="op">+</span> <span class="dv">2</span> <span class="op">*</span> padding <span class="op">-</span> kernel_size) <span class="op">//</span> stride <span class="op">+</span> <span class="dv">1</span></span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="co"># 8: "same" padding keeps size</span></span>
+<span id="cb1-5">conv_output_size(<span class="dv">8</span>, kernel_size<span class="op">=</span><span class="dv">3</span>, padding<span class="op">=</span><span class="dv">1</span>, stride<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-6"><span class="co"># 6: no padding shrinks by (k-1)</span></span>
+<span id="cb1-7">conv_output_size(<span class="dv">8</span>, kernel_size<span class="op">=</span><span class="dv">3</span>, padding<span class="op">=</span><span class="dv">0</span>, stride<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-8"><span class="co"># 4: a 2x2/stride-2 max-pool halves size</span></span>
+<span id="cb1-9">conv_output_size(<span class="dv">8</span>, kernel_size<span class="op">=</span><span class="dv">2</span>, padding<span class="op">=</span><span class="dv">0</span>, stride<span class="op">=</span><span class="dv">2</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> getting the flatten dimension wrong for the first fully-connected layer. Compute it explicitly for every conv/pool layer in sequence rather than guessing; a one-off error here is the single most common reason a new CNN throws a shape-mismatch error on the first forward pass.</p>
+<p id="proc-68-2"><strong>Procedure 68.2 (Choose Kernel Size, Stride, and Padding).</strong> <em>When to use:</em> designing a new conv layer.</p>
+<div id="lst-cnn-choose-params" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cnn-choose-params-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;68.2: Rules of thumb, not laws
+</figcaption>
+<div aria-describedby="lst-cnn-choose-params-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Kernel size: 3x3 default (stacking small kernels is
+             usually more parameter-efficient).
+             Exception: the FIRST layer sometimes uses
+             5x5/7x7 with stride&gt;1 to downsample quickly
+             and cheaply before the expensive part of the
+             network.
+Stride:      1 for most layers; stride=2 is a common
+             alternative to a separate pooling layer:
+             downsamples AND learns what to keep.
+Padding:     'same' padding standard unless spatial size
+             should shrink each layer.
+             padding_for_same_size = (kernel_size - 1) // 2
+             # stride=1, odd kernel_size</code></pre>
+</div>
+</figure>
+</div>
+<p id="proc-68-3"><strong>Procedure 68.3 (Set Up a Data Augmentation Pipeline, Task-Appropriately).</strong> <em>When to use:</em> training on a dataset small enough that augmentation is worth the real, task-dependent risk.</p>
+<div id="lst-cnn-augment" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cnn-augment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;68.3: Two different augmentation pipelines for two different label-sensitivity profiles
+</figcaption>
+<div aria-describedby="lst-cnn-augment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># Natural photos: flips are usually safe</span></span>
+<span id="cb3-2"><span class="co"># (a flipped cat is still a cat)</span></span>
+<span id="cb3-3">photo_augmentation <span class="op">=</span> T.Compose([</span>
+<span id="cb3-4">    T.RandomHorizontalFlip(p<span class="op">=</span><span class="fl">0.5</span>),</span>
+<span id="cb3-5">    T.RandomRotation(degrees<span class="op">=</span><span class="dv">10</span>),</span>
+<span id="cb3-6">])</span>
+<span id="cb3-7"></span>
+<span id="cb3-8"><span class="co"># Digits/symbols: flips are usually WRONG (a flipped "7" isn't a</span></span>
+<span id="cb3-9"><span class="co"># "7")</span></span>
+<span id="cb3-10">symbol_augmentation <span class="op">=</span> T.Compose([</span>
+<span id="cb3-11">    T.RandomAffine(degrees<span class="op">=</span><span class="dv">5</span>, translate<span class="op">=</span>(<span class="fl">0.05</span>, <span class="fl">0.05</span>)),</span>
+<span id="cb3-12">])</span>
+<span id="cb3-13"><span class="co"># deliberately NO RandomHorizontalFlip here</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> copying a standard ImageNet-style augmentation pipeline onto a task where those transformations don’t preserve label meaning: digits, text, medical scans with a canonical orientation. And even when a transformation does preserve label meaning, its strength still has to suit the image’s actual resolution. Worked Example 68 measures a real case where this assumption fails.</p>
+</section>
+<section id="worked-example" class="level2" data-number="68.5">
+<h2 data-number="68.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">68.5</span> Worked Example</h2>
+<p>A roughly 1,900-parameter CNN (two small conv+pool blocks followed by a small fully-connected head) trained on real handwritten digit images reaches <strong>94.4% test accuracy</strong>, a concrete, measured confirmation of Exposition’s efficiency claim: a network with fewer parameters than a single small fully-connected layer would need for one image’s raw pixels achieves strong accuracy specifically because weight sharing lets it reuse the same learned edge/stroke detectors across every position in the image, rather than learning position-specific weights from scratch.</p>
+<p>A second experiment, seed-averaged over 8 runs, tests Trade-offs’ data-augmentation claim directly rather than assuming augmentation helps by default:</p>
+<div id="lst-cnn-worked-augment" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cnn-worked-augment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;68.4: The augmentation ablation: same model, same data, only augmentation toggled
+</figcaption>
+<div aria-describedby="lst-cnn-worked-augment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="cf">for</span> seed <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">8</span>):</span>
+<span id="cb4-2">    acc_no_aug <span class="op">=</span> train_and_eval(</span>
+<span id="cb4-3">        model,</span>
+<span id="cb4-4">        train_data,</span>
+<span id="cb4-5">        seed<span class="op">=</span>seed,</span>
+<span id="cb4-6">        augment<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb4-7">    )</span>
+<span id="cb4-8">    acc_aug    <span class="op">=</span> train_and_eval(</span>
+<span id="cb4-9">        model,</span>
+<span id="cb4-10">        train_data,</span>
+<span id="cb4-11">        seed<span class="op">=</span>seed,</span>
+<span id="cb4-12">        augment<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb4-13">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Condition</th>
+<th>Test accuracy (mean ± std over 8 seeds)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>No augmentation</td>
+<td><strong>0.874 ± 0.016</strong></td>
+</tr>
+<tr class="even">
+<td>With augmentation (small shifts + mild noise)</td>
+<td><strong>0.866 ± 0.013</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Augmentation gave essentially no benefit, if anything, a small, likely-noise-level decrease. At this resolution (small, low-resolution digit images), standard augmentation strengths tuned for much larger natural images are proportionally too aggressive to help: a “small” pixel shift calibrated for a 224x224 photo is a much larger fraction of an 8x8 digit’s total content, effectively corrupting the digit rather than mildly perturbing it. This is Trade-offs’ warning made measurable: augmentation’s benefit has to be measured and calibrated to a dataset’s actual scale, not applied by default because a general tutorial or library default recommends it.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># Amazon Rekognition: managed image classification/</span></span>
+<span id="cb5-2"><span class="co"># detection with zero custom training, for common</span></span>
+<span id="cb5-3"><span class="co"># categories, or Custom Labels for a specific taxonomy</span></span>
+<span id="cb5-4">response <span class="op">=</span> rekognition.detect_labels(</span>
+<span id="cb5-5">    Image<span class="op">=</span>{<span class="st">"S3Object"</span>: {<span class="st">"Bucket"</span>: bucket, <span class="st">"Name"</span>: key}}</span>
+<span id="cb5-6">)</span></code></pre></div>
+<p><strong>When to prefer Rekognition over training a custom CNN:</strong> when the target categories fall inside Rekognition’s pretrained label taxonomy (common objects, scenes, activities), or when Custom Labels’ small-sample fine-tuning UI covers the task without hand-designing an architecture. Procedure 68.1-68.3’s CNN-from-scratch approach remains the right call when a task has specialised categories, resolution characteristics, or accuracy requirements Rekognition’s general-purpose models weren’t tuned for, which this chapter’s 8x8-digit augmentation result illustrates directly: a general-purpose default doesn’t automatically transfer to an unusual data scale.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="68.6">
+<h2 data-number="68.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">68.6</span> History and Further Reading</h2>
+<p>LeCun et al.’s “Gradient-Based Learning Applied to Document Recognition” <span class="citation" data-cites="lecun1998lenet">(<a href="#ref-lecun1998lenet" role="doc-biblioref">LeCun et al. 1998</a>)</span> is the original LeNet paper. Krizhevsky, Sutskever &amp; Hinton’s “ImageNet Classification with Deep Convolutional Neural Networks” <span class="citation" data-cites="krizhevsky2012alexnet">(<a href="#ref-krizhevsky2012alexnet" role="doc-biblioref">Krizhevsky et al. 2012</a>)</span> is the AlexNet paper, the ImageNet moment. Simonyan &amp; Zisserman’s “Very Deep Convolutional Networks for Large-Scale Image Recognition” <span class="citation" data-cites="simonyan2014vgg">(<a href="#ref-simonyan2014vgg" role="doc-biblioref">Simonyan and Zisserman 2014</a>)</span> is the VGG paper. Burkov Ch. 5 gives a concise neural-network refresher useful as context for the backpropagation this chapter assumes <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="68.7">
+<h2 data-number="68.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">68.7</span> How This Connects</h2>
+<p>This chapter builds on Book 2’s intro-to-neural-networks chapter (the perceptron/backpropagation foundation every layer type, including convolution, trains with) and Chapter 67’s historical arc, which this chapter’s architectures sit within. It enables Chapter 69 (which solves the vanishing-gradient wall this chapter ends on) and Chapter 70 (detection/segmentation architectures are built on CNN backbones like these). It’s often confused on equivariance versus invariance. Get these backwards and pooling’s role stops making sense: convolution alone is equivariant (shifts with the input), pooling moves the network toward invariance (doesn’t change when the input shifts).</p>
+</section>
+<section id="exercises" class="level2" data-number="68.8">
+<h2 data-number="68.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">68.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-68-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define translation equivariance and translation invariance in one sentence each, and state which one convolution alone provides.</p></li>
+<li id="ex-68-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Using <a href="#lst-cnn-output-size" class="quarto-xref">Listing&nbsp;<span>68.1</span></a>’s formula, compute the output size of an 8x8 input through a 3x3 kernel with padding=0, stride=1, and explain why this differs from the “same”-padding case.</p></li>
+<li id="ex-68-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s measured augmentation result (0.874 ± 0.016 without vs.&nbsp;0.866 ± 0.013 with augmentation), explain why the overlapping error ranges (mean ± std) matter for concluding “augmentation didn’t help” rather than “augmentation made it slightly worse.”</p></li>
+<li id="ex-68-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s ~1,900-parameter CNN reaching 94.4% accuracy, explain in your own words why weight sharing is the specific mechanism that makes this parameter count sufficient, connecting it to Exposition’s fully-connected-layer parameter-count comparison.</p></li>
+<li id="ex-68-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague copies a standard ImageNet augmentation pipeline (flips, rotation, colour jitter) onto a medical X-ray classification task without modification. Using this chapter’s Procedure 68.3 and Worked Example, write the two or three sentences you’d say about what to check first.</p></li>
+<li id="ex-68-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A new CNN throws a shape-mismatch error on its first forward pass. Using Procedure 68.1’s warning, describe the specific debugging step to take before assuming the error is in the model architecture itself.</p></li>
+<li id="ex-68-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about the vanishing-gradient problem as it affects very deep plain CNNs (referenced in this chapter’s “Where This Hits a Wall”). Identify what specifically about stacking many convolutional layers (without skip connections) causes gradients to vanish, in your own words, before reading Chapter 69’s solution.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="68.9">
+<h2 data-number="68.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">68.9</span> Mental Model</h2>
+<p>A convolution layer is a small, cheap, reusable pattern detector applied everywhere in the image at once. Pooling then throws away exactly where a pattern fired, keeping only that it fired. Stack a few rounds of “detect local patterns, discard exact position, detect patterns-of-patterns” and the network moves from raw pixels to increasingly abstract, position-independent features: edges, then textures, then parts, then whole objects. This chapter’s Worked Example is a reminder that not every standard technique transfers automatically to a new data scale: augmentation is a real, useful tool for natural photos, and a measured non-improvement on tiny digit images, both true at once.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-krizhevsky2012alexnet" class="csl-entry" role="listitem">
+Krizhevsky, Alex, Ilya Sutskever, and Geoffrey E. Hinton. 2012. <span>“ImageNet Classification with Deep Convolutional Neural Networks.”</span> <em>Advances in Neural Information Processing Systems</em> 25: 1097–105.
+</div>
+<div id="ref-lecun1998lenet" class="csl-entry" role="listitem">
+LeCun, Yann, Léon Bottou, Yoshua Bengio, and Patrick Haffner. 1998. <span>“Gradient-Based Learning Applied to Document Recognition.”</span> <em>Proceedings of the IEEE</em> 86 (11): 2278–324.
+</div>
+<div id="ref-simonyan2014vgg" class="csl-entry" role="listitem">
+Simonyan, Karen, and Andrew Zisserman. 2014. <span>“Very Deep Convolutional Networks for Large-Scale Image Recognition.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+</div>
+</section>

@@ -1,0 +1,191 @@
+<p><a href="/books/applied-ai-domains/ch58-physical-ai-landscape-embodiment" class="quarto-xref"><span>Chapter 58</span></a> named the sim-to-real gap without explaining how anyone actually deals with it. This chapter does. Training or testing a policy directly on real hardware is slow (one trial at a time, real-time only), expensive (real robots break), and unsafe (a bad policy can hurt itself, its surroundings, or a person while it’s still learning). Simulation solves all three: thousands of trials can run in parallel, faster than real time, with zero physical risk. The cost is that a simulator is a model of physics, not physics, and every place that model is wrong is a place a policy can learn to exploit a quirk that doesn’t exist in reality.</p>
+<section id="motivation" class="level2" data-number="62.1">
+<h2 data-number="62.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">62.1</span> Motivation</h2>
+<p>Three properties trade off against each other in any robotics simulator: physics accuracy (how faithfully contact dynamics, friction, and articulated-body motion match reality; contact dynamics are notoriously hard to simulate accurately, and a lot of the sim-to-real gap lives here), rendering fidelity (how photorealistic the visual output is; matters enormously for vision-based policies, not at all for policies that only ever see joint angles and velocities), and speed/parallelism (how many simulated steps per second, and critically, how many environment instances can run simultaneously; a simulator that can only run one environment at a time, even quickly, still bottlenecks training on wall-clock time). No simulator maximises all three simultaneously, and which one to reach for depends on which property a specific task actually needs. Worked Example 62 below measures directly what the core mechanism for narrowing the sim-to-real gap, domain randomization, is worth, numerically, not just conceptually.</p>
+</section>
+<section id="exposition" class="level2" data-number="62.2">
+<h2 data-number="62.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">62.2</span> Exposition</h2>
+<section id="isaac-sim-vs.-isaac-lab" class="level3" data-number="62.2.1">
+<h3 data-number="62.2.1" class="anchored" data-anchor-id="isaac-sim-vs.-isaac-lab"><span class="header-section-number">62.2.1</span> Isaac Sim vs.&nbsp;Isaac Lab</h3>
+<p>These are two different layers, often confused. Isaac Sim is the underlying simulation and rendering platform, built on NVIDIA Omniverse and USD, using PhysX for physically accurate rigid-body and contact dynamics, with photorealistic ray-traced rendering: a general-purpose 3D simulation tool that happens to be very good for robotics. Isaac Lab is a robot-learning framework built on top of Isaac Sim: it wraps Isaac Sim scenes as standardised RL/imitation-learning environments (observation/action spaces, reward functions, episode reset logic) and, its single most practically important feature, runs thousands of instances of the same environment in parallel on one GPU. This is what turns “simulate a robot arm” into “simulate 4,096 robot arms simultaneously, all slightly different,” the throughput a modern RL training run actually needs. Isaac Sim is the right tool directly for a one-off scene or a non-learning simulation task; Isaac Lab is the right tool when the goal is training or evaluating a learned policy at scale.</p>
+</section>
+<section id="open-source-alternatives" class="level3" data-number="62.2.2">
+<h3 data-number="62.2.2" class="anchored" data-anchor-id="open-source-alternatives"><span class="header-section-number">62.2.2</span> Open-Source Alternatives</h3>
+<p>MuJoCo offers fast, accurate contact physics with basic (non-photorealistic) rendering and good CPU/GPU (MJX) parallelism, now free and open-source, extremely widely used as an RL benchmark. Gazebo offers solid, mature, ROS-native physics with a strong sensor-simulation ecosystem, suited to classical robotics/ROS workflows. PyBullet is lightweight and easy to prototype with, suited to fast prototyping and teaching. A learner without a GPU or Isaac licence should reach for MuJoCo or PyBullet to learn the concepts. This book leans Isaac-primary because it’s the tool most aligned with production robot-learning workflows, not because the alternatives are inadequate for learning.</p>
+</section>
+<section id="domain-randomization" class="level3" data-number="62.2.3">
+<h3 data-number="62.2.3" class="anchored" data-anchor-id="domain-randomization"><span class="header-section-number">62.2.3</span> Domain Randomization</h3>
+<p>The core mechanism for narrowing the sim-to-real gap: instead of training against one fixed simulator configuration, deliberately vary simulated parameters (physics: friction, mass, motor strength; visual: lighting, texture, camera intrinsics; sensor: noise characteristics) across a distribution during training. A policy trained against a single fixed simulator configuration can, and empirically does, learn to exploit that configuration’s specific, incorrect quirks, because doing so minimises training loss and the policy has no way to know those quirks aren’t real. A policy trained across many simulated configurations can’t do this. Overfitting to any one configuration actively hurts its performance on the others, so the only way to do well across the whole distribution is to learn features robust to the variation, and those tend to be closer to the features that also hold in reality.</p>
+</section>
+<section id="synthetic-data-generation" class="level3" data-number="62.2.4">
+<h3 data-number="62.2.4" class="anchored" data-anchor-id="synthetic-data-generation"><span class="header-section-number">62.2.4</span> Synthetic Data Generation</h3>
+<p>A related but distinct use of simulation: rendering many randomized scenes to generate labelled training data for perception models (object detection boxes, segmentation masks, depth maps) automatically and perfectly, because the simulator knows ground truth exactly (it placed every object itself). This sidesteps the expensive, error-prone, slow process of hand-labelling real photographs, at the cost of a visual domain gap between synthetic and real images that domain randomization, applied to rendering this time rather than physics, also helps close.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="62.3">
+<h2 data-number="62.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">62.3</span> Trade-offs and Limits</h2>
+<p>A highly accurate simulator is slow, which limits how many training episodes are affordable; a fast, simplified one allows more training but risks a wider sim-to-real gap. Isaac Lab’s answer is parallelism: run many instances of a moderately accurate simulator simultaneously, rather than one instance of a maximally accurate one sequentially. Too narrow a randomization range and the sim-to-real gap isn’t meaningfully closed; too wide and the training problem becomes so varied the policy struggles to learn anything useful for any single configuration. Worked Example 62 measures a concrete instance of the narrow-range failure mode directly. Isaac Sim’s ray-traced rendering is far more visually realistic than MuJoCo’s, which matters for vision policies but costs real compute. A non-vision policy (joint-angle observations only) gets no benefit from paying that cost.</p>
+</section>
+<section id="procedures" class="level2" data-number="62.4">
+<h2 data-number="62.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">62.4</span> Procedures</h2>
+<p id="proc-62-1"><strong>Procedure 62.1 (Decide What to Randomize and By How Much).</strong> <em>When to use:</em> setting up domain randomization for a new task, before picking any numbers.</p>
+<div id="lst-sim-randomize-heuristic" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sim-randomize-heuristic-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;62.1: A practical heuristic: there isn’t a closed-form answer
+</figcaption>
+<div aria-describedby="lst-sim-randomize-heuristic-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>1. Start narrow: randomize the 2-4 parameters with the
+   LEAST real-hardware confidence (often: friction, mass,
+   motor strength, camera intrinsics).
+2. Centre the range on the best real-world estimate,
+   not an arbitrary default.
+3. Train, then validate on real hardware.
+4. If real-world performance is poor: widen the range for
+   the likely parameter(s), or add a parameter not yet
+   randomized.
+5. If the policy can't learn ANYTHING in simulation: the
+   range is likely too wide too fast. Narrow it and
+   re-add parameters incrementally.</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> randomizing every parameter conceivable on day one. This makes the training problem much harder without evidence any of those parameters actually mattered for the specific sim-to-real gap being closed.</p>
+<p id="proc-62-2"><strong>Procedure 62.2 (Structure an Isaac Lab Environment Conceptually).</strong> <em>When to use:</em> setting up a new Isaac Lab training environment for the first time.</p>
+<div id="lst-sim-isaac-structure" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sim-isaac-structure-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;62.2: The standard separation of concerns
+</figcaption>
+<div aria-describedby="lst-sim-isaac-structure-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>SceneCfg:         what's physically in the scene
+                  (robot, objects, ground plane)
+ObservationsCfg:  what the policy sees each step
+ActionsCfg:       what the policy can command
+RewardsCfg:       the reward function, usually a sum
+                  of weighted terms
+TerminationsCfg:  when an episode ends (success, failure,
+                  timeout)
+EventsCfg / RandomizationCfg:  domain randomization
+                  triggers</code></pre>
+</div>
+</figure>
+</div>
+<p>Each is a small, composable config class: swap <code>RewardsCfg</code> or <code>RandomizationCfg</code> without touching the rest.</p>
+</section>
+<section id="worked-example" class="level2" data-number="62.5">
+<h2 data-number="62.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">62.5</span> Worked Example</h2>
+<p>A PD controller’s gains tuned two ways for a robot arm carrying an unknown payload: fixed-config gains designed for one specific assumed mass (1.0kg, unloaded), versus domain-randomized gains designed against a geometric-mean payload mass (2.24kg) spanning a realistic 1–5kg range:</p>
+<div id="lst-sim-worked-gains" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sim-worked-gains-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;62.3: Two controllers, tuned for different assumptions about payload mass
+</figcaption>
+<div aria-describedby="lst-sim-worked-gains-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># designed for one exact mass</span></span>
+<span id="cb3-2">fixed_kp, fixed_kd <span class="op">=</span> tune_pd_gains(assumed_mass<span class="op">=</span><span class="fl">1.0</span>)</span>
+<span id="cb3-3"><span class="co"># designed across a range</span></span>
+<span id="cb3-4">random_kp, random_kd <span class="op">=</span> tune_pd_gains(</span>
+<span id="cb3-5">    assumed_mass<span class="op">=</span>geo_mean(<span class="fl">1.0</span>, <span class="fl">5.0</span>)</span>
+<span id="cb3-6">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Both controllers evaluated on the identical test set: 300 payload masses sampled uniformly from 1.0 to 5.0 kg, a range the fixed-config controller was never designed to handle:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Controller</th>
+<th>Mean tracking cost</th>
+<th>Mean overshoot</th>
+<th>Max overshoot</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Fixed-config (designed for 1.0kg)</td>
+<td>0.6485</td>
+<td>10.0%</td>
+<td>20.5%</td>
+</tr>
+<tr class="even">
+<td><strong>Domain-randomized (designed across 1–5kg)</strong></td>
+<td><strong>0.4937</strong></td>
+<td><strong>1.3%</strong></td>
+<td><strong>5.5%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The domain-randomized controller wins decisively across the full test distribution: lower mean tracking cost, and dramatically lower overshoot (1.3% mean versus 10.0%, roughly 7.7x better). This alone confirms Exposition’s central claim, but the more striking result comes from checking the fixed-config controller’s <em>own exact design point</em>, the one condition it should have the advantage on:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Condition</th>
+<th>Fixed-config</th>
+<th>Domain-randomized</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Unloaded (mass=1.0, fixed-config’s exact design target)</td>
+<td>cost=0.46205, overshoot=0.00%</td>
+<td><strong>cost=0.41036, overshoot=0.00%</strong></td>
+</tr>
+<tr class="even">
+<td>Heaviest realistic payload (mass=5.0)</td>
+<td>cost=0.83607, overshoot=20.54%</td>
+<td><strong>cost=0.57765, overshoot=5.52%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Even at mass=1.0, the exact single value the fixed-config controller was tuned for, with no domain-randomization “handicap” for the comparison, the domain-randomized controller still achieves a <em>lower</em> tracking cost (0.41036 vs.&nbsp;0.46205). This is a genuinely counterintuitive result worth sitting with: tuning for a range didn’t just avoid catastrophic failure elsewhere at the cost of peak performance at the design point; it won at the design point too. At the heaviest tested payload, the gap widens dramatically (cost 0.578 vs.&nbsp;0.836, overshoot 5.52% vs.&nbsp;20.54%), exactly where a fixed-config controller’s untested assumption breaks down hardest. This is Exposition’s mechanism made numeric: a policy (or controller) trained against a single fixed configuration optimises specifically for that configuration’s quirks in a way that doesn’t generalise, while one exposed to variation during training is forced to find a genuinely more robust solution, one that, in this case, wasn’t even a trade-off against peak single-point performance.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<p>Isaac Lab training runs are commonly hosted on GPU-backed EC2 instances or SageMaker Training Jobs with <code>ml.g5</code>/<code>ml.p4d</code> instance types, since Isaac Lab’s core value, thousands of parallel environment instances on one GPU, needs the same GPU memory and compute budget regardless of where it runs. The domain-randomization ranges from Procedure 62.1 are ordinary training hyperparameters from SageMaker’s perspective, versionable and trackable the same way any other hyperparameter sweep is (Book 2’s experiment tracking chapter).</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="62.6">
+<h2 data-number="62.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">62.6</span> History and Further Reading</h2>
+<p>Tobin et al.’s “Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World” <span class="citation" data-cites="tobin2017domainrandomization">(<a href="#ref-tobin2017domainrandomization" role="doc-biblioref">Tobin et al. 2017</a>)</span> is the original domain randomization paper. Todorov, Erez &amp; Tassa’s “MuJoCo: A Physics Engine for Model-Based Control” <span class="citation" data-cites="todorov2012mujoco">(<a href="#ref-todorov2012mujoco" role="doc-biblioref">Todorov et al. 2012</a>)</span> is the paper behind the open-source alternative. NVIDIA’s Isaac Sim / Isaac Lab documentation is the authoritative, current API reference. Worth checking before trusting any Isaac code, including this chapter’s, given how fast the API moves.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="62.7">
+<h2 data-number="62.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">62.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/applied-ai-domains/ch58-physical-ai-landscape-embodiment" class="quarto-xref"><span>Chapter 58</span></a> (where the sim-to-real gap was first introduced, explained mechanically here) and <a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a> (synthetic data generation exists to feed perception model training). It enables <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>, which trains policies inside the simulator this chapter sets up, using the domain randomization this chapter measures directly. It’s often confused with a simulator being used purely for visualisation or demonstration (no learning happening) versus a simulator being used as the actual training environment for a learned policy. The same tool serves both roles, but this chapter and the next care specifically about the latter.</p>
+</section>
+<section id="exercises" class="level2" data-number="62.8">
+<h2 data-number="62.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">62.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-62-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three properties that trade off in any robotics simulator (physics accuracy, rendering fidelity, speed/parallelism), and state which one matters “not at all” for a policy that only observes joint angles and velocities.</p></li>
+<li id="ex-62-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain the difference between Isaac Sim and Isaac Lab in one or two sentences, and state which one you’d use for training a policy at scale.</p></li>
+<li id="ex-62-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s unloaded-mass comparison (fixed-config cost=0.46205 vs.&nbsp;domain-randomized cost=0.41036, both at the fixed-config’s own exact design point), explain why this specific result is stronger evidence for domain randomization’s value than the full-range comparison (0.6485 vs.&nbsp;0.4937) alone would have been.</p></li>
+<li id="ex-62-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s heaviest-payload comparison (overshoot 20.54% fixed-config vs.&nbsp;5.52% domain-randomized), explain in your own words what “overshoot” represents physically for a robot arm’s controller, and why a 20.54% overshoot could be a safety concern in a real deployment.</p></li>
+<li id="ex-62-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague argues “if we tune our controller perfectly for the exact conditions we expect in deployment, that will always beat a domain-randomized controller tuned across a range we don’t fully need.” Using this chapter’s Worked Example, write the two or three sentences you’d say in response.</p></li>
+<li id="ex-62-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 62.1 warns against randomizing every parameter on day one. Using this chapter’s Worked Example (which randomized a single parameter, payload mass), describe what evidence would justify adding a second randomized parameter (e.g.&nbsp;friction) to this specific controller-tuning task.</p></li>
+<li id="ex-62-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about MuJoCo’s MJX (JAX-based) parallel simulation capability, mentioned in this chapter’s Exposition. Explain in your own words how running physics simulation on a GPU via JAX differs from Isaac Lab’s GPU-parallel approach, and what a learner without an Isaac licence gains by using it instead.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="62.9">
+<h2 data-number="62.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">62.9</span> Mental Model</h2>
+<p>Simulation is a cheap, safe, parallel substitute for the real world during training, and domain randomization is the acknowledgment that the substitute is never exact. Rather than trying to make the simulator perfectly accurate, which is impossible, the policy (or controller) is made indifferent to the ways the simulator is inaccurate, by never letting it see the same “reality” twice during training. This chapter’s Worked Example turned that principle into a number: a controller tuned across a range of payload masses beat one tuned for a single exact mass, even measured at that exact mass. Robustness, in this case, wasn’t a trade-off against peak performance, it was strictly better.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-tobin2017domainrandomization" class="csl-entry" role="listitem">
+Tobin, Josh, Rachel Fong, Alex Ray, Jonas Schneider, Wojciech Zaremba, and Pieter Abbeel. 2017. <span>“Domain Randomization for Transferring Deep Neural Networks from Simulation to the Real World.”</span> <em>IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)</em>, 23–30.
+</div>
+<div id="ref-todorov2012mujoco" class="csl-entry" role="listitem">
+Todorov, Emanuel, Tom Erez, and Yuval Tassa. 2012. <span>“MuJoCo: A Physics Engine for Model-Based Control.”</span> <em>IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)</em>, 5026–33.
+</div>
+</div>
+</section>

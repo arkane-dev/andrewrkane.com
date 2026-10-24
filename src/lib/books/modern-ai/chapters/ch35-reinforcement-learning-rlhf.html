@@ -1,0 +1,389 @@
+<p>Instruction fine-tuning (Chapter 34) teaches a model to imitate a demonstrated response. Show it thousands of <code>(instruction, response)</code> pairs and it learns to reproduce that pattern. That works when there’s a single response worth demonstrating. Most of the time there isn’t. Ask for a product description and there are dozens of reasonable answers, some better than others, none uniquely “correct.” Imitation can teach a model <em>a</em> way to respond. It can’t teach the model to prefer <em>better</em> responses over <em>worse</em> ones when both are plausible. This chapter covers the two dominant techniques for that: Reinforcement Learning from Human Feedback (RLHF), and its lighter, more stable descendant, Direct Preference Optimization (DPO). Both train on comparisons rather than demonstrations.</p>
+<section id="motivation" class="level2" data-number="35.1">
+<h2 data-number="35.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">35.1</span> Motivation</h2>
+<p>Reinforcement learning is a genuinely different training signal from supervised fine-tuning. SFT’s loss says “produce <em>this exact</em> sequence of tokens.” RL’s objective says “produce <em>some</em> sequence that scores well.” It doesn’t specify which one, only that it be good by some measure. That flexibility is exactly what makes RL suited to optimising qualities like helpfulness, harmlessness, and tone: qualities that are hard to demonstrate exhaustively (there’s no canonical “helpful” response to every prompt) but comparatively easy to <em>judge</em>. A human can reliably say which of two candidate responses is better even when neither is uniquely correct. RLHF and DPO exist to turn that comparative judgement into a training signal.</p>
+</section>
+<section id="exposition" class="level2" data-number="35.2">
+<h2 data-number="35.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">35.2</span> Exposition</h2>
+<section id="a-minimal-rl-vocabulary" class="level3" data-number="35.2.1">
+<h3 data-number="35.2.1" class="anchored" data-anchor-id="a-minimal-rl-vocabulary"><span class="header-section-number">35.2.1</span> A Minimal RL Vocabulary</h3>
+<p>RLHF borrows five terms from reinforcement learning, each with a direct LLM-specific meaning:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>RL term</th>
+<th>General meaning</th>
+<th>Meaning for an LLM</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Agent</td>
+<td>The thing making decisions</td>
+<td>The language model (the “policy”)</td>
+</tr>
+<tr class="even">
+<td>Environment</td>
+<td>What the agent acts on</td>
+<td>The conversation: the prompt so far</td>
+</tr>
+<tr class="odd">
+<td>State</td>
+<td>The situation observed</td>
+<td>The tokens generated so far</td>
+</tr>
+<tr class="even">
+<td>Action</td>
+<td>A choice the agent makes</td>
+<td>Emitting the next token, or, more coarsely, the whole response</td>
+</tr>
+<tr class="odd">
+<td>Reward</td>
+<td>A scalar signal for how good an action was</td>
+<td>A score for the whole response, from a reward model</td>
+</tr>
+<tr class="even">
+<td>Policy</td>
+<td>The agent’s state-to-action strategy</td>
+<td>The LLM’s probability distribution over next tokens: the model itself</td>
+</tr>
+</tbody>
+</table>
+<p>The RL objective is to adjust the policy so that, in expectation, it earns higher reward. For an LLM this means adjusting the model’s weights so it produces responses a human, or a reward model standing in for one, rates more highly.</p>
+</section>
+<section id="the-three-stage-rlhf-pipeline" class="level3" data-number="35.2.2">
+<h3 data-number="35.2.2" class="anchored" data-anchor-id="the-three-stage-rlhf-pipeline"><span class="header-section-number">35.2.2</span> The Three-Stage RLHF Pipeline</h3>
+<p>Classic RLHF, as used for InstructGPT and the early ChatGPT models, runs in three stages, each producing an artefact the next stage consumes.</p>
+<p><strong>Stage 1 — Collect preference data.</strong> Show human annotators a prompt and two or more candidate completions, usually sampled from an SFT model like the one built in Chapter 34. Ask which one they prefer. The result is a dataset of <code>(prompt, chosen, rejected)</code> triples. Note what isn’t being collected: a “correct” answer, only a comparison.</p>
+<p><strong>Stage 2 — Train a reward model.</strong> A reward model is a second model, often initialised from the SFT model, with its final layer replaced by a scalar output head, trained to assign a numeric score to a <code>(prompt, response)</code> pair such that the chosen response scores higher than the rejected one, for every pair in the preference dataset. The standard loss is the <strong>Bradley-Terry</strong> model of pairwise comparison:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mtext>chosen</mtext><mo>≻</mo><mtext>rejected</mtext><mo stretchy="false">)</mo><mo>=</mo><mi>σ</mi><mo stretchy="false">(</mo><mi>r</mi><mo stretchy="false">(</mo><mtext>chosen</mtext><mo stretchy="false">)</mo><mo>−</mo><mi>r</mi><mo stretchy="false">(</mo><mtext>rejected</mtext><mo stretchy="false">)</mo><mo stretchy="false">)</mo><mspace width="2em"></mspace><mi mathvariant="script">L</mi><mo>=</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><mi>σ</mi><mo stretchy="false">(</mo><mi>r</mi><mo stretchy="false">(</mo><mtext>chosen</mtext><mo stretchy="false">)</mo><mo>−</mo><mi>r</mi><mo stretchy="false">(</mo><mtext>rejected</mtext><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(\text{chosen} \succ \text{rejected}) = \sigma(r(\text{chosen}) - r(\text{rejected})) \qquad \mathcal{L} = -\log \sigma(r(\text{chosen}) - r(\text{rejected}))</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord text"><span class="mord">chosen</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≻</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">rejected</span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord text"><span class="mord">chosen</span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord text"><span class="mord">rejected</span></span><span class="mclose">))</span><span class="mspace" style="margin-right:2em;"></span><span class="mord mathcal">L</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord text"><span class="mord">chosen</span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord text"><span class="mord">rejected</span></span><span class="mclose">))</span></span></span></span></span></p>
+<p>where <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi><mo stretchy="false">(</mo><mo>⋅</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">r(\cdot)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord">⋅</span><span class="mclose">)</span></span></span></span> is the reward model’s scalar output and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi></mrow><annotation encoding="application/x-tex">\sigma</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span></span></span></span> is the sigmoid. This loss is minimised by maximising the score gap between chosen and rejected. It never demands a specific reward <em>value</em>, only the correct <em>ordering</em>.</p>
+<p><strong>Stage 3 — Optimise the policy against the reward model with PPO.</strong> The SFT model is fine-tuned further. For each prompt it generates a response, the frozen reward model scores it, and Proximal Policy Optimization (PPO), a policy-gradient RL algorithm, nudges the model’s weights to make higher-scoring responses more likely.</p>
+</section>
+<section id="the-kl-penalty-why-reward-cant-be-maximised-directly" class="level3" data-number="35.2.3">
+<h3 data-number="35.2.3" class="anchored" data-anchor-id="the-kl-penalty-why-reward-cant-be-maximised-directly"><span class="header-section-number">35.2.3</span> The KL Penalty: Why Reward Can’t Be Maximised Directly</h3>
+<p>Naively maximising reward-model score produces <strong>reward hacking</strong>. The policy finds some degenerate output the reward model over-scores, repeating a flattering phrase, stuffing responses with superlatives, that a human would rate as garbage. The reward model is a proxy for human judgement, not human judgement itself, and any proxy can be gamed if optimised hard enough.</p>
+<p>The fix is to keep the policy close to the original SFT model while still nudging it toward higher reward, using KL divergence as a penalty term:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Objective</mtext><mo>=</mo><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mi>r</mi><mo stretchy="false">(</mo><mtext>response</mtext><mo stretchy="false">)</mo><mo stretchy="false">]</mo><mo>−</mo><mi>β</mi><mo>⋅</mo><mtext>KL</mtext><mo stretchy="false">(</mo><msub><mi>π</mi><mrow><mi>R</mi><mi>L</mi></mrow></msub><mo stretchy="false">(</mo><mo>⋅</mo><mi mathvariant="normal">∣</mi><mtext>prompt</mtext><mo stretchy="false">)</mo><mtext> </mtext><mi mathvariant="normal">∥</mi><mtext> </mtext><msub><mi>π</mi><mrow><mi>S</mi><mi>F</mi><mi>T</mi></mrow></msub><mo stretchy="false">(</mo><mo>⋅</mo><mi mathvariant="normal">∣</mi><mtext>prompt</mtext><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{Objective} = \mathbb{E}[r(\text{response})] - \beta \cdot \text{KL}(\pi_{RL}(\cdot|\text{prompt}) \,\|\, \pi_{SFT}(\cdot|\text{prompt}))</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Objective</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathbb">E</span><span class="mopen">[</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord text"><span class="mord">response</span></span><span class="mclose">)]</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">KL</span></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0077em;">R</span><span class="mord mathnormal mtight">L</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord">⋅</span><span class="mord">∣</span><span class="mord text"><span class="mord">prompt</span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">∥</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0576em;">S</span><span class="mord mathnormal mtight" style="margin-right:0.1389em;">F</span><span class="mord mathnormal mtight" style="margin-right:0.1389em;">T</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord">⋅</span><span class="mord">∣</span><span class="mord text"><span class="mord">prompt</span></span><span class="mclose">))</span></span></span></span></span></p>
+<p><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>π</mi><mrow><mi>R</mi><mi>L</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\pi_{RL}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0077em;">R</span><span class="mord mathnormal mtight">L</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> is the policy being trained. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>π</mi><mrow><mi>S</mi><mi>F</mi><mi>T</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\pi_{SFT}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0576em;">S</span><span class="mord mathnormal mtight" style="margin-right:0.1389em;">F</span><span class="mord mathnormal mtight" style="margin-right:0.1389em;">T</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> is the frozen, original SFT model: the reference point the whole objective is anchored to. The KL term measures how far the trained policy’s output distribution has drifted from the reference model’s, and penalises the objective in exact proportion. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi></mrow><annotation encoding="application/x-tex">\beta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span></span></span></span> controls the trade-off. Too low, and the policy is barely constrained, chasing the reward model’s blind spots until it degenerates into repetitive or nonsensical but high-scoring text. Too high, and the policy can barely move from the SFT model at all, so training accomplishes little. This is the single most consequential hyperparameter in RLHF, and it reappears with an identical role in DPO below.</p>
+</section>
+<section id="dpo-skipping-the-reward-model-and-the-rl-loop" class="level3" data-number="35.2.4">
+<h3 data-number="35.2.4" class="anchored" data-anchor-id="dpo-skipping-the-reward-model-and-the-rl-loop"><span class="header-section-number">35.2.4</span> DPO: Skipping the Reward Model and the RL Loop</h3>
+<p>PPO-based RLHF works, but it is operationally heavy: a separate reward model to train and host, online sampling from the policy during training, and a genuinely finicky RL optimiser. PPO has half a dozen sensitive hyperparameters beyond <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi></mrow><annotation encoding="application/x-tex">\beta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span></span></span></span>. Many teams found this fragile and expensive to get right.</p>
+<p><strong>Direct Preference Optimization</strong> makes an important observation. For the exact KL-constrained reward-maximisation objective above, the <em>optimal</em> policy has a closed-form relationship to the reward function. That relationship can be substituted back into the Bradley-Terry preference loss to eliminate the reward model entirely. What remains is a loss defined <strong>directly on the policy</strong>, computed <strong>directly on preference pairs</strong>, with no RL loop, no reward model, and no online sampling:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi mathvariant="script">L</mi><mrow><mi>D</mi><mi>P</mi><mi>O</mi></mrow></msub><mo>=</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><mi>σ</mi><mtext> ⁣</mtext><mrow><mo fence="true">(</mo><mi>β</mi><mrow><mo fence="true">[</mo><mi>log</mi><mo>⁡</mo><mfrac><mrow><msub><mi>π</mi><mi>θ</mi></msub><mo stretchy="false">(</mo><mtext>chosen</mtext><mi mathvariant="normal">∣</mi><mi>p</mi><mo stretchy="false">)</mo></mrow><mrow><msub><mi>π</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="false">(</mo><mtext>chosen</mtext><mi mathvariant="normal">∣</mi><mi>p</mi><mo stretchy="false">)</mo></mrow></mfrac><mo>−</mo><mi>log</mi><mo>⁡</mo><mfrac><mrow><msub><mi>π</mi><mi>θ</mi></msub><mo stretchy="false">(</mo><mtext>rejected</mtext><mi mathvariant="normal">∣</mi><mi>p</mi><mo stretchy="false">)</mo></mrow><mrow><msub><mi>π</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="false">(</mo><mtext>rejected</mtext><mi mathvariant="normal">∣</mi><mi>p</mi><mo stretchy="false">)</mo></mrow></mfrac><mo fence="true">]</mo></mrow><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{L}_{DPO} = -\log \sigma\!\left(\beta \left[\log\frac{\pi_\theta(\text{chosen}|p)}{\pi_{ref}(\text{chosen}|p)} - \log\frac{\pi_\theta(\text{rejected}|p)}{\pi_{ref}(\text{rejected}|p)}\right]\right)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathcal">L</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">D</span><span class="mord mathnormal mtight" style="margin-right:0.1389em;">P</span><span class="mord mathnormal mtight" style="margin-right:0.0278em;">O</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.4221em;vertical-align:-0.9721em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mspace" style="margin-right:-0.1667em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">[</span></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.1076em;">f</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord text"><span class="mord">chosen</span></span><span class="mord">∣</span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord text"><span class="mord">chosen</span></span><span class="mord">∣</span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.1076em;">f</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord text"><span class="mord">rejected</span></span><span class="mord">∣</span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord text"><span class="mord">rejected</span></span><span class="mord">∣</span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">]</span></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span></span></span></span></span></p>
+<p>Read it as: increase the model’s log-probability of the chosen response relative to the frozen reference model, decrease its log-probability of the rejected response relative to the same reference model, and use <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi></mrow><annotation encoding="application/x-tex">\beta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span></span></span></span> to control how strongly to do this. That’s exactly the role <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi></mrow><annotation encoding="application/x-tex">\beta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span></span></span></span> plays as the KL coefficient in PPO. DPO doesn’t add a KL penalty as a separate term. The derivation folds it directly into the loss.</p>
+<p>DPO won broad adoption for concrete reasons: no reward model to train, store, or serve; no online generation during training (it’s ordinary supervised learning on a static preference dataset, structurally identical to SFT); far fewer hyperparameters and much more stable training; and empirically competitive results with PPO-based RLHF on most benchmarks. What’s given up is a reusable artefact. Classic RLHF’s reward model can be used to score or filter data, run best-of-N sampling, or plug into other pipelines. DPO produces only a fine-tuned policy, no standalone reward model. For most teams building a single instruction-tuned assistant, that’s a trade worth making. Teams that need a reward model as infrastructure in its own right, for LLM-judge-style automated grading (Chapter 32), or best-of-N reranking at inference time, may still find classic RLHF’s reward model earns its cost.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="35.3">
+<h2 data-number="35.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">35.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>PPO-based RLHF</th>
+<th>DPO</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Infrastructure needed</td>
+<td>Reward model + RL training loop + online sampling</td>
+<td>Standard supervised training loop</td>
+</tr>
+<tr class="even">
+<td>Stability</td>
+<td>Notoriously sensitive to hyperparameters</td>
+<td>Much more stable</td>
+</tr>
+<tr class="odd">
+<td>Compute cost</td>
+<td>High (reward model + generation + PPO updates)</td>
+<td>Lower (single forward/backward pass per pair, like SFT)</td>
+</tr>
+<tr class="even">
+<td>Reusable reward model produced?</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="odd">
+<td>Typical choice today</td>
+<td>Large labs with RL infrastructure and reward-model use cases beyond this one run</td>
+<td>Default choice for most preference-tuning</td>
+</tr>
+</tbody>
+</table>
+<p>Preference-tuning is not a substitute for SFT. It’s the stage that comes after it. Both PPO-based RLHF and DPO need an SFT model to start from and to serve as the frozen KL reference. Skipping straight to preference-tuning on a base model that has never seen instruction data produces a policy with nothing sensible to anchor its comparisons against. And preference-tuning of either flavour can measurably degrade a model’s general capability relative to the SFT checkpoint it started from: the “alignment tax.” That may still be a worthwhile trade for a production assistant, but it should be measured (Chapter 32), not assumed away.</p>
+</section>
+<section id="procedures" class="level2" data-number="35.4">
+<h2 data-number="35.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">35.4</span> Procedures</h2>
+<p id="proc-35-1"><strong>Procedure 35.1 (Format Preference Data).</strong> <em>When to use:</em> before training a reward model or running DPO. Both need the same underlying schema.</p>
+<div id="lst-preference-format" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-preference-format-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;35.1: The universal preference-data format: one prompt, one chosen, one rejected response
+</figcaption>
+<div aria-describedby="lst-preference-format-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1">preference_example <span class="op">=</span> {</span>
+<span id="cb1-2">    <span class="st">"prompt"</span>: <span class="st">"Explain what a stack overflow is."</span>,</span>
+<span id="cb1-3">    <span class="st">"chosen"</span>: (</span>
+<span id="cb1-4">        <span class="st">"A stack overflow happens when a program's call "</span></span>
+<span id="cb1-5">        <span class="st">"stack exceeds its allocated memory, often caused "</span></span>
+<span id="cb1-6">        <span class="st">"by uncontrolled recursion."</span></span>
+<span id="cb1-7">    ),</span>
+<span id="cb1-8">    <span class="st">"rejected"</span>: <span class="st">"It's an error. Bad code causes it."</span>,</span>
+<span id="cb1-9">}</span>
+<span id="cb1-10"></span>
+<span id="cb1-11"><span class="im">from</span> datasets <span class="im">import</span> Dataset</span>
+<span id="cb1-12">preference_dataset <span class="op">=</span> Dataset.from_list([preference_example, ...])</span>
+<span id="cb1-13"><span class="co"># columns: "prompt", "chosen", "rejected": trl's DPOTrainer and</span></span>
+<span id="cb1-14"><span class="co"># RewardTrainer both expect this schema</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> mixing preference-comparison data with instruction/response SFT data (Chapter 34’s format). They train different things. SFT format has one <code>response</code>. Preference format has <code>chosen</code> <em>and</em> <code>rejected</code> for the same prompt. Keep them in separate datasets.</p>
+<p id="proc-35-2"><strong>Procedure 35.2 (Train a Reward Model with the Bradley-Terry Loss).</strong> <em>When to use:</em> whenever a standalone, reusable reward model is needed: for best-of-N reranking, data filtering, or as an automated grader alongside Chapter 32’s LLM-judge techniques.</p>
+<div id="lst-reward-model" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-reward-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;35.2: A minimal reward model: a frozen backbone plus a trainable scalar head, trained with Bradley-Terry loss
+</figcaption>
+<div aria-describedby="lst-reward-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">class</span> RewardModel(nn.Module):</span>
+<span id="cb2-2">    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, backbone, hidden_size):</span>
+<span id="cb2-3">        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb2-4">        <span class="co"># frozen: only the head is trained</span></span>
+<span id="cb2-5">        <span class="va">self</span>.backbone <span class="op">=</span> backbone</span>
+<span id="cb2-6">        <span class="va">self</span>.head <span class="op">=</span> nn.Linear(hidden_size, <span class="dv">1</span>)</span>
+<span id="cb2-7"></span>
+<span id="cb2-8">    <span class="kw">def</span> forward(<span class="va">self</span>, input_ids, attention_mask):</span>
+<span id="cb2-9">        hidden <span class="op">=</span> <span class="va">self</span>.backbone(</span>
+<span id="cb2-10">            input_ids<span class="op">=</span>input_ids,</span>
+<span id="cb2-11">            attention_mask<span class="op">=</span>attention_mask,</span>
+<span id="cb2-12">        ).last_hidden_state</span>
+<span id="cb2-13">        mask <span class="op">=</span> attention_mask.unsqueeze(<span class="op">-</span><span class="dv">1</span>).<span class="bu">float</span>()</span>
+<span id="cb2-14">        <span class="co"># mean-pool over real tokens</span></span>
+<span id="cb2-15">        pooled <span class="op">=</span> (hidden <span class="op">*</span> mask).<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>) <span class="op">/</span> mask.<span class="bu">sum</span>(dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb2-16">        <span class="co"># (batch,) scalar reward</span></span>
+<span id="cb2-17">        <span class="cf">return</span> <span class="va">self</span>.head(pooled).squeeze(<span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb2-18"></span>
+<span id="cb2-19">r_chosen, r_rejected <span class="op">=</span> reward_model(</span>
+<span id="cb2-20">    chosen_ids,</span>
+<span id="cb2-21">    chosen_mask,</span>
+<span id="cb2-22">), reward_model(rejected_ids, rejected_mask)</span>
+<span id="cb2-23"><span class="co"># Bradley-Terry loss</span></span>
+<span id="cb2-24">loss <span class="op">=</span> <span class="op">-</span>F.logsigmoid(r_chosen <span class="op">-</span> r_rejected).mean()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>In production, <code>trl.RewardTrainer</code> implements this exact loss end to end. The hand-rolled version above exists to make the mechanics inspectable, not to be reproduced outside a teaching context.</p>
+<p id="proc-35-3"><strong>Procedure 35.3 (Run DPO Directly from Its Closed-Form Loss).</strong> <em>When to use:</em> the default starting point for preference-tuning an SFT model, before reaching for full PPO-based RLHF.</p>
+<div id="lst-dpo-loss" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-dpo-loss-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;35.3: The DPO loss computed directly from policy and reference sequence log-probabilities
+</figcaption>
+<div aria-describedby="lst-dpo-loss-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">def</span> sequence_logprob(model, prompt, response):</span>
+<span id="cb3-2">    <span class="co">"""Sum of log p(token | prompt + previous response</span></span>
+<span id="cb3-3"><span class="co">    tokens), over the response span only."""</span></span>
+<span id="cb3-4">    input_ids <span class="op">=</span> tokenizer(</span>
+<span id="cb3-5">        prompt <span class="op">+</span> response,</span>
+<span id="cb3-6">        return_tensors<span class="op">=</span><span class="st">'pt'</span>,</span>
+<span id="cb3-7">    ).input_ids</span>
+<span id="cb3-8">    log_probs <span class="op">=</span> F.log_softmax(model(input_ids).logits, dim<span class="op">=-</span><span class="dv">1</span>)</span>
+<span id="cb3-9">    <span class="co"># ... slice to the response span, gather each token's log-prob,</span></span>
+<span id="cb3-10">    <span class="co"># sum ...</span></span>
+<span id="cb3-11">    <span class="cf">return</span> response_token_log_probs.<span class="bu">sum</span>()</span>
+<span id="cb3-12"></span>
+<span id="cb3-13"><span class="co"># same role as the KL coefficient in PPO</span></span>
+<span id="cb3-14">BETA <span class="op">=</span> <span class="fl">0.1</span></span>
+<span id="cb3-15">chosen_term <span class="op">=</span> sequence_logprob(</span>
+<span id="cb3-16">    policy,</span>
+<span id="cb3-17">    prompt,</span>
+<span id="cb3-18">    chosen,</span>
+<span id="cb3-19">) <span class="op">-</span> sequence_logprob(reference, prompt, chosen)</span>
+<span id="cb3-20">rejected_term <span class="op">=</span> sequence_logprob(</span>
+<span id="cb3-21">    policy,</span>
+<span id="cb3-22">    prompt,</span>
+<span id="cb3-23">    rejected,</span>
+<span id="cb3-24">) <span class="op">-</span> sequence_logprob(reference, prompt, rejected)</span>
+<span id="cb3-25">loss <span class="op">=</span> <span class="op">-</span>F.logsigmoid(BETA <span class="op">*</span> (chosen_term <span class="op">-</span> rejected_term))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> setting the DPO learning rate as high as an SFT run. DPO is much more sensitive to learning rate than SFT. <code>5e-6</code> to <code>1e-5</code> is a safer starting range than the <code>1e-4</code>-plus typical for LoRA SFT.</p>
+<p id="proc-35-4"><strong>Procedure 35.4 (Run DPO at Scale with <code>trl.DPOTrainer</code>).</strong> <em>When to use:</em> once the loss mechanics are understood and a real training run is needed, typically combined with LoRA (Chapter 34) rather than full fine-tuning.</p>
+<div id="lst-dpo-trainer" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-dpo-trainer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;35.4: Production DPO training via trl, combined with a LoRA adapter
+</figcaption>
+<div aria-describedby="lst-dpo-trainer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> trl <span class="im">import</span> DPOTrainer, DPOConfig</span>
+<span id="cb4-2"><span class="im">from</span> peft <span class="im">import</span> LoraConfig, TaskType</span>
+<span id="cb4-3"></span>
+<span id="cb4-4">lora_config <span class="op">=</span> LoraConfig(</span>
+<span id="cb4-5">    task_type<span class="op">=</span>TaskType.CAUSAL_LM,</span>
+<span id="cb4-6">    r<span class="op">=</span><span class="dv">16</span>,</span>
+<span id="cb4-7">    lora_alpha<span class="op">=</span><span class="dv">32</span>,</span>
+<span id="cb4-8">    target_modules<span class="op">=</span>[<span class="st">"q_proj"</span>, <span class="st">"v_proj"</span>],</span>
+<span id="cb4-9">)</span>
+<span id="cb4-10"></span>
+<span id="cb4-11">trainer <span class="op">=</span> DPOTrainer(</span>
+<span id="cb4-12">    model<span class="op">=</span>policy,</span>
+<span id="cb4-13">    <span class="co"># None -&gt; trl auto-creates a frozen copy of</span></span>
+<span id="cb4-14">    <span class="co"># `model` as reference</span></span>
+<span id="cb4-15">    ref_model<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb4-16">    args<span class="op">=</span>DPOConfig(</span>
+<span id="cb4-17">        beta<span class="op">=</span><span class="fl">0.1</span>,</span>
+<span id="cb4-18">        learning_rate<span class="op">=</span><span class="fl">5e-6</span>,</span>
+<span id="cb4-19">        max_length<span class="op">=</span><span class="dv">512</span>,</span>
+<span id="cb4-20">        max_prompt_length<span class="op">=</span><span class="dv">256</span>,</span>
+<span id="cb4-21">    ),</span>
+<span id="cb4-22">    train_dataset<span class="op">=</span>preference_dataset,</span>
+<span id="cb4-23">    processing_class<span class="op">=</span>tokenizer,</span>
+<span id="cb4-24">    peft_config<span class="op">=</span>lora_config,</span>
+<span id="cb4-25">)</span>
+<span id="cb4-26">trainer.train()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-35-5"><strong>Procedure 35.5 (Choose and Diagnose the KL Coefficient <code>beta</code>).</strong> <em>When to use:</em> whenever the trained policy either barely changes from its reference or degenerates into repetitive, off-topic text.</p>
+<div id="lst-beta-diagnosis" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-beta-diagnosis-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;35.5: Reading beta’s symptoms and adjusting it
+</figcaption>
+<div aria-describedby="lst-beta-diagnosis-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># Start at beta = 0.1 (trl's default), then diagnose from there:</span></span>
+<span id="cb5-2"><span class="co">#</span></span>
+<span id="cb5-3"><span class="co"># Symptom: policy output barely differs from the reference model</span></span>
+<span id="cb5-4"><span class="co"># after training</span></span>
+<span id="cb5-5"><span class="co">#   -&gt; beta too high, the KL leash is too tight -&gt; try 0.05, 0.02</span></span>
+<span id="cb5-6"><span class="co">#</span></span>
+<span id="cb5-7"><span class="co"># Symptom: policy output degenerates: repetition, off-topic</span></span>
+<span id="cb5-8"><span class="co"># rambling, reward hacking</span></span>
+<span id="cb5-9"><span class="co">#   -&gt; beta too low, the policy has wandered too far from the</span></span>
+<span id="cb5-10"><span class="co"># reference -&gt; try 0.2, 0.5</span></span>
+<span id="cb5-11"><span class="co">#</span></span>
+<span id="cb5-12"><span class="co"># Always read a handful of actual generations from policy vs.</span></span>
+<span id="cb5-13"><span class="co"># reference on held-out prompts --</span></span>
+<span id="cb5-14"><span class="co"># a rising preference margin is necessary but not sufficient</span></span>
+<span id="cb5-15"><span class="co"># evidence that tuning helped.</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-35-6"><strong>Procedure 35.6 (Evaluate Whether Preference-Tuning Actually Helped).</strong> <em>When to use:</em> after any RLHF/DPO run, before shipping it.</p>
+<div id="lst-preference-eval" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-preference-eval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;35.6: Four checks before trusting a preference-tuned policy
+</figcaption>
+<div aria-describedby="lst-preference-eval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># 1. Reward model sanity check: does it correctly rank a held-out</span></span>
+<span id="cb6-2"><span class="co"># preference set?</span></span>
+<span id="cb6-3"><span class="co"># 2. Win-rate against the reference model using an LLM judge</span></span>
+<span id="cb6-4"><span class="co"># (Chapter 32): for each of N</span></span>
+<span id="cb6-5"><span class="co">#    held-out prompts, generate from both policy and reference, ask</span></span>
+<span id="cb6-6"><span class="co"># a judge which is better,</span></span>
+<span id="cb6-7"><span class="co">#    swap presentation order to control for position bias, and</span></span>
+<span id="cb6-8"><span class="co"># compute win rate (&gt; 50% = improved).</span></span>
+<span id="cb6-9"><span class="co"># 3. Watch for reward hacking: if reward-model score keeps climbing</span></span>
+<span id="cb6-10"><span class="co"># but a judge or human</span></span>
+<span id="cb6-11"><span class="co">#    reviewer rates outputs as worse, the policy is exploiting the</span></span>
+<span id="cb6-12"><span class="co"># reward model, not improving.</span></span>
+<span id="cb6-13"><span class="co"># 4. Regression-test general capability on a benchmark the policy</span></span>
+<span id="cb6-14"><span class="co"># wasn't tuned on: a</span></span>
+<span id="cb6-15"><span class="co">#    measurable "alignment tax" may still be an acceptable trade,</span></span>
+<span id="cb6-16"><span class="co"># but it should be known, not assumed.</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="35.5">
+<h2 data-number="35.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">35.5</span> Worked Example</h2>
+<p>The tutorial notebook builds the three pieces of preference-tuning that are small enough to run on a laptop: a reward model trained from scratch, a DPO fine-tuning loop implemented directly from its closed-form loss, and an explicit KL-divergence computation of the kind a PPO loop would use. Full PPO-based RLHF needs a GPU cluster and days of training and is out of scope for a teaching notebook; the point here is to make the losses and the KL term completely concrete rather than abstract formulas.</p>
+<p><strong>Reward model.</strong> Eight synthetic preference pairs were built (<a href="#lst-preference-format" class="quarto-xref">Listing&nbsp;<span>35.1</span></a>’s schema), each pairing a helpful, complete response against a terse or evasive one for the same prompt: e.g.&nbsp;“The capital of France is Paris, which has been the country’s capital since 987 CE” (chosen) against “Dunno, look it up” (rejected). A reward model was built on a frozen GPT-2 backbone with a trainable 769-parameter linear head (<a href="#lst-reward-model" class="quarto-xref">Listing&nbsp;<span>35.2</span></a>), and trained for 30 epochs with the Bradley-Terry loss. The average loss fell from <strong>0.575</strong> at epoch 0 to <strong>0.015</strong> at epoch 29, a roughly 38x reduction. After training, the reward model correctly ranked all <strong>8 of 8</strong> preference pairs, assigning every <code>chosen</code> response a higher score than its paired <code>rejected</code> response (e.g.&nbsp;<code>r(chosen) = -8.839</code> vs.&nbsp;<code>r(rejected) = -12.693</code> for the France question; <code>r(chosen) = -6.921</code> vs.&nbsp;<code>r(rejected) = -12.460</code> for the hash-table question). The loss only ever pushed the <em>ordering</em> apart, never toward a specific value, which is exactly why all eight scores landed in a similar negative range yet still separated cleanly within each pair.</p>
+<p><strong>DPO.</strong> The same eight preference pairs were used to fine-tune GPT-2 directly with <a href="#lst-dpo-loss" class="quarto-xref">Listing&nbsp;<span>35.3</span></a>, at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi><mo>=</mo><mn>0.1</mn></mrow><annotation encoding="application/x-tex">\beta = 0.1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.1</span></span></span></span>, for 40 steps, cycling through the eight pairs five times. At step 0 the policy and reference model were identical, so the preference margin (chosen log-probability minus rejected log-probability, relative to the frozen reference) started at exactly <strong>+0.0000</strong> and the DPO loss started at <strong>0.6931</strong>: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mi>log</mi><mo>⁡</mo><mi>σ</mi><mo stretchy="false">(</mo><mn>0</mn><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">-\log \sigma(0)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="mord">0</span><span class="mclose">)</span></span></span></span>, the loss’s value when the policy has no preference at all. By step 10 the margin had jumped to <strong>+19.53</strong> and the loss had fallen to <strong>0.133</strong>. By the final step the margin reached <strong>+40.72</strong>, a clear and monotonic move in the correct direction, with loss falling to <strong>0.025-0.027</strong> over the last several logged steps. The margin is exactly the quantity DPO’s loss pushes upward: the policy’s preference for the chosen response over the rejected one, measured relative to the frozen reference, increasing without a reward model or a single RL rollout involved.</p>
+<p><strong>KL penalty, made concrete.</strong> For the prompt “What is the capital of France?”, a single forward pass computed <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>KL</mtext><mo stretchy="false">(</mo><msub><mi>π</mi><mtext>policy</mtext></msub><mtext> </mtext><mi mathvariant="normal">∥</mi><mtext> </mtext><msub><mi>π</mi><mtext>reference</mtext></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{KL}(\pi_{\text{policy}} \,\|\, \pi_{\text{reference}})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord text"><span class="mord">KL</span></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">policy</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">∥</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">reference</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span> over the next-token distribution using Module 05’s formula, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>∑</mo><mi>x</mi></msub><mi>p</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo stretchy="false">[</mo><mi>log</mi><mo>⁡</mo><mi>p</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><mi>q</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">\sum_x p(x)[\log p(x) - \log q(x)]</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0497em;vertical-align:-0.2997em;"></span><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.0017em;"><span style="top:-2.4003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">x</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2997em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mopen">[</span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">p</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)]</span></span></span></span>. The result was <strong>0.201 nats</strong>. In a real PPO loop this exact quantity is computed at every generated token, summed over the whole response, and subtracted (scaled by <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi></mrow><annotation encoding="application/x-tex">\beta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span></span></span></span>) from the reward-model score before the policy-gradient update: the concrete mechanism behind the abstract “<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>Objective</mtext><mo>=</mo><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mtext>reward</mtext><mo stretchy="false">]</mo><mo>−</mo><mi>β</mi><mo>⋅</mo><mtext>KL</mtext><mo stretchy="false">(</mo><mo>⋅</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{Objective} = \mathbb{E}[\text{reward}] - \beta \cdot \text{KL}(\cdot)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Objective</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathbb">E</span><span class="mopen">[</span><span class="mord text"><span class="mord">reward</span></span><span class="mclose">]</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">KL</span></span><span class="mopen">(</span><span class="mord">⋅</span><span class="mclose">)</span></span></span></span>” formula above.</p>
+</section>
+<section id="aws-sagemaker-notes" class="level2" data-number="35.6">
+<h2 data-number="35.6" class="anchored" data-anchor-id="aws-sagemaker-notes"><span class="header-section-number">35.6</span> AWS SageMaker Notes</h2>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<p>SageMaker has no distinct “RLHF service.” <code>trl</code>’s <code>RewardTrainer</code>, <code>DPOTrainer</code>, and <code>PPOTrainer</code> run inside a SageMaker Training Job using the HuggingFace container, the same pattern as Chapter 34’s SFT job:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="im">from</span> sagemaker.huggingface <span class="im">import</span> HuggingFace</span>
+<span id="cb7-2"></span>
+<span id="cb7-3">estimator <span class="op">=</span> HuggingFace(</span>
+<span id="cb7-4">    <span class="co"># a trl DPOTrainer script</span></span>
+<span id="cb7-5">    entry_point<span class="op">=</span><span class="st">"train_dpo.py"</span>,</span>
+<span id="cb7-6">    role<span class="op">=</span>role,</span>
+<span id="cb7-7">    <span class="co"># DPO holds policy + frozen reference in memory</span></span>
+<span id="cb7-8">    <span class="co"># simultaneously</span></span>
+<span id="cb7-9">    instance_type<span class="op">=</span><span class="st">"ml.g5.2xlarge"</span>,</span>
+<span id="cb7-10">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb7-11">    transformers_version<span class="op">=</span><span class="st">"4.49"</span>,</span>
+<span id="cb7-12">    pytorch_version<span class="op">=</span><span class="st">"2.5"</span>,</span>
+<span id="cb7-13">    py_version<span class="op">=</span><span class="st">"py311"</span>,</span>
+<span id="cb7-14">    hyperparameters<span class="op">=</span>{<span class="st">"beta"</span>: <span class="fl">0.1</span>, <span class="st">"learning_rate"</span>: <span class="fl">5e-6</span>},</span>
+<span id="cb7-15">)</span>
+<span id="cb7-16">estimator.fit({<span class="st">"train"</span>: preference_data_s3_uri})</span></code></pre></div>
+<p><strong>When to prefer SageMaker:</strong> once a preference dataset and hyperparameters are validated locally, as in this chapter’s notebook, and a GPU class larger than what’s available locally is needed, or the run should be tracked in a Model Registry (Chapter 24) as a versioned artefact. PPO in particular needs enough GPU memory to hold the policy, the frozen reference, and the reward model simultaneously, which pushes real runs onto instances well beyond a laptop GPU.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="35.7">
+<h2 data-number="35.7" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">35.7</span> History and Further Reading</h2>
+<p>Murphy’s Advanced text gives the formal reinforcement-learning foundations, policies, value functions, policy gradients, that PPO builds on <span class="citation" data-cites="murphy2023pmladvanced">(<a href="#ref-murphy2023pmladvanced" role="doc-biblioref">Murphy 2023</a>)</span>. “InstructGPT” (Ouyang et al.) is the paper that established the three-stage RLHF pipeline this chapter’s Exposition follows <span class="citation" data-cites="ouyang2022instructgpt">(<a href="#ref-ouyang2022instructgpt" role="doc-biblioref"><span class="nocase">Ouyang et al.</span> 2022</a>)</span>. “Direct Preference Optimization” (Rafailov et al.) is the DPO paper. Its closed-form derivation is more approachable on a read than its reputation suggests <span class="citation" data-cites="rafailov2023dpo">(<a href="#ref-rafailov2023dpo" role="doc-biblioref">Rafailov et al. 2023</a>)</span>. “Proximal Policy Optimization” (Schulman et al.) is the original PPO paper, for the RL side of classic RLHF <span class="citation" data-cites="schulman2017ppo">(<a href="#ref-schulman2017ppo" role="doc-biblioref">Schulman et al. 2017</a>)</span>. Burkov’s <em>Hundred-Page Language Models Book</em> covers RLHF alongside Constitutional AI as a contrasting alignment approach, worth a look for how the two differ in how they incorporate human oversight <span class="citation" data-cites="burkov2025hundredpagellm">(<a href="#ref-burkov2025hundredpagellm" role="doc-biblioref">Burkov 2025</a>)</span>. The Hugging Face <code>trl</code> documentation is worth keeping open alongside this chapter for runnable implementations of <code>RewardTrainer</code>, <code>DPOTrainer</code>, and <code>PPOTrainer</code>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="35.8">
+<h2 data-number="35.8" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">35.8</span> How This Connects</h2>
+<p>This chapter builds directly on Chapter 34. The SFT model from that chapter is both the starting point for the policy being trained here and the frozen reference model anchoring the KL/DPO term. It is not a replacement for instruction fine-tuning. It is the stage that comes after it. It also depends on the KL divergence introduced early in this book’s information-theory material. The same formula that measures how far two probability distributions have drifted apart is, here, the mechanism that keeps preference-tuning from collapsing into reward hacking, whether applied as PPO’s explicit penalty or folded implicitly into DPO’s loss. It connects forward to Chapter 32: a reward model is itself a learned evaluator, trained the same way an LLM-judge is prompted, to produce a quality signal from a comparison. And it can develop the same biases (length, style, sycophancy) an LLM-judge can. It is often confused with instruction fine-tuning. The distinction that matters is that SFT teaches a model <em>a</em> correct behaviour via imitation of demonstrations, while RLHF and DPO teach a model to <em>prefer</em> better behaviour via comparison, without ever specifying a single correct response.</p>
+</section>
+<section id="exercises" class="level2" data-number="35.9">
+<h2 data-number="35.9" class="anchored" data-anchor-id="exercises"><span class="header-section-number">35.9</span> Exercises</h2>
+<ol type="1">
+<li id="ex-35-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Using the RL vocabulary table, state what the “action” and “reward” are for an LLM being trained with RLHF, and explain in one sentence why the reward is typically assigned to a whole response rather than to each individual token.</p></li>
+<li id="ex-35-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain, in your own words, why the Bradley-Terry loss never demands a specific reward value, only that <code>r(chosen) &gt; r(rejected)</code>. What would change about a reward model’s outputs if the loss instead demanded a specific value for each score?</p></li>
+<li id="ex-35-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-preference-format" class="quarto-xref">Listing&nbsp;<span>35.1</span></a> as a template, write three new <code>(prompt, chosen, rejected)</code> triples for a domain of your choosing (not customer support or general trivia), following the pattern from the Worked Example where <code>chosen</code> is helpful and complete and <code>rejected</code> is terse or evasive.</p></li>
+<li id="ex-35-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> The Worked Example’s DPO run started with margin <code>+0.0000</code> at step 0 and reached <code>+40.72</code> by the final step. Using <a href="#lst-dpo-loss" class="quarto-xref">Listing&nbsp;<span>35.3</span></a>’s formula, explain algebraically why the margin must be exactly zero at step 0, before any training has occurred, regardless of which preference pairs are used.</p></li>
+<li id="ex-35-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team preference-tuned a model with DPO and observed the reward-model-analogous preference margin rising steadily, but a human reviewer reports the model’s outputs have become oddly repetitive. Using this chapter’s Trade-offs and Procedure 35.5, name the likely cause and the specific hyperparameter change you’d try first.</p></li>
+<li id="ex-35-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer wants to preference-tune a foundation model but has never run instruction fine-tuning on it. Using this chapter’s “How This Connects” framing, explain in two or three sentences why you’d recommend against skipping straight to DPO.</p></li>
+<li id="ex-35-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the DPO paper’s (Rafailov et al.) derivation of the closed-form relationship between the optimal policy and the reward function. Summarise, in your own words, the key algebraic step that lets the reward model be eliminated from the loss.</p></li>
+<li id="ex-35-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Compare the “alignment tax” mentioned in this chapter’s Trade-offs section to the concept of overfitting from earlier in this book. Are they the same failure mode measured on different axes, or genuinely different phenomena? Justify your answer with reference to what each one trades away.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="35.10">
+<h2 data-number="35.10" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">35.10</span> Mental Model</h2>
+<p>SFT is apprenticeship: watch an expert, imitate them. RLHF and DPO are coaching. Rather than handing the model a script, show it two attempts and say “that one was better,” repeatedly, until it internalises the underlying preference. The KL term, whether PPO’s explicit penalty or DPO’s implicit one, is the leash that stops the model wandering off to please the coach’s proxy metric instead of the coach’s actual intent.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2025hundredpagellm" class="csl-entry" role="listitem">
+Burkov, Andriy. 2025. <em>The Hundred-Page Language Models Book</em>. True Positive Inc.
+</div>
+<div id="ref-murphy2023pmladvanced" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2023. <em>Probabilistic Machine Learning: Advanced Topics</em>. MIT Press.
+</div>
+<div id="ref-ouyang2022instructgpt" class="csl-entry" role="listitem">
+<span class="nocase">Ouyang, Long, Jeff Wu, Xu Jiang, et al.</span> 2022. <span>“Training Language Models to Follow Instructions with Human Feedback.”</span> <em>arXiv Preprint arXiv:2203.02155</em>.
+</div>
+<div id="ref-rafailov2023dpo" class="csl-entry" role="listitem">
+Rafailov, Rafael, Archit Sharma, Eric Mitchell, Christopher D. Manning, Stefano Ermon, and Chelsea Finn. 2023. <span>“Direct Preference Optimization: Your Language Model Is Secretly a Reward Model.”</span> <em>Advances in Neural Information Processing Systems</em> 36.
+</div>
+<div id="ref-schulman2017ppo" class="csl-entry" role="listitem">
+Schulman, John, Filip Wolski, Prafulla Dhariwal, Alec Radford, and Oleg Klimov. 2017. <span>“Proximal Policy Optimization Algorithms.”</span> <em>arXiv Preprint arXiv:1707.06347</em>.
+</div>
+</div>
+</section>

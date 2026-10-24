@@ -1,0 +1,168 @@
+<p>Chapter 39 built the launch syntax and the host/device transfer model. Chapter 40 built the memory-access rules that make one kernel fast and an apparently identical one slow. This chapter is where those pieces combine into something recognisable as real GPU programming: a handful of small, genuine kernels, benchmarked honestly against a CPU baseline, including the uncomfortable case where the GPU loses, which turns out to be exactly as instructive as the cases where it wins. Almost every GPU kernel in production ML is a variation on one of a small number of patterns, and the simplest and most common of them, the <strong>map</strong> (or elementwise) pattern, is this chapter’s subject.</p>
+<section id="motivation" class="level2" data-number="41.1">
+<h2 data-number="41.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">41.1</span> Motivation</h2>
+<p>Vector addition (Chapter 39), SAXPY, and elementwise activation functions like sigmoid or ReLU are all instances of one pattern: the same independent operation applied to every element of one or more arrays, with zero communication between elements. Writing the kernel itself is, at this point, nearly mechanical. Chapter 39 already covered the launch syntax and indexing needed. The genuinely useful content in this chapter is a rigorous, measured answer to the question every beginner asks and every ML framework quietly answers on their behalf: <strong>when does the GPU actually win?</strong></p>
+</section>
+<section id="exposition" class="level2" data-number="41.2">
+<h2 data-number="41.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">41.2</span> Exposition</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface.</p>
+<section id="saxpy-the-hello-world-of-numerical-kernels" class="level3" data-number="41.2.1">
+<h3 data-number="41.2.1" class="anchored" data-anchor-id="saxpy-the-hello-world-of-numerical-kernels"><span class="header-section-number">41.2.1</span> SAXPY: The “Hello World” of Numerical Kernels</h3>
+<p>SAXPY (<code>y = a·x + y</code>, “Single-precision A·X Plus Y”) is a BLAS Level 1 operation and one of the most benchmarked kernels in computing history. It’s simple enough to write in one line, and representative enough of real elementwise workloads (including, not coincidentally, the parameter-update step inside SGD-family optimisers) to be a meaningful test rather than a toy.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb1-1">__global__ <span class="dt">void</span> saxpy<span class="op">(</span><span class="dt">int</span> n<span class="op">,</span> <span class="dt">float</span> a<span class="op">,</span> <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> x<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> y<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-2">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb1-3">    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> y<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> a <span class="op">*</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">+</span> y<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb1-4"><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="the-uncomfortable-result-the-cpu-can-win" class="level3" data-number="41.2.2">
+<h3 data-number="41.2.2" class="anchored" data-anchor-id="the-uncomfortable-result-the-cpu-can-win"><span class="header-section-number">41.2.2</span> The Uncomfortable Result: the CPU Can Win</h3>
+<p>The Worked Example below benchmarks SAXPY end to end, host-to-device transfer, kernel, device-to-host transfer, against a plain CPU loop, across problem sizes from 1,000 to 100,000,000 elements. <strong>The CPU wins at every single size tested.</strong> This is not a mistake in the experiment. It is the direct, measurable consequence of Chapter 39’s lesson. A single-shot round trip pays the full PCIe transfer cost every time, and SAXPY is cheap enough, one multiply, one add, per element, that transfer cost dominates kernel cost by one to two orders of magnitude, at every size measured. This is also the single most common way beginners misjudge GPU performance: benchmarking a kernel in isolation, transfer included, and being surprised when the “should obviously be faster” GPU version loses.</p>
+</section>
+<section id="the-fix-isnt-a-faster-kernel.-its-amortisation" class="level3" data-number="41.2.3">
+<h3 data-number="41.2.3" class="anchored" data-anchor-id="the-fix-isnt-a-faster-kernel.-its-amortisation"><span class="header-section-number">41.2.3</span> The Fix Isn’t a Faster Kernel. It’s Amortisation</h3>
+<p>Running the identical SAXPY kernel 100 times on data transferred to the GPU <em>once</em>, staying resident there, with the result copied back only after all 100 calls, reverses the single-shot result completely, without changing a single line of the kernel itself. This is the real lesson, and it is the reason every serious ML framework works the way it does. PyTorch keeps tensors resident on the GPU across an entire training loop not because any individual operation strictly needs it, but because round-tripping data to the CPU between every operation would make the “faster” GPU version slower overall. That’s precisely what the single-shot experiment demonstrates directly. <code>.to('cuda')</code> once at the start of a training loop, and staying there, is not a stylistic preference. It is load-bearing for the entire performance case for using a GPU at all.</p>
+</section>
+<section id="a-second-map-kernel-sigmoid" class="level3" data-number="41.2.4">
+<h3 data-number="41.2.4" class="anchored" data-anchor-id="a-second-map-kernel-sigmoid"><span class="header-section-number">41.2.4</span> A Second Map Kernel: Sigmoid</h3>
+<p>To see the map pattern with a slightly more realistic, and directly ML-relevant, body, this chapter also implements a sigmoid activation kernel (<code>1 / (1 + exp(-x))</code>), using <code>expf()</code>, CUDA’s device-side single-precision exponential, in place of a multiply-add:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb2-1">__global__ <span class="dt">void</span> sigmoidKernel<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb2-3">    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="fl">1.0</span><span class="bu">f</span> <span class="op">/</span> <span class="op">(</span><span class="fl">1.0</span><span class="bu">f</span> <span class="op">+</span> expf<span class="op">(-</span>in<span class="op">[</span>i<span class="op">]));</span></span>
+<span id="cb2-4"><span class="op">}</span></span></code></pre></div>
+<p>This kernel has exactly the same shape as SAXPY: one thread, one element, one independent computation. Every elementwise activation function inside a neural network’s forward pass, ReLU, GELU, sigmoid, tanh, is this same map pattern. Only the body of the <code>if (i &lt; n)</code> block changes.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="41.3">
+<h2 data-number="41.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">41.3</span> Trade-offs and Limits</h2>
+<p>The map pattern, and GPUs generally, win decisively at repeated operations on data that stays resident on the device across many calls, at sufficiently large <code>n</code> that per-call overhead (launch plus any transfer) is a small fraction of total work, and at purely elementwise, branch-free computation. They lose at one-shot operations on host-resident data, regardless of size, exactly as this chapter’s SAXPY sweep demonstrates concretely, and at very small <code>n</code>, where kernel launch overhead alone, microseconds, but real, can exceed the entire CPU computation time. The practical implication is a triage question, not a rule of thumb about GPUs being universally fast. Does this exact operation run once on data that starts on the host, or does it run repeatedly on data that can stay resident? The same kernel, unchanged, can be a clear loss or a clear win depending only on the answer.</p>
+</section>
+<section id="procedures" class="level2" data-number="41.4">
+<h2 data-number="41.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">41.4</span> Procedures</h2>
+<p id="proc-41-1"><strong>Procedure 41.1 (Write a Basic Elementwise/Map Kernel).</strong> <em>When to use:</em> any operation applied independently to every element of one or more arrays: activations, elementwise arithmetic, type casts, masking.</p>
+<div id="lst-firstkernels-map" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-firstkernels-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;41.1: The general shape of an elementwise (map) kernel
+</figcaption>
+<div aria-describedby="lst-firstkernels-map-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>__global__ void mapKernel(const float* in, float* out, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i &lt; n) {
+        out[i] = /* your per-element operation, using in[i] */;
+    }
+}</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> omitting the bounds check when <code>n</code> isn’t a clean multiple of the block size. The last block’s threads with <code>i &gt;= n</code> will read or write past the end of the allocated buffer: undefined behaviour, sometimes silent, sometimes a crash. Always include <code>if (i &lt; n)</code> unless it has been proven that <code>n</code> divides evenly into the launch configuration.</p>
+<p id="proc-41-2"><strong>Procedure 41.2 (Benchmark GPU vs.&nbsp;CPU Correctly for a Real Decision).</strong> <em>When to use:</em> before claiming “the GPU version is faster” in any report or design doc. This chapter’s SAXPY result shows how easily this goes wrong by accident.</p>
+<div id="lst-firstkernels-benchmark-decision" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-firstkernels-benchmark-decision-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;41.2: The three numbers a real GPU-vs-CPU decision needs, kept separate
+</figcaption>
+<div aria-describedby="lst-firstkernels-benchmark-decision-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># 1. CPU baseline time</span></span>
+<span id="cb4-2"><span class="co"># 2. GPU round-trip time (H2D + kernel + D2H) for a SINGLE call</span></span>
+<span id="cb4-3"><span class="co"># 3. GPU amortised time: (1 transfer in, N kernel calls, 1 transfer</span></span>
+<span id="cb4-4"><span class="co"># out) / N</span></span>
+<span id="cb4-5"></span>
+<span id="cb4-6"><span class="co"># If the real workload calls the operation once on host data -&gt;</span></span>
+<span id="cb4-7"><span class="co"># compare against (2)</span></span>
+<span id="cb4-8"><span class="co"># If the real workload calls it repeatedly on data that can stay</span></span>
+<span id="cb4-9"><span class="co"># resident -&gt; compare against (3)</span></span>
+<span id="cb4-10"><span class="co"># These can point to OPPOSITE conclusions for the identical kernel,</span></span>
+<span id="cb4-11"><span class="co"># as this chapter demonstrates.</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> reporting GPU speedup numbers measured with amortised (data-resident, many-repeated-calls) timing when the actual production use case is single-shot on host data, or the reverse. State plainly which scenario was measured. The two can differ by an order of magnitude or more, in opposite directions, for the exact same kernel.</p>
+<p id="proc-41-3"><strong>Procedure 41.3 (Triage Whether an Operation Is Worth a GPU Kernel).</strong> <em>When to use:</em> early design-time, before writing any kernel at all.</p>
+<div id="lst-firstkernels-worth-gpu" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-firstkernels-worth-gpu-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;41.3: A rough first-filter heuristic: real answers still require Procedure 41.2’s benchmark
+</figcaption>
+<div aria-describedby="lst-firstkernels-worth-gpu-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="kw">def</span> worth_gpu_kernel(</span>
+<span id="cb5-2">    n_elements,</span>
+<span id="cb5-3">    flops_per_element,</span>
+<span id="cb5-4">    will_stay_resident,</span>
+<span id="cb5-5">    expected_call_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb5-6">):</span>
+<span id="cb5-7">    <span class="co">"""Rough triage only. Always confirm with a real</span></span>
+<span id="cb5-8"><span class="co">    benchmark (Procedure 41.2)."""</span></span>
+<span id="cb5-9">    <span class="cf">if</span> will_stay_resident <span class="kw">and</span> expected_call_count <span class="op">&gt;</span> <span class="dv">1</span>:</span>
+<span id="cb5-10">        <span class="co"># amortisation almost always favours GPU once n is</span></span>
+<span id="cb5-11">        <span class="co"># reasonably large</span></span>
+<span id="cb5-12">        <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb5-13">    <span class="cf">if</span> n_elements <span class="op">&lt;</span> <span class="dv">100_000</span>:</span>
+<span id="cb5-14">        <span class="co"># launch + transfer overhead likely dominates at this scale</span></span>
+<span id="cb5-15">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb5-16">    <span class="cf">if</span> flops_per_element <span class="op">&lt;</span> <span class="dv">5</span>:</span>
+<span id="cb5-17">        <span class="co"># too cheap per element to survive a single-shot round trip</span></span>
+<span id="cb5-18">        <span class="co"># (see SAXPY)</span></span>
+<span id="cb5-19">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb5-20">    <span class="co"># genuinely ambiguous: benchmark both paths for real</span></span>
+<span id="cb5-21">    <span class="cf">return</span> <span class="va">None</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> skipping this triage and reflexively writing a CUDA kernel for every “slow” CPU loop. This chapter’s own SAXPY sweep is a concrete case where the “obvious” GPU port is a net loss at every size tested. A five-line heuristic, or better, an actual measurement, is far cheaper than finding this out after shipping.</p>
+</section>
+<section id="worked-example" class="level2" data-number="41.5">
+<h2 data-number="41.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">41.5</span> Worked Example</h2>
+<p>The companion notebook compiles and runs raw <code>.cu</code> files with <code>nvcc</code>, targeting this book’s reference rig’s real compute capability (<code>sm_120</code>, queried live), timing with CUDA events (Chapter 39, Procedure 39.4) and best-of-3 CPU timing.</p>
+<p><strong>Single-shot SAXPY, full round trip (H2D + kernel + D2H), across six sizes:</strong></p>
+<pre class="text"><code>           n       CPU (ms) GPU total (ms)     winner
+        1000         0.0000         0.0201        CPU
+       10000         0.0020         0.0312        CPU
+      100000         0.0140         0.1596        CPU
+     1000000         0.1110         0.9956        CPU
+    10000000         2.1380         8.6309        CPU
+   100000000        28.5180        85.8573        CPU</code></pre>
+<p>The CPU wins<span class="ref-rig-mark">†</span> at every size from 1,000 to 100,000,000 elements. At the smallest size the CPU’s time is below this clock’s measurement resolution (reported as 0.0000 ms), and at the largest size the CPU still finishes in about a third of the GPU’s total time. SAXPY does too little arithmetic per byte moved to amortise a single round trip’s transfer cost, at any size tested.</p>
+<p><strong>The same kernel, 100 repeated calls, data resident on the GPU (<code>n = 10,000,000</code>):</strong></p>
+<pre class="text"><code>n = 10000000, 100 repeated SAXPY calls, SAME resident data:
+CPU total:  330.70 ms (3.3070 ms/call)
+GPU total:   10.94 ms (0.1094 ms/call, amortized)
+  (1 transfer in/out, 100 kernel launches)
+GPU speedup once transfer is amortized: 30.2x</code></pre>
+<p>Same kernel, same GPU, opposite conclusion: a 30.2x<span class="ref-rig-mark">†</span> GPU win once the transfer cost is spread across 100 calls instead of paid once per call. The only thing that changed between the two experiments is how many times the kernel ran per data transfer. Not the kernel’s code, not the GPU, not the problem size per call. This is precisely why PyTorch, and every serious ML framework, keeps tensors resident on the GPU for the duration of a training loop rather than moving them back to the CPU between every single operation.</p>
+<p><strong>Sigmoid, correctness spot-check</strong> (<code>n = 1 &lt;&lt; 24</code>, compared against host <code>expf()</code> at 20 evenly spaced points, tolerance <code>1e-5</code>):</p>
+<pre class="text"><code>Sigmoid kernel correct (spot-checked against host expf): true
+Sample: sigmoid(-3.92) = 0.0195</code></pre>
+<p>The kernel matches the host math library everywhere it was checked, confirming the map pattern generalises cleanly from a multiply-add (SAXPY) to a transcendental function call (<code>expf</code>) without any change in kernel structure. Only the body of the <code>if (i &lt; n)</code> block differs.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="41.6">
+<h2 data-number="41.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">41.6</span> History and Further Reading</h2>
+<p>The “CUDA C++ Best Practices Guide,” Chapter 9, “Maximizing Utilization,” covers overlapping transfer with compute via CUDA streams as a further fix beyond simple amortisation, for readers who want to push past what this chapter covers. SAXPY’s specification as a BLAS Level 1 operation predates GPU computing entirely and is worth knowing as historical context for why this specific, tiny operation became a standard benchmark. Book 2, Chapter 23 (Model Deployment &amp; Serving) covers KV-caching and batching for LLM inference: the same amortisation principle this chapter demonstrates, applied at the level of an entire serving system rather than one kernel. Cautaerts and Ghorbanfekr’s <em>GPU-Accelerated Computing with Python 3 and CUDA</em> <span class="citation" data-cites="cautaerts2026gpuaccelerated">(<a href="#ref-cautaerts2026gpuaccelerated" role="doc-biblioref">Cautaerts and Ghorbanfekr 2026</a>)</span>, Chapter 3, covers the same mismatched-grid-size handling and race-condition avoidance (thread synchronization, atomics) this chapter’s first kernels run into, from a Numba-CUDA starting point.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="41.7">
+<h2 data-number="41.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">41.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 39’s launch syntax and transfer-cost model and Chapter 40’s memory-access rules. Both are prerequisites for writing and correctly benchmarking even the simple kernels here. It enables Chapter 42 (patterns where threads <em>do</em> need to communicate: reduction, scan, stencil, go beyond this chapter’s independent, elementwise work) and Chapter 43 (which formalises exactly why the crossover point in this chapter’s SAXPY sweep sits where it does, using the roofline model). It is often confused with the blanket claim “GPUs are always faster.” The single most corrective experiment in this chapter is the SAXPY sweep, measured and honest, and the opposite of the naive expectation for a single-shot workload.</p>
+</section>
+<section id="exercises" class="level2" data-number="41.8">
+<h2 data-number="41.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">41.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-41-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In your own words, explain why a single-shot SAXPY round trip loses to a CPU loop at every size this chapter tested, using the transfer-vs-compute cost idea from Chapter 39.</p></li>
+<li id="ex-41-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define “amortisation” as this chapter uses it, and state which single measurement changed between the single-shot and the 100-repeated-call SAXPY experiments.</p></li>
+<li id="ex-41-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-firstkernels-map" class="quarto-xref">Listing&nbsp;<span>41.1</span></a> as a template, write the kernel body for a ReLU activation (<code>out[i] = max(0, in[i])</code>), and state which of this chapter’s two example kernels (SAXPY or sigmoid) it more closely resembles in arithmetic cost per element.</p></li>
+<li id="ex-41-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter measured a 30.2x amortised speedup at 100 repeated calls on <code>n = 10,000,000</code>. Using the single-shot table’s <code>n = 10,000,000</code> row (CPU 2.1380 ms, GPU 8.6309 ms), estimate roughly how many repeated calls it would take for the amortised GPU total to first drop below the single-shot CPU time, assuming the GPU’s per-call time stays close to the measured 0.1094 ms amortised figure.</p></li>
+<li id="ex-41-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Run <a href="#lst-firstkernels-worth-gpu" class="quarto-xref">Listing&nbsp;<span>41.3</span></a> with <code>n_elements=500_000</code>, <code>flops_per_element=1</code>, <code>will_stay_resident=False</code>, <code>expected_call_count=1</code>. State what it returns and whether that matches this chapter’s single-shot SAXPY finding.</p></li>
+<li id="ex-41-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague wants to port a CPU function that runs once per user request, on a few thousand elements each time, to a CUDA kernel “because GPUs are faster.” Using this chapter’s Trade-offs section and Procedure 41.3, write the two or three sentences you’d say back.</p></li>
+<li id="ex-41-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Propose one realistic ML workload (in a sentence or two) where the single-shot SAXPY result, CPU wins, would be the <em>right</em> choice to design around, rather than something to “fix” by moving to GPU.</p></li>
+<li id="ex-41-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the “Maximizing Utilization” chapter of the NVIDIA CUDA C++ Best Practices Guide, focusing on CUDA streams. Summarise, in a few sentences, how overlapping transfer with compute could change this chapter’s single-shot SAXPY result, and why it wouldn’t fully close the gap for an operation this cheap per element.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="41.9">
+<h2 data-number="41.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">41.9</span> Mental Model</h2>
+<p>A GPU kernel is a specialist hired by the job, not by the hour, and hiring one has a fixed booking fee (the data transfer) that doesn’t depend on how much work is actually handed over. Hire the specialist once for a tiny task, and the booking fee eats the entire budget. That’s the single-shot SAXPY result. Hire the specialist once and hand over a hundred tasks in a row without sending them home in between, and the fixed fee is spread so thin it barely matters. That’s amortisation, and it is the entire reason ML frameworks keep data resident on the GPU across a whole training loop rather than shuttling it back and forth per operation.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-cautaerts2026gpuaccelerated" class="csl-entry" role="listitem">
+Cautaerts, Niels, and Hossein Ghorbanfekr. 2026. <em>GPU-Accelerated Computing with Python 3 and CUDA: From Low-Level Kernels to Real-World Applications in Scientific Computing and Machine Learning</em>. Packt Publishing.
+</div>
+</div>
+</section>

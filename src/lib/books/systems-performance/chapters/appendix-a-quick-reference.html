@@ -1,0 +1,2824 @@
+<p>Scan, don’t read. This appendix collects each chapter’s lookup material, key terms, API summaries, formulas, decision guides, and metrics, organized by chapter. Keep it open while working; it is not meant to be read start to finish.</p>
+<section id="chapter-38-gpu-architecture-fundamentals" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-38-gpu-architecture-fundamentals">Chapter 38 — GPU Architecture Fundamentals</h2>
+<section id="key-terms" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>SM (Streaming Multiprocessor)</strong></td>
+<td>The GPU’s core execution unit; contains CUDA cores, Tensor Cores, a warp scheduler, registers, and shared memory</td>
+</tr>
+<tr class="even">
+<td><strong>Warp</strong></td>
+<td>A group of 32 threads executed in lockstep: the actual unit of scheduling on NVIDIA GPUs</td>
+</tr>
+<tr class="odd">
+<td><strong>SIMT</strong></td>
+<td>Single Instruction, Multiple Threads: one instruction issued per clock to an entire warp</td>
+</tr>
+<tr class="even">
+<td><strong>Warp divergence</strong></td>
+<td>Performance cost when threads in the same warp take different branches of a conditional</td>
+</tr>
+<tr class="odd">
+<td><strong>Independent thread scheduling</strong></td>
+<td>Volta-onward feature that lets diverged threads make progress more flexibly, reducing (not eliminating) divergence cost</td>
+</tr>
+<tr class="even">
+<td><strong>CUDA core</strong></td>
+<td>General-purpose scalar ALU: one thread, one operation (add/multiply/FMA) per clock</td>
+</tr>
+<tr class="odd">
+<td><strong>Tensor Core</strong></td>
+<td>Specialised unit performing a small matrix-multiply-accumulate per instruction; the workhorse of deep learning FLOPs</td>
+</tr>
+<tr class="even">
+<td><strong>Occupancy</strong></td>
+<td>Ratio of active warps on an SM to the maximum it could support — covered in depth in Chapter 43</td>
+</tr>
+<tr class="odd">
+<td><strong>HBM (High Bandwidth Memory)</strong></td>
+<td>The GPU’s off-chip global memory: largest capacity, slowest tier, but still roughly 1-2 TB/s on modern cards</td>
+</tr>
+<tr class="even">
+<td><strong>Latency hiding</strong></td>
+<td>Covering a stalled warp’s memory-access wait time by switching the SM to a different, ready warp</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="reference-rig-specs-this-books-gpu" class="level3">
+<h3 class="anchored" data-anchor-id="reference-rig-specs-this-books-gpu">Reference Rig Specs (this Book’s GPU)</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Property</th>
+<th>Value</th>
+<th>How to query it yourself</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>GPU</td>
+<td>NVIDIA GeForce RTX 5090</td>
+<td><code>nvidia-smi --query-gpu=name --format=csv</code></td>
+</tr>
+<tr class="even">
+<td>Compute capability</td>
+<td>12.0 (Blackwell)</td>
+<td><code>torch.cuda.get_device_capability(0)</code></td>
+</tr>
+<tr class="odd">
+<td>SM count</td>
+<td>170</td>
+<td><code>torch.cuda.get_device_properties(0).multi_processor_count</code></td>
+</tr>
+<tr class="even">
+<td>Total memory</td>
+<td>~32 GB</td>
+<td><code>torch.cuda.get_device_properties(0).total_memory</code></td>
+</tr>
+<tr class="odd">
+<td>L2 cache</td>
+<td>96-101 MB</td>
+<td><code>torch.cuda.get_device_properties(0).L2_cache_size</code></td>
+</tr>
+<tr class="even">
+<td>Driver version</td>
+<td>610.43.03</td>
+<td><code>nvidia-smi --query-gpu=driver_version --format=csv</code></td>
+</tr>
+<tr class="odd">
+<td>CUDA toolkit (nvcc)</td>
+<td>13.3</td>
+<td><code>nvcc --version</code></td>
+</tr>
+</tbody>
+</table>
+<p>Numbers on other hardware will differ — always query live values rather than hardcoding these.</p>
+</section>
+<section id="architecture-comparison-cpu-vs.-gpu" class="level3">
+<h3 class="anchored" data-anchor-id="architecture-comparison-cpu-vs.-gpu">Architecture Comparison: CPU vs.&nbsp;GPU</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Property</th>
+<th>CPU</th>
+<th>GPU</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Design goal</td>
+<td>Latency (finish one thread fast)</td>
+<td>Throughput (finish millions of threads fast in aggregate)</td>
+</tr>
+<tr class="even">
+<td>Core count</td>
+<td>8-64</td>
+<td>Thousands (organised into 100+ SMs)</td>
+</tr>
+<tr class="odd">
+<td>Per-core complexity</td>
+<td>High (branch prediction, out-of-order execution, deep pipelines)</td>
+<td>Low (simple ALUs, in-order per warp)</td>
+</tr>
+<tr class="even">
+<td>Cache size</td>
+<td>Large, multi-level, per-core</td>
+<td>Smaller per-SM shared memory + shared L2</td>
+</tr>
+<tr class="odd">
+<td>Best at</td>
+<td>Branchy, sequential, latency-sensitive code</td>
+<td>Uniform, massively parallel, throughput-sensitive code</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="memory-hierarchy-summary" class="level3">
+<h3 class="anchored" data-anchor-id="memory-hierarchy-summary">Memory Hierarchy Summary</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Tier</th>
+<th>Scope</th>
+<th>Approx. size</th>
+<th>Approx. latency</th>
+<th>Managed by</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Registers</td>
+<td>Per-thread</td>
+<td>~256 KB per SM, split across resident threads</td>
+<td>~1 cycle</td>
+<td>Compiler</td>
+</tr>
+<tr class="even">
+<td>Shared memory</td>
+<td>Per-block (SM-local)</td>
+<td>48-228 KB per SM (architecture-dependent)</td>
+<td>~20-30 cycles</td>
+<td>Programmer (explicit)</td>
+</tr>
+<tr class="odd">
+<td>L2 cache</td>
+<td>Chip-wide</td>
+<td>Tens of MB (~100 MB on this book’s reference rig)</td>
+<td>~200 cycles</td>
+<td>Hardware</td>
+</tr>
+<tr class="even">
+<td>Global memory (HBM)</td>
+<td>Chip-wide</td>
+<td>GBs (~32 GB on this book’s reference rig)</td>
+<td>~400-600 cycles</td>
+<td>Programmer (allocation), hardware (caching)</td>
+</tr>
+</tbody>
+</table>
+<p>Full treatment, including coalescing and bank conflicts, is Chapter 40.</p>
+</section>
+<section id="bandwidth-formula" class="level3">
+<h3 class="anchored" data-anchor-id="bandwidth-formula">Bandwidth Formula</h3>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Achieved&nbsp;bandwidth&nbsp;(GB/s)</mtext><mo>=</mo><mfrac><mrow><msub><mi>n</mi><mtext>elements</mtext></msub><mo>×</mo><msub><mi>n</mi><mtext>arrays&nbsp;touched</mtext></msub><mo>×</mo><mtext>bytes&nbsp;per&nbsp;element</mtext></mrow><mrow><mtext>time&nbsp;(s)</mtext><mo>×</mo><msup><mn>10</mn><mn>9</mn></msup></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{Achieved bandwidth (GB/s)} = \frac{n_{\text{elements}} \times n_{\text{arrays touched}} \times \text{bytes per element}}{\text{time (s)} \times 10^9}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">Achieved&nbsp;bandwidth&nbsp;(GB/s)</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.3074em;vertical-align:-0.936em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3714em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord text"><span class="mord">time&nbsp;(s)</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7401em;"><span style="top:-2.989em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">9</span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">elements</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">arrays&nbsp;touched</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord text"><span class="mord">bytes&nbsp;per&nbsp;element</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+</section>
+<section id="quick-device-query-snippets" class="level3">
+<h3 class="anchored" data-anchor-id="quick-device-query-snippets">Quick Device-Query Snippets</h3>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> torch</span>
+<span id="cb1-2"></span>
+<span id="cb1-3">props <span class="op">=</span> torch.cuda.get_device_properties(<span class="dv">0</span>)</span>
+<span id="cb1-4"><span class="co"># full summary</span></span>
+<span id="cb1-5"><span class="bu">print</span>(props)</span>
+<span id="cb1-6"><span class="co"># SM count</span></span>
+<span id="cb1-7"><span class="bu">print</span>(props.multi_processor_count)</span>
+<span id="cb1-8"><span class="co"># global memory</span></span>
+<span id="cb1-9"><span class="bu">print</span>(props.total_memory <span class="op">/</span> <span class="fl">1e9</span>, <span class="st">'GB'</span>)</span>
+<span id="cb1-10"><span class="co"># (major, minor) compute capability</span></span>
+<span id="cb1-11"><span class="bu">print</span>(torch.cuda.get_device_capability(<span class="dv">0</span>))</span></code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><span class="ex">nvidia-smi</span> <span class="at">--query-gpu</span><span class="op">=</span>name,memory.total,clocks.max.sm, <span class="dt">\</span></span>
+<span id="cb2-2">    clocks.max.memory,power.max_limit <span class="at">--format</span><span class="op">=</span>csv</span></code></pre></div>
+</section>
+</section>
+<section id="chapter-39-the-cuda-programming-model" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-39-the-cuda-programming-model">Chapter 39 — The CUDA Programming Model</h2>
+<section id="key-terms-1" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-1">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Kernel</strong></td>
+<td>A function marked <code>__global__</code>, called from host code, executed on the device by many threads at once</td>
+</tr>
+<tr class="even">
+<td><strong>Host / Device</strong></td>
+<td>Host = CPU and its memory; Device = GPU and its memory. Physically separate address spaces</td>
+</tr>
+<tr class="odd">
+<td><strong>Block</strong></td>
+<td>A group of threads (≤1024) that run on one SM, can synchronise (<code>__syncthreads()</code>), and share on-chip shared memory</td>
+</tr>
+<tr class="even">
+<td><strong>Grid</strong></td>
+<td>The full set of blocks launched by one kernel call; blocks run independently, no cross-block synchronisation</td>
+</tr>
+<tr class="odd">
+<td><strong><code>threadIdx</code> / <code>blockIdx</code> / <code>blockDim</code> / <code>gridDim</code></strong></td>
+<td>Built-in per-thread variables identifying a thread’s position in the block/grid hierarchy</td>
+</tr>
+<tr class="even">
+<td><strong>Grid-stride loop</strong></td>
+<td>Pattern where each thread processes multiple elements, striding by total thread count: decouples launch config from problem size</td>
+</tr>
+<tr class="odd">
+<td><strong>Pageable memory</strong></td>
+<td>Ordinary host memory (<code>new</code>/<code>malloc</code>); OS can relocate it, so <code>cudaMemcpy</code> stages it through a pinned buffer first</td>
+</tr>
+<tr class="even">
+<td><strong>Pinned (page-locked) memory</strong></td>
+<td>Host memory allocated with <code>cudaMallocHost</code>; fixed physical address, enables direct DMA transfer, no staging copy</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cuda-function-qualifiers" class="level3">
+<h3 class="anchored" data-anchor-id="cuda-function-qualifiers">CUDA Function Qualifiers</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Qualifier</th>
+<th>Runs on</th>
+<th>Callable from</th>
+<th>Use for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>__global__</code></td>
+<td>Device</td>
+<td>Host (or device, for dynamic parallelism)</td>
+<td>Kernel entry points — always returns <code>void</code></td>
+</tr>
+<tr class="even">
+<td><code>__device__</code></td>
+<td>Device</td>
+<td>Device only</td>
+<td>Helper functions called from within kernels</td>
+</tr>
+<tr class="odd">
+<td><code>__host__</code></td>
+<td>Host</td>
+<td>Host only</td>
+<td>Default for ordinary C++ functions; can combine with <code>__device__</code> to compile for both</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="kernel-launch-syntax" class="level3">
+<h3 class="anchored" data-anchor-id="kernel-launch-syntax">Kernel Launch Syntax</h3>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb3-1">kernelName<span class="op">&lt;&lt;&lt;</span>gridDim<span class="op">,</span> blockDim<span class="op">,</span> sharedMemBytes<span class="op">,</span> stream<span class="op">&gt;&gt;&gt;(</span>args<span class="op">...);</span></span></code></pre></div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Field</th>
+<th>Meaning</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>gridDim</code></td>
+<td>Number of blocks (can be <code>dim3</code> for 2D/3D grids)</td>
+<td><code>int</code> form launches a 1D grid</td>
+</tr>
+<tr class="even">
+<td><code>blockDim</code></td>
+<td>Number of threads per block (≤1024 total)</td>
+<td><code>int</code> form launches a 1D block</td>
+</tr>
+<tr class="odd">
+<td><code>sharedMemBytes</code></td>
+<td>Optional: extra dynamic shared memory per block, in bytes</td>
+<td>Defaults to 0; static shared memory (Chapter 40) doesn’t need this</td>
+</tr>
+<tr class="even">
+<td><code>stream</code></td>
+<td>Optional: CUDA stream for concurrency/overlap</td>
+<td>Defaults to the default stream (synchronous relative to host)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="core-memory-api" class="level3">
+<h3 class="anchored" data-anchor-id="core-memory-api">Core Memory API</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Call</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>cudaMalloc(&amp;ptr, bytes)</code></td>
+<td>Allocate device (GPU) memory</td>
+</tr>
+<tr class="even">
+<td><code>cudaFree(ptr)</code></td>
+<td>Free device memory</td>
+</tr>
+<tr class="odd">
+<td><code>cudaMallocHost(&amp;ptr, bytes)</code> / <code>cudaFreeHost(ptr)</code></td>
+<td>Allocate/free <strong>pinned</strong> host memory</td>
+</tr>
+<tr class="even">
+<td><code>cudaMemcpy(dst, src, bytes, kind)</code></td>
+<td>Synchronous copy; <code>kind</code> ∈ <code>cudaMemcpyHostToDevice</code>, <code>cudaMemcpyDeviceToHost</code>, <code>cudaMemcpyDeviceToDevice</code></td>
+</tr>
+<tr class="odd">
+<td><code>cudaMallocManaged(&amp;ptr, bytes)</code></td>
+<td>Allocate <strong>Unified Memory</strong>, accessible from both host and device without explicit copies (simpler, not always faster)</td>
+</tr>
+<tr class="even">
+<td><code>cudaDeviceSynchronize()</code></td>
+<td>Block host until all prior device work completes</td>
+</tr>
+<tr class="odd">
+<td><code>cudaGetLastError()</code></td>
+<td>Retrieve the last error from an asynchronous kernel launch (launches don’t return errors directly)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timing-with-cuda-events-c" class="level3">
+<h3 class="anchored" data-anchor-id="timing-with-cuda-events-c">Timing With CUDA Events (C++)</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb4-1"><span class="dt">cudaEvent_t</span> start<span class="op">,</span> stop<span class="op">;</span></span>
+<span id="cb4-2">cudaEventCreate<span class="op">(&amp;</span>start<span class="op">);</span></span>
+<span id="cb4-3">cudaEventCreate<span class="op">(&amp;</span>stop<span class="op">);</span></span>
+<span id="cb4-4"></span>
+<span id="cb4-5">cudaEventRecord<span class="op">(</span>start<span class="op">);</span></span>
+<span id="cb4-6">myKernel<span class="op">&lt;&lt;&lt;</span>grid<span class="op">,</span> block<span class="op">&gt;&gt;&gt;(</span>args<span class="op">...);</span></span>
+<span id="cb4-7">cudaEventRecord<span class="op">(</span>stop<span class="op">);</span></span>
+<span id="cb4-8"><span class="co">// wait for the stop event to actually complete</span></span>
+<span id="cb4-9">cudaEventSynchronize<span class="op">(</span>stop<span class="op">);</span></span>
+<span id="cb4-10"></span>
+<span id="cb4-11"><span class="dt">float</span> ms<span class="op">;</span></span>
+<span id="cb4-12">cudaEventElapsedTime<span class="op">(&amp;</span>ms<span class="op">,</span> start<span class="op">,</span> stop<span class="op">);</span></span></code></pre></div>
+<p>Kernel launches are asynchronous. The host resumes immediately after queuing the launch, so a host-side timer without <code>cudaDeviceSynchronize()</code>/<code>cudaEventSynchronize()</code> measures launch overhead, not execution time.</p>
+</section>
+<section id="compiling-with-nvcc" class="level3">
+<h3 class="anchored" data-anchor-id="compiling-with-nvcc">Compiling With <code>nvcc</code></h3>
+<div class="sourceCode" id="cb5"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><span class="co"># -arch must match your GPU's compute capability</span></span>
+<span id="cb5-2"><span class="ex">nvcc</span> <span class="at">-arch</span><span class="op">=</span>sm_120 myfile.cu <span class="at">-o</span> myprogram</span>
+<span id="cb5-3"><span class="ex">./myprogram</span></span></code></pre></div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Flag</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>-arch=sm_XX</code></td>
+<td>Target compute capability (this book’s reference rig: <code>sm_120</code>; query yours with <code>torch.cuda.get_device_capability(0)</code>)</td>
+</tr>
+<tr class="even">
+<td><code>-O3</code></td>
+<td>Host-code optimisation level (device code is optimised by <code>nvcc</code>’s own pipeline regardless)</td>
+</tr>
+<tr class="odd">
+<td><code>-o name</code></td>
+<td>Output binary name</td>
+</tr>
+<tr class="even">
+<td><code>--ptxas-options=-v</code></td>
+<td>Print register/shared-memory usage per kernel — useful for Chapter 43</td>
+</tr>
+<tr class="odd">
+<td><code>-lineinfo</code></td>
+<td>Embed source line info for Nsight Compute correlation</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-transfer-costs-this-books-reference-rig-n-33.5m-float32-elements-134-mbarray" class="level3">
+<h3 class="anchored" data-anchor-id="measured-transfer-costs-this-books-reference-rig-n-33.5m-float32-elements-134-mbarray">Measured Transfer Costs (This Book’s Reference Rig, n ≈ 33.5M float32 elements, 134 MB/array)</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Transfer</th>
+<th>Pageable host memory</th>
+<th>Pinned host memory</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Host → Device (2 arrays)</td>
+<td>~19.2 ms</td>
+<td>~18.6 ms</td>
+</tr>
+<tr class="even">
+<td>Kernel (grid-stride vector add)</td>
+<td>~0.5 ms</td>
+<td>~0.5 ms</td>
+</tr>
+<tr class="odd">
+<td>Device → Host (1 array)</td>
+<td>~54.5 ms</td>
+<td>~9.3 ms</td>
+</tr>
+<tr class="even">
+<td><strong>Total</strong></td>
+<td><strong>~74.2 ms</strong></td>
+<td><strong>~28.3 ms</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Numbers are from this book’s reference rig’s specific hardware/PCIe link and will vary on other systems. The <em>relationship</em> (pinned memory dramatically helps D2H, kernel time is often the smallest component) is the durable lesson.</p>
+</section>
+</section>
+<section id="chapter-40-memory-hierarchy-in-practice" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-40-memory-hierarchy-in-practice">Chapter 40 — Memory Hierarchy in Practice</h2>
+<section id="key-terms-2" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-2">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Coalesced access</strong></td>
+<td>A warp’s 32 threads access consecutive memory addresses, satisfied by one (or few) memory transactions</td>
+</tr>
+<tr class="even">
+<td><strong>Strided / scattered access</strong></td>
+<td>A warp’s threads access widely-separated addresses, requiring many more, smaller memory transactions for the same useful data</td>
+</tr>
+<tr class="odd">
+<td><strong>Cache line / memory transaction</strong></td>
+<td>The fixed-size chunk (commonly 128 bytes) DRAM is fetched in, regardless of how much of it you actually need</td>
+</tr>
+<tr class="even">
+<td><strong>Shared memory bank</strong></td>
+<td>One of 32 equal-width physical partitions of shared memory; ideally each of a warp’s 32 threads hits a different bank per access</td>
+</tr>
+<tr class="odd">
+<td><strong>Bank conflict</strong></td>
+<td>Two or more threads in a warp access different addresses in the <em>same</em> bank, forcing serialised (not parallel) access</td>
+</tr>
+<tr class="even">
+<td><strong>Register spilling</strong></td>
+<td>When a kernel needs more registers per thread than are available, excess variables spill to slower local memory (physically in global memory)</td>
+</tr>
+<tr class="odd">
+<td><strong>Occupancy</strong></td>
+<td>Ratio of active warps to the maximum an SM could support — full treatment in Chapter 43, but register/shared-memory usage per thread directly limits it</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-this-books-reference-rig" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-this-books-reference-rig">Measured Results (This Book’s Reference Rig)</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Experiment</th>
+<th>Configuration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Coalesced vs.&nbsp;strided global memory copy</td>
+<td>16.7M elements, stride 32 (128 bytes apart)</td>
+<td>Coalesced: ~1876 GB/s. Strided: ~56 GB/s. <strong>~33.4x slowdown</strong></td>
+</tr>
+<tr class="even">
+<td>AoS vs.&nbsp;SoA (sum one field only)</td>
+<td>16.7M 16-byte <code>Record{x,y,z,w}</code> structs, sum <code>.x</code> only</td>
+<td>AoS: ~409 GB/s useful. SoA: ~1044 GB/s. <strong>~2.55x slowdown</strong></td>
+</tr>
+<tr class="odd">
+<td>Shared memory bank conflicts (tiled transpose)</td>
+<td>8192×8192 float matrix (268 MB), <code>tile[32][32]</code> vs <code>tile[32][33]</code></td>
+<td>Unpadded: ~1087 GB/s. Padded: ~1250 GB/s. <strong>~1.15x speedup</strong> from one line of padding</td>
+</tr>
+</tbody>
+</table>
+<p>Re-measure on your own hardware with the companion notebook. The <em>magnitude</em> varies by GPU generation and memory technology. The <em>direction</em> (coalesced/padded is always faster or equal) does not.</p>
+</section>
+<section id="the-tiled-transpose-with-padding-pattern" class="level3">
+<h3 class="anchored" data-anchor-id="the-tiled-transpose-with-padding-pattern">The Tiled-Transpose-With-Padding Pattern</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb6-1"><span class="pp">#define TILE </span><span class="dv">32</span></span>
+<span id="cb6-2"></span>
+<span id="cb6-3"><span class="co">// Bank-conflict-prone: tile[32][32]</span></span>
+<span id="cb6-4">__shared__ <span class="dt">float</span> tile<span class="op">[</span>TILE<span class="op">][</span>TILE<span class="op">];</span></span>
+<span id="cb6-5"></span>
+<span id="cb6-6"><span class="co">// Conflict-free: tile[32][33]. One extra column shifts</span></span>
+<span id="cb6-7"><span class="co">// each row's bank alignment</span></span>
+<span id="cb6-8">__shared__ <span class="dt">float</span> tile<span class="op">[</span>TILE<span class="op">][</span>TILE <span class="op">+</span> <span class="dv">1</span><span class="op">];</span></span></code></pre></div>
+<p>This single-line pattern (padding the fast/leading dimension of a 2D shared memory array by 1) is one of the most common, highest-value micro-optimisations in CUDA code that uses shared memory tiles — applicable to transposes, tiled matrix multiplication, and any stencil operation that reads shared memory along both dimensions.</p>
+</section>
+<section id="coalescing-checklist" class="level3">
+<h3 class="anchored" data-anchor-id="coalescing-checklist">Coalescing Checklist</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question</th>
+<th>If “no,” consider</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Do consecutive <code>threadIdx.x</code> values map to consecutive memory addresses?</td>
+<td>Restructure indexing so they do: often just swapping which index depends on <code>threadIdx.x</code></td>
+</tr>
+<tr class="even">
+<td>Is the data type’s size a “nice” multiple (4/8/16 bytes)?</td>
+<td>Structs-of-arrays (SoA) generally coalesce better than arrays-of-structs (AoS): each field is contiguous across threads (measured ~2.55x on this book’s reference rig, above)</td>
+</tr>
+<tr class="odd">
+<td>Are you accessing a 2D array row-major with <code>threadIdx.x</code> on the column?</td>
+<td>This is usually the coalesced direction; <code>threadIdx.x</code> on the row (with a stride jump per thread) usually isn’t</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="nvcc-flags-relevant-to-this-chapter" class="level3">
+<h3 class="anchored" data-anchor-id="nvcc-flags-relevant-to-this-chapter"><code>nvcc</code> Flags Relevant to This Chapter</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Flag</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>--ptxas-options=-v</code></td>
+<td>Prints registers-per-thread and shared-memory-per-block usage: see register-pressure trade-offs directly</td>
+</tr>
+<tr class="even">
+<td><code>-maxrregcount=N</code></td>
+<td>Caps registers per thread (can increase occupancy at the cost of more spilling: a Chapter 43 trade-off)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="common-imports-for-this-chapters-notebook" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports-for-this-chapters-notebook">Common Imports for This Chapter’s Notebook</h3>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="im">import</span> subprocess, tempfile, os</span>
+<span id="cb7-2"><span class="im">import</span> torch</span></code></pre></div>
+<p>(This chapter’s tutorial uses raw <code>.cu</code> files compiled with <code>nvcc</code>, same pattern as Chapter 39.)</p>
+</section>
+</section>
+<section id="chapter-41-writing-your-first-kernels" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-41-writing-your-first-kernels">Chapter 41 — Writing Your First Kernels</h2>
+<section id="key-terms-3" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-3">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Map / elementwise pattern</strong></td>
+<td>A kernel pattern where the identical, independent operation is applied to every element, with no communication between threads</td>
+</tr>
+<tr class="even">
+<td><strong>SAXPY</strong></td>
+<td>“Single-precision A·X Plus Y”: <code>y = a*x + y</code>, a classic BLAS Level 1 benchmark and the update step inside many optimisers</td>
+</tr>
+<tr class="odd">
+<td><strong>Amortisation</strong></td>
+<td>Spreading a fixed one-time cost (here, data transfer) across many repeated operations so its per-operation share shrinks</td>
+</tr>
+<tr class="even">
+<td><strong>Round trip</strong></td>
+<td>A full host-to-device-to-host cycle for a single operation: the expensive pattern this chapter’s first experiment measures</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-this-books-reference-rig-1" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-this-books-reference-rig-1">Measured Results (This Book’s Reference Rig)</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Experiment</th>
+<th>Configuration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Single-shot SAXPY, full round trip</td>
+<td>n = 1,000 to 100,000,000</td>
+<td>CPU wins at every size tested (e.g.&nbsp;n=100M: CPU 28.52 ms vs.&nbsp;GPU 85.86 ms)</td>
+</tr>
+<tr class="even">
+<td>Amortised SAXPY, 100 repeated calls, data resident</td>
+<td>n = 10,000,000</td>
+<td>CPU total 330.70 ms vs.&nbsp;GPU total 10.94 ms: <strong>~30.2x GPU speedup</strong></td>
+</tr>
+<tr class="odd">
+<td>Sigmoid activation kernel</td>
+<td>n = 1 &lt;&lt; 24, spot-checked vs.&nbsp;host <code>expf()</code></td>
+<td>Correct to 1e-5 tolerance</td>
+</tr>
+</tbody>
+</table>
+<p>Re-measure on your own hardware with the companion notebook. The crossover point (how many repeated calls it takes for GPU to win) depends on your specific GPU and PCIe link. The <em>existence</em> and <em>direction</em> of the crossover is universal.</p>
+</section>
+<section id="the-map-kernel-pattern" class="level3">
+<h3 class="anchored" data-anchor-id="the-map-kernel-pattern">The Map Kernel Pattern</h3>
+<div class="sourceCode" id="cb8"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb8-1">__global__ <span class="dt">void</span> mapKernel<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-2">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb8-3">    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-4">        out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="co">/* per-element operation */</span><span class="op">;</span></span>
+<span id="cb8-5">    <span class="op">}</span></span>
+<span id="cb8-6"><span class="op">}</span></span>
+<span id="cb8-7"></span>
+<span id="cb8-8"><span class="co">// SAXPY: y = a*x + y</span></span>
+<span id="cb8-9">__global__ <span class="dt">void</span> saxpy<span class="op">(</span><span class="dt">int</span> n<span class="op">,</span> <span class="dt">float</span> a<span class="op">,</span> <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> x<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> y<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-10">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb8-11">    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> y<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> a <span class="op">*</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">+</span> y<span class="op">[</span>i<span class="op">];</span></span>
+<span id="cb8-12"><span class="op">}</span></span>
+<span id="cb8-13"></span>
+<span id="cb8-14"><span class="co">// Sigmoid activation: out = 1 / (1 + exp(-in))</span></span>
+<span id="cb8-15">__global__ <span class="dt">void</span> sigmoidKernel<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb8-16">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb8-17">    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> <span class="fl">1.0</span><span class="bu">f</span> <span class="op">/</span> <span class="op">(</span><span class="fl">1.0</span><span class="bu">f</span> <span class="op">+</span> expf<span class="op">(-</span>in<span class="op">[</span>i<span class="op">]));</span></span>
+<span id="cb8-18"><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="benchmarking-decision-checklist" class="level3">
+<h3 class="anchored" data-anchor-id="benchmarking-decision-checklist">Benchmarking Decision Checklist</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question</th>
+<th>Compare against</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Does the real workload call this operation once, on host-resident data?</td>
+<td>GPU round-trip time (H2D + kernel + D2H), single call</td>
+</tr>
+<tr class="even">
+<td>Does the real workload call this operation repeatedly on data that can stay resident?</td>
+<td>GPU amortised time: (1 transfer in, N kernel calls, 1 transfer out) / N</td>
+</tr>
+</tbody>
+</table>
+<p>These two comparisons can point to opposite conclusions for the identical kernel. Always state which scenario was measured.</p>
+</section>
+<section id="gpu-worth-triage-heuristic" class="level3">
+<h3 class="anchored" data-anchor-id="gpu-worth-triage-heuristic">GPU-Worth Triage Heuristic</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><span class="kw">def</span> worth_gpu_kernel(</span>
+<span id="cb9-2">    n_elements,</span>
+<span id="cb9-3">    flops_per_element,</span>
+<span id="cb9-4">    will_stay_resident,</span>
+<span id="cb9-5">    expected_call_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb9-6">):</span>
+<span id="cb9-7">    <span class="cf">if</span> will_stay_resident <span class="kw">and</span> expected_call_count <span class="op">&gt;</span> <span class="dv">1</span>:</span>
+<span id="cb9-8">        <span class="cf">return</span> <span class="va">True</span></span>
+<span id="cb9-9">    <span class="cf">if</span> n_elements <span class="op">&lt;</span> <span class="dv">100_000</span>:</span>
+<span id="cb9-10">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb9-11">    <span class="cf">if</span> flops_per_element <span class="op">&lt;</span> <span class="dv">5</span>:</span>
+<span id="cb9-12">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb9-13">    <span class="co"># benchmark both paths for real</span></span>
+<span id="cb9-14">    <span class="cf">return</span> <span class="va">None</span></span></code></pre></div>
+</section>
+<section id="device-side-math-functions-used-here" class="level3">
+<h3 class="anchored" data-anchor-id="device-side-math-functions-used-here">Device-Side Math Functions Used Here</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Function</th>
+<th>Purpose</th>
+<th>Header</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>expf(x)</code></td>
+<td>Single-precision exponential, callable from device code</td>
+<td><code>&lt;cmath&gt;</code> (device overload resolved automatically by <code>nvcc</code>)</td>
+</tr>
+<tr class="even">
+<td><code>fabsf(x)</code></td>
+<td>Single-precision absolute value</td>
+<td><code>&lt;cmath&gt;</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="common-imports-for-this-chapters-notebook-1" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports-for-this-chapters-notebook-1">Common Imports for This Chapter’s Notebook</h3>
+<div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><span class="im">import</span> subprocess, tempfile, os</span>
+<span id="cb10-2"><span class="im">import</span> torch</span></code></pre></div>
+<p>(This chapter’s tutorial uses raw <code>.cu</code> files compiled with <code>nvcc</code>, same pattern as Chapters 39-40.)</p>
+</section>
+</section>
+<section id="chapter-42-parallel-patterns" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-42-parallel-patterns">Chapter 42 — Parallel Patterns</h2>
+<section id="key-terms-4" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-4">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Reduction</strong></td>
+<td>Combining many values into one (sum, max, min, …) via parallel, tree-structured combination rather than a serial pass</td>
+</tr>
+<tr class="even">
+<td><strong>Tree reduction</strong></td>
+<td>Halving the number of active threads each step, each surviving thread combining with a neighbour: <code>log₂(n)</code> steps instead of <code>n</code></td>
+</tr>
+<tr class="odd">
+<td><strong>Scan / prefix sum</strong></td>
+<td>Computing, for every position, the running combination of all elements up to that position</td>
+</tr>
+<tr class="even">
+<td><strong>Hillis-Steele scan</strong></td>
+<td>Simple scan algorithm, <code>log₂(n)</code> steps, <code>O(n log n)</code> total work; easy to implement, not the most work-efficient</td>
+</tr>
+<tr class="odd">
+<td><strong>Blelloch scan</strong></td>
+<td>Work-efficient scan algorithm, <code>O(n)</code> total work, more complex (up-sweep/down-sweep); the production-grade choice for large scans</td>
+</tr>
+<tr class="even">
+<td><strong>Stencil</strong></td>
+<td>A kernel pattern where each output element depends on a small fixed neighbourhood of input elements</td>
+</tr>
+<tr class="odd">
+<td><strong>Halo</strong></td>
+<td>The extra border of neighbouring elements a tiled stencil kernel loads into shared memory alongside its own block’s data</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-this-books-reference-rig-2" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-this-books-reference-rig-2">Measured Results (This Book’s Reference Rig)</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Experiment</th>
+<th>Configuration</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Reduction: naive atomics vs.&nbsp;tree reduction</td>
+<td>~16.7M elements, sum of all-ones</td>
+<td>Naive: 21.3228 ms. Tree: 0.0866 ms. <strong>~246.2x speedup</strong></td>
+</tr>
+<tr class="even">
+<td>Stencil: naive vs.&nbsp;tiled-with-halo</td>
+<td>1D, radius 3, ~16.7M elements</td>
+<td>Naive: 0.0761 ms. Tiled: 0.0774 ms. <strong>0.98x: no benefit</strong></td>
+</tr>
+<tr class="odd">
+<td>Scan: inclusive sum, n = 1024</td>
+<td>Single block, Hillis-Steele</td>
+<td>Exact match vs.&nbsp;CPU cumulative sum</td>
+</tr>
+</tbody>
+</table>
+<p>Re-measure on your own hardware with the companion notebook. The <em>magnitude</em> of both the reduction speedup and the stencil non-result varies by GPU generation and cache size. Older or smaller-cache GPUs may show the classic tiling benefit the literature predicts.</p>
+</section>
+<section id="reduction-pattern" class="level3">
+<h3 class="anchored" data-anchor-id="reduction-pattern">Reduction Pattern</h3>
+<div class="sourceCode" id="cb11"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb11-1">__global__ <span class="dt">void</span> sumTreeReduction<span class="op">(</span></span>
+<span id="cb11-2">    <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span></span>
+<span id="cb11-3">    <span class="dt">float</span><span class="op">*</span> result<span class="op">,</span></span>
+<span id="cb11-4">    <span class="dt">int</span> n</span>
+<span id="cb11-5"><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-6">    __shared__ <span class="dt">float</span> sdata<span class="op">[</span><span class="dv">256</span><span class="op">];</span>   <span class="co">// must match blockDim.x</span></span>
+<span id="cb11-7">    <span class="dt">int</span> tid <span class="op">=</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb11-8">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb11-9">    sdata<span class="op">[</span>tid<span class="op">]</span> <span class="op">=</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">?</span> in<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb11-10">    __syncthreads<span class="op">();</span></span>
+<span id="cb11-11"></span>
+<span id="cb11-12">    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> s <span class="op">=</span> blockDim<span class="op">.</span>x <span class="op">/</span> <span class="dv">2</span><span class="op">;</span> s <span class="op">&gt;</span> <span class="dv">0</span><span class="op">;</span> s <span class="op">&gt;&gt;=</span> <span class="dv">1</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb11-13">        <span class="cf">if</span> <span class="op">(</span>tid <span class="op">&lt;</span> s<span class="op">)</span> sdata<span class="op">[</span>tid<span class="op">]</span> <span class="op">+=</span> sdata<span class="op">[</span>tid <span class="op">+</span> s<span class="op">];</span></span>
+<span id="cb11-14">        __syncthreads<span class="op">();</span></span>
+<span id="cb11-15">    <span class="op">}</span></span>
+<span id="cb11-16">    <span class="cf">if</span> <span class="op">(</span>tid <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> atomicAdd<span class="op">(</span>result<span class="op">,</span> sdata<span class="op">[</span><span class="dv">0</span><span class="op">]);</span></span>
+<span id="cb11-17"><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="stencil-tiled-with-halo-pattern" class="level3">
+<h3 class="anchored" data-anchor-id="stencil-tiled-with-halo-pattern">Stencil (Tiled, With Halo) Pattern</h3>
+<div class="sourceCode" id="cb12"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb12-1"><span class="pp">#define RADIUS </span><span class="dv">3</span></span>
+<span id="cb12-2"><span class="pp">#define BLOCK </span><span class="dv">256</span></span>
+<span id="cb12-3"></span>
+<span id="cb12-4">__global__ <span class="dt">void</span> stencilTiled<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-5">    __shared__ <span class="dt">float</span> tile<span class="op">[</span>BLOCK <span class="op">+</span> <span class="dv">2</span> <span class="op">*</span> RADIUS<span class="op">];</span></span>
+<span id="cb12-6">    <span class="dt">int</span> gi <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb12-7">    <span class="dt">int</span> li <span class="op">=</span> threadIdx<span class="op">.</span>x <span class="op">+</span> RADIUS<span class="op">;</span></span>
+<span id="cb12-8"></span>
+<span id="cb12-9">    tile<span class="op">[</span>li<span class="op">]</span> <span class="op">=</span> <span class="op">(</span>gi <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">?</span> in<span class="op">[</span>gi<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb12-10">    <span class="cf">if</span> <span class="op">(</span>threadIdx<span class="op">.</span>x <span class="op">&lt;</span> RADIUS<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb12-11">        tile<span class="op">[</span>li <span class="op">-</span> RADIUS<span class="op">]</span> <span class="op">=</span></span>
+<span id="cb12-12">            <span class="op">(</span>gi <span class="op">&gt;=</span> RADIUS<span class="op">)</span> <span class="op">?</span> in<span class="op">[</span>gi <span class="op">-</span> RADIUS<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb12-13">        tile<span class="op">[</span>li <span class="op">+</span> BLOCK<span class="op">]</span> <span class="op">=</span></span>
+<span id="cb12-14">            <span class="op">(</span>gi <span class="op">+</span> BLOCK <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">?</span> in<span class="op">[</span>gi <span class="op">+</span> BLOCK<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb12-15">    <span class="op">}</span></span>
+<span id="cb12-16">    __syncthreads<span class="op">();</span></span>
+<span id="cb12-17"></span>
+<span id="cb12-18">    <span class="cf">if</span> <span class="op">(</span>gi <span class="op">&lt;</span> RADIUS <span class="op">||</span> gi <span class="op">&gt;=</span> n <span class="op">-</span> RADIUS<span class="op">)</span> <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb12-19">    <span class="dt">float</span> sum <span class="op">=</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb12-20">    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> off <span class="op">=</span> <span class="op">-</span>RADIUS<span class="op">;</span> off <span class="op">&lt;=</span> RADIUS<span class="op">;</span> off<span class="op">++)</span></span>
+<span id="cb12-21">        sum <span class="op">+=</span> tile<span class="op">[</span>li <span class="op">+</span> off<span class="op">];</span></span>
+<span id="cb12-22">    out<span class="op">[</span>gi<span class="op">]</span> <span class="op">=</span> sum <span class="op">/</span> <span class="op">(</span><span class="dv">2</span> <span class="op">*</span> RADIUS <span class="op">+</span> <span class="dv">1</span><span class="op">);</span></span>
+<span id="cb12-23"><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="hillis-steele-inclusive-scan-pattern" class="level3">
+<h3 class="anchored" data-anchor-id="hillis-steele-inclusive-scan-pattern">Hillis-Steele Inclusive Scan Pattern</h3>
+<div class="sourceCode" id="cb13"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb13-1"><span class="pp">#define N </span><span class="dv">1024</span><span class="pp">  </span><span class="co">// single block, one thread per element</span></span>
+<span id="cb13-2"></span>
+<span id="cb13-3">__global__ <span class="dt">void</span> inclusiveScan<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-4">    __shared__ <span class="dt">float</span> temp<span class="op">[</span>N<span class="op">];</span></span>
+<span id="cb13-5">    <span class="dt">int</span> tid <span class="op">=</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb13-6">    temp<span class="op">[</span>tid<span class="op">]</span> <span class="op">=</span> in<span class="op">[</span>tid<span class="op">];</span></span>
+<span id="cb13-7">    __syncthreads<span class="op">();</span></span>
+<span id="cb13-8"></span>
+<span id="cb13-9">    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> offset <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> offset <span class="op">&lt;</span> n<span class="op">;</span> offset <span class="op">*=</span> <span class="dv">2</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb13-10">        <span class="dt">float</span> val <span class="op">=</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb13-11">        <span class="cf">if</span> <span class="op">(</span>tid <span class="op">&gt;=</span> offset<span class="op">)</span> val <span class="op">=</span> temp<span class="op">[</span>tid <span class="op">-</span> offset<span class="op">];</span></span>
+<span id="cb13-12">        __syncthreads<span class="op">();</span></span>
+<span id="cb13-13">        temp<span class="op">[</span>tid<span class="op">]</span> <span class="op">+=</span> val<span class="op">;</span></span>
+<span id="cb13-14">        __syncthreads<span class="op">();</span></span>
+<span id="cb13-15">    <span class="op">}</span></span>
+<span id="cb13-16">    out<span class="op">[</span>tid<span class="op">]</span> <span class="op">=</span> temp<span class="op">[</span>tid<span class="op">];</span></span>
+<span id="cb13-17"><span class="op">}</span></span></code></pre></div>
+<p><strong>Note the double <code>__syncthreads()</code>:</strong> one after reading the neighbour value (ensuring every thread has read <em>before</em> anyone writes), one after writing (ensuring every thread’s write is visible before the next iteration reads). Dropping either introduces a race condition.</p>
+</section>
+<section id="stencil-tiling-triage" class="level3">
+<h3 class="anchored" data-anchor-id="stencil-tiling-triage">Stencil Tiling Triage</h3>
+<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1"><span class="kw">def</span> stencil_tiling_likely_helps(</span>
+<span id="cb14-2">    data_size_bytes,</span>
+<span id="cb14-3">    l2_cache_bytes,</span>
+<span id="cb14-4">    radius,</span>
+<span id="cb14-5">    is_coalesced_base_access,</span>
+<span id="cb14-6">):</span>
+<span id="cb14-7">    <span class="cf">if</span> data_size_bytes <span class="op">&lt;=</span> l2_cache_bytes:</span>
+<span id="cb14-8">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb14-9">    <span class="cf">if</span> is_coalesced_base_access <span class="kw">and</span> radius <span class="op">&lt;</span> <span class="dv">64</span>:</span>
+<span id="cb14-10">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb14-11">    <span class="co"># benchmark both versions on your actual hardware</span></span>
+<span id="cb14-12">    <span class="cf">return</span> <span class="va">None</span></span></code></pre></div>
+</section>
+<section id="common-imports-for-this-chapters-notebook-2" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports-for-this-chapters-notebook-2">Common Imports for This Chapter’s Notebook</h3>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><span class="im">import</span> subprocess, tempfile, os</span>
+<span id="cb15-2"><span class="im">import</span> torch</span></code></pre></div>
+<p>(This chapter’s tutorial uses raw <code>.cu</code> files compiled with <code>nvcc</code>, same pattern as Chapters 39-41.)</p>
+</section>
+</section>
+<section id="chapter-43-kernel-performance-tuning" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-43-kernel-performance-tuning">Chapter 43 — Kernel Performance Tuning</h2>
+<section id="key-terms-5" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-5">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Arithmetic intensity</strong></td>
+<td>FLOPs performed per byte of memory moved; the x-axis of the roofline model</td>
+</tr>
+<tr class="even">
+<td><strong>Roofline model</strong></td>
+<td>Performance ceiling as a function of arithmetic intensity: sloped (bandwidth-limited) at low intensity, flat (compute-limited) at high intensity</td>
+</tr>
+<tr class="odd">
+<td><strong>Memory-bound</strong></td>
+<td>Runtime set by memory bandwidth; extra arithmetic is nearly free until the “knee”</td>
+</tr>
+<tr class="even">
+<td><strong>Compute-bound</strong></td>
+<td>Runtime set by FLOPs throughput; more memory bandwidth wouldn’t help</td>
+</tr>
+<tr class="odd">
+<td><strong>Occupancy</strong></td>
+<td>Ratio of actually-resident warps on an SM to the hardware maximum it could support</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-rtx-5090-170-sms-1536-max-threadssm" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-rtx-5090-170-sms-1536-max-threadssm">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>: RTX 5090, 170 SMs, 1,536 max threads/SM)</h3>
+<p>Peak memory bandwidth achieved: ~1,986 GB/s. Peak compute achieved: ~118.6 TFLOP/s (FP32, CUDA cores). Ridge point: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>R</mi><mo>=</mo><mn>118,600</mn><mi mathvariant="normal">/</mi><mn>1,986</mn><mo>≈</mo><mn>60</mn></mrow><annotation encoding="application/x-tex">R = 118{,}600 / 1{,}986 \approx 60</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0077em;">R</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">118</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">600/1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">986</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">60</span></span></span></span> FLOPs/byte. This matches the measured knee between <code>REPEAT=64</code> (16 FLOPs/byte, memory-bound) and <code>REPEAT=256</code> (64 FLOPs/byte, past the knee).</p>
+<p>Occupancy sweep (200 FMAs/element kernel): block size 512 is the sweet spot band (3 max active blocks/SM, 48 resident warps/SM); block size 1,024 only fits 1 block/SM (32 resident warps) since <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>×</mo><mn>1,024</mn><mo>&gt;</mo><mn>1,536</mn></mrow><annotation encoding="application/x-tex">2 \times 1{,}024 &gt; 1{,}536</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">024</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&gt;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">536</span></span></span></span>.</p>
+<p>Achieved vs.&nbsp;theoretical occupancy (<code>ncu --section Occupancy</code>, same six block sizes): achieved is lower than theoretical at every block size, worst at block 64 (100% theoretical vs.&nbsp;44.00% achieved). Achieved occupancy tracks measured wall-clock ordering more closely than theoretical does, but not perfectly: block 512’s achieved occupancy (85.24%) is the highest of the six, yet block 128 (84.73% achieved) is still the fastest kernel measured.</p>
+</section>
+<section id="rough-roofline-triage" class="level3">
+<h3 class="anchored" data-anchor-id="rough-roofline-triage">Rough Roofline Triage</h3>
+<pre class="text"><code>I = total_FLOPs / total_bytes_moved
+R = peak_FLOPs / peak_bandwidth
+
+Is I &lt; R?
+├── Yes -&gt; memory-bound. Optimise: coalescing, reduce
+│          bytes moved, increase reuse (fuse operations),
+│          or accept it.
+└── No  -&gt; compute-bound. Optimise: reduce redundant
+           arithmetic, use Tensor Cores if matmul-shaped,
+           reduce precision.</code></pre>
+</section>
+<section id="querying-real-occupancy" class="level3">
+<h3 class="anchored" data-anchor-id="querying-real-occupancy">Querying Real Occupancy</h3>
+<div class="sourceCode" id="cb17"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb17-1"><span class="dt">int</span> maxActiveBlocks<span class="op">;</span></span>
+<span id="cb17-2">cudaOccupancyMaxActiveBlocksPerMultiprocessor<span class="op">(</span></span>
+<span id="cb17-3">    <span class="op">&amp;</span>maxActiveBlocks<span class="op">,</span></span>
+<span id="cb17-4">    kernelFunctionName<span class="op">,</span></span>
+<span id="cb17-5">    blockSize<span class="op">,</span></span>
+<span id="cb17-6">    dynamicSharedMemBytes</span>
+<span id="cb17-7"><span class="op">);</span></span>
+<span id="cb17-8"><span class="dt">int</span> warpsPerSM <span class="op">=</span> maxActiveBlocks <span class="op">*</span> <span class="op">(</span>blockSize <span class="op">/</span> <span class="dv">32</span><span class="op">);</span></span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb18-1"><span class="ex">nvcc</span> <span class="at">-arch</span><span class="op">=</span>sm_XX <span class="at">--ptxas-options</span><span class="op">=</span>-v yourfile.cu <span class="at">-o</span> yourfile</span>
+<span id="cb18-2"><span class="co"># Look for: "Used N registers" and any "bytes spill"</span></span></code></pre></div>
+</section>
+<section id="achieved-not-just-theoretical-occupancy" class="level3">
+<h3 class="anchored" data-anchor-id="achieved-not-just-theoretical-occupancy">Achieved (Not Just Theoretical) Occupancy</h3>
+<div class="sourceCode" id="cb19"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb19-1"><span class="ex">ncu</span> <span class="at">--section</span> Occupancy ./yourprogram</span>
+<span id="cb19-2"><span class="co"># Reports "Theoretical Occupancy" (resource-based prediction)</span></span>
+<span id="cb19-3"><span class="co"># AND "Achieved Occupancy" (measured from the real run) side by</span></span>
+<span id="cb19-4"><span class="co"># side. Needs elevated permissions: see Chapter 46.</span></span></code></pre></div>
+</section>
+</section>
+<section id="chapter-44-triton-for-kernel-authoring" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-44-triton-for-kernel-authoring">Chapter 44 — Triton for Kernel Authoring</h2>
+<section id="key-terms-6" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-6">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong><code>@triton.jit</code></strong></td>
+<td>Decorator marking a Python function as a Triton kernel, compiled at first call</td>
+</tr>
+<tr class="even">
+<td><strong>Program / <code>program_id</code></strong></td>
+<td>One instance of the kernel grid: analogous to a CUDA block, not a single thread</td>
+</tr>
+<tr class="odd">
+<td><strong><code>tl.constexpr</code></strong></td>
+<td>Marks a kernel parameter as compile-time constant (e.g.&nbsp;<code>BLOCK_SIZE</code>)</td>
+</tr>
+<tr class="even">
+<td><strong>Block-level programming</strong></td>
+<td>Triton’s core abstraction: operations act on a <code>BLOCK_SIZE</code>-sized chunk at once</td>
+</tr>
+<tr class="odd">
+<td><strong><code>@triton.autotune</code></strong></td>
+<td>Benchmarks a list of configs on first use per <code>key</code> and caches the fastest</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>)</h3>
+<p>Softmax (4096×4096): hand-written Triton kernel ~0.072 ms vs.&nbsp;<code>torch.softmax</code> ~0.075 ms. Triton ~0.97x (slightly faster), correctness within 7.45e-09 max abs error. Autotuned vector-add (67M elements) selected <code>BLOCK_SIZE=1024</code> in one run and <code>BLOCK_SIZE=2048</code> in another on identical hardware. For a memory-bound kernel, several mid-range configs perform within noise of each other.</p>
+</section>
+<section id="core-triton-api" class="level3">
+<h3 class="anchored" data-anchor-id="core-triton-api">Core Triton API</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Function</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>tl.program_id(axis)</code></td>
+<td>This program’s index along <code>axis</code>: analogous to <code>blockIdx</code></td>
+</tr>
+<tr class="even">
+<td><code>tl.arange(start, end)</code></td>
+<td>Block-sized index range; <code>end</code> must be compile-time constant</td>
+</tr>
+<tr class="odd">
+<td><code>tl.load(ptr, mask=, other=)</code></td>
+<td>Vectorised masked load</td>
+</tr>
+<tr class="even">
+<td><code>tl.store(ptr, value, mask=)</code></td>
+<td>Vectorised masked store</td>
+</tr>
+<tr class="odd">
+<td><code>tl.sum(x, axis=0)</code> / <code>tl.max(x, axis=0)</code></td>
+<td>Block-level reductions</td>
+</tr>
+<tr class="even">
+<td><code>triton.cdiv(a, b)</code></td>
+<td>Ceiling division: standard grid-size computation</td>
+</tr>
+<tr class="odd">
+<td><code>triton.next_power_of_2(n)</code></td>
+<td>Rounds up to next power of 2</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="minimal-kernel-template" class="level3">
+<h3 class="anchored" data-anchor-id="minimal-kernel-template">Minimal Kernel Template</h3>
+<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><span class="im">import</span> triton</span>
+<span id="cb20-2"><span class="im">import</span> triton.language <span class="im">as</span> tl</span>
+<span id="cb20-3"></span>
+<span id="cb20-4"><span class="at">@triton.jit</span></span>
+<span id="cb20-5"><span class="kw">def</span> my_kernel(x_ptr, out_ptr, n, BLOCK_SIZE: tl.constexpr):</span>
+<span id="cb20-6">    pid <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="cb20-7">    offs <span class="op">=</span> pid <span class="op">*</span> BLOCK_SIZE <span class="op">+</span> tl.arange(<span class="dv">0</span>, BLOCK_SIZE)</span>
+<span id="cb20-8">    mask <span class="op">=</span> offs <span class="op">&lt;</span> n</span>
+<span id="cb20-9">    x <span class="op">=</span> tl.load(x_ptr <span class="op">+</span> offs, mask<span class="op">=</span>mask)</span>
+<span id="cb20-10">    tl.store(out_ptr <span class="op">+</span> offs, x <span class="op">*</span> <span class="fl">2.0</span>, mask<span class="op">=</span>mask)</span>
+<span id="cb20-11"></span>
+<span id="cb20-12"><span class="kw">def</span> my_op(x):</span>
+<span id="cb20-13">    n <span class="op">=</span> x.numel()</span>
+<span id="cb20-14">    out <span class="op">=</span> torch.empty_like(x)</span>
+<span id="cb20-15">    grid <span class="op">=</span> (triton.cdiv(n, <span class="dv">1024</span>),)</span>
+<span id="cb20-16">    my_kernel[grid](x, out, n, BLOCK_SIZE<span class="op">=</span><span class="dv">1024</span>)</span>
+<span id="cb20-17">    <span class="cf">return</span> out</span></code></pre></div>
+</section>
+<section id="autotuning-template" class="level3">
+<h3 class="anchored" data-anchor-id="autotuning-template">Autotuning Template</h3>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><span class="at">@triton.autotune</span>(</span>
+<span id="cb21-2">    configs<span class="op">=</span>[</span>
+<span id="cb21-3">        triton.Config({<span class="st">'BLOCK_SIZE'</span>: <span class="dv">1024</span>}, num_warps<span class="op">=</span><span class="dv">4</span>), ...</span>
+<span id="cb21-4">    ],</span>
+<span id="cb21-5">    key<span class="op">=</span>[<span class="st">'n_elements'</span>],</span>
+<span id="cb21-6">)</span>
+<span id="cb21-7"><span class="at">@triton.jit</span></span>
+<span id="cb21-8"><span class="kw">def</span> my_autotuned_kernel(</span>
+<span id="cb21-9">    x_ptr,</span>
+<span id="cb21-10">    out_ptr,</span>
+<span id="cb21-11">    n_elements,</span>
+<span id="cb21-12">    BLOCK_SIZE: tl.constexpr,</span>
+<span id="cb21-13">):</span>
+<span id="cb21-14">    ...</span></code></pre></div>
+</section>
+</section>
+<section id="chapter-45-custom-pytorch-cuda-extensions" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-45-custom-pytorch-cuda-extensions">Chapter 45 — Custom PyTorch CUDA Extensions</h2>
+<section id="key-terms-7" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-7">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong><code>torch.utils.cpp_extension.load_inline</code></strong></td>
+<td>Compiles CUDA/C++ source strings just-in-time and returns a Python module exposing the compiled functions</td>
+</tr>
+<tr class="even">
+<td><strong><code>torch.autograd.Function</code></strong></td>
+<td>Base class for defining a custom differentiable operation with explicit <code>forward</code>/<code>backward</code></td>
+</tr>
+<tr class="odd">
+<td><strong><code>ctx</code> (context object)</strong></td>
+<td>Carries state from <code>forward</code> to <code>backward</code>: used via <code>ctx.save_for_backward(...)</code> and <code>ctx.saved_tensors</code></td>
+</tr>
+<tr class="even">
+<td><strong>Kernel fusion</strong></td>
+<td>Combining multiple operations into one kernel launch, eliminating intermediate memory round-trips</td>
+</tr>
+<tr class="odd">
+<td><strong>JIT compilation (extensions)</strong></td>
+<td>Compiling against the system’s actual installed toolchain at runtime, not a toolchain PyTorch ships or controls</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-this-books-reference-rig-3" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-this-books-reference-rig-3">Measured Results (This Book’s Reference Rig)</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Check</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Extension compile time (first run)</td>
+<td>32.1 s</td>
+</tr>
+<tr class="even">
+<td>Forward correctness vs.&nbsp;<code>torch.relu(x) ** 2</code></td>
+<td>Exact match (0.0 max abs error)</td>
+</tr>
+<tr class="odd">
+<td>Gradient correctness vs.&nbsp;native autograd</td>
+<td>Exact match (0.0 max abs error)</td>
+</tr>
+<tr class="even">
+<td>Custom fused kernel time (16,777,216 elements)</td>
+<td>0.0731 ms</td>
+</tr>
+<tr class="odd">
+<td>Native <code>torch.relu(x) ** 2</code> time (two kernel launches)</td>
+<td>0.1386 ms</td>
+</tr>
+<tr class="even">
+<td>Speedup from fusion</td>
+<td>1.89x</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="minimal-load_inline-extension-template" class="level3">
+<h3 class="anchored" data-anchor-id="minimal-load_inline-extension-template">Minimal <code>load_inline</code> Extension Template</h3>
+<div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><span class="im">import</span> torch</span>
+<span id="cb22-2"><span class="im">from</span> torch.utils.cpp_extension <span class="im">import</span> load_inline</span>
+<span id="cb22-3"></span>
+<span id="cb22-4">cuda_source <span class="op">=</span> <span class="vs">r"""</span></span>
+<span id="cb22-5"><span class="co">#include &lt;torch/extension.h&gt;</span></span>
+<span id="cb22-6"><span class="co">#include &lt;cuda_runtime.h&gt;</span></span>
+<span id="cb22-7"></span>
+<span id="cb22-8"><span class="vs">__global__ void my_kernel</span><span class="kw">(</span><span class="vs">const float</span><span class="op">*</span><span class="vs"> x, float</span><span class="op">*</span><span class="vs"> out, int n</span><span class="kw">)</span><span class="vs"> {</span></span>
+<span id="cb22-9"><span class="vs">    int i = blockIdx</span><span class="dv">.</span><span class="vs">x </span><span class="op">*</span><span class="vs"> blockDim</span><span class="dv">.</span><span class="vs">x </span><span class="op">+</span><span class="vs"> threadIdx</span><span class="dv">.</span><span class="vs">x;</span></span>
+<span id="cb22-10"><span class="vs">    if </span><span class="kw">(</span><span class="vs">i &lt; n</span><span class="kw">)</span><span class="vs"> out</span><span class="pp">[i]</span><span class="vs"> = /</span><span class="op">*</span><span class="vs"> your op </span><span class="op">*</span><span class="vs">/;</span></span>
+<span id="cb22-11"><span class="vs">}</span></span>
+<span id="cb22-12"></span>
+<span id="cb22-13"><span class="vs">torch::Tensor my_op</span><span class="kw">(</span><span class="vs">torch::Tensor x</span><span class="kw">)</span><span class="vs"> {</span></span>
+<span id="cb22-14"><span class="vs">    auto out = torch::empty_like</span><span class="kw">(</span><span class="vs">x</span><span class="kw">)</span><span class="vs">;</span></span>
+<span id="cb22-15"><span class="vs">    int n = x</span><span class="dv">.</span><span class="vs">numel</span><span class="kw">()</span><span class="vs">;</span></span>
+<span id="cb22-16"><span class="vs">    int block = 256, grid = </span><span class="kw">(</span><span class="vs">n </span><span class="op">+</span><span class="vs"> block - 1</span><span class="kw">)</span><span class="vs"> / block;</span></span>
+<span id="cb22-17"><span class="vs">    my_kernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;</span><span class="kw">(</span></span>
+<span id="cb22-18"><span class="vs">        x</span><span class="dv">.</span><span class="vs">data_ptr&lt;float&gt;</span><span class="kw">()</span><span class="vs">, out</span><span class="dv">.</span><span class="vs">data_ptr&lt;float&gt;</span><span class="kw">()</span><span class="vs">, n</span></span>
+<span id="cb22-19"><span class="vs">    </span><span class="kw">)</span><span class="vs">;</span></span>
+<span id="cb22-20"><span class="vs">    return out;</span></span>
+<span id="cb22-21"><span class="vs">}</span></span>
+<span id="cb22-22"><span class="vs">"""</span></span>
+<span id="cb22-23"></span>
+<span id="cb22-24">cpp_source <span class="op">=</span> <span class="st">"torch::Tensor my_op(torch::Tensor x);"</span></span>
+<span id="cb22-25"></span>
+<span id="cb22-26">ext <span class="op">=</span> load_inline(</span>
+<span id="cb22-27">    name<span class="op">=</span><span class="st">"my_ext"</span>,</span>
+<span id="cb22-28">    cpp_sources<span class="op">=</span>cpp_source,</span>
+<span id="cb22-29">    cuda_sources<span class="op">=</span>cuda_source,</span>
+<span id="cb22-30">    functions<span class="op">=</span>[<span class="st">"my_op"</span>],</span>
+<span id="cb22-31">    verbose<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb22-32">)</span></code></pre></div>
+</section>
+<section id="wiring-a-kernel-pair-into-autograd" class="level3">
+<h3 class="anchored" data-anchor-id="wiring-a-kernel-pair-into-autograd">Wiring a Kernel Pair Into Autograd</h3>
+<div class="sourceCode" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><span class="kw">class</span> MyOp(torch.autograd.Function):</span>
+<span id="cb23-2">    <span class="at">@staticmethod</span></span>
+<span id="cb23-3">    <span class="kw">def</span> forward(ctx, x):</span>
+<span id="cb23-4">        ctx.save_for_backward(x)</span>
+<span id="cb23-5">        <span class="cf">return</span> ext.my_op_fwd(x)</span>
+<span id="cb23-6"></span>
+<span id="cb23-7">    <span class="at">@staticmethod</span></span>
+<span id="cb23-8">    <span class="kw">def</span> backward(ctx, grad_output):</span>
+<span id="cb23-9">        x, <span class="op">=</span> ctx.saved_tensors</span>
+<span id="cb23-10">        <span class="cf">return</span> ext.my_op_bwd(grad_output.contiguous(), x)</span>
+<span id="cb23-11"></span>
+<span id="cb23-12"><span class="kw">def</span> my_op(x):</span>
+<span id="cb23-13">    <span class="cf">return</span> MyOp.<span class="bu">apply</span>(x)</span></code></pre></div>
+<p><code>backward</code> must return one gradient per <code>forward</code> input. <code>grad_output.contiguous()</code> guards against non-contiguous gradient tensors, which raw pointer access (<code>.data_ptr&lt;float&gt;()</code>) requires.</p>
+</section>
+<section id="squared-relu-kernel-pair-full" class="level3">
+<h3 class="anchored" data-anchor-id="squared-relu-kernel-pair-full">Squared ReLU Kernel Pair (Full)</h3>
+<div class="sourceCode" id="cb24"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb24-1">__global__ <span class="dt">void</span> squared_relu_fwd_kernel<span class="op">(</span></span>
+<span id="cb24-2">    <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> x<span class="op">,</span></span>
+<span id="cb24-3">    <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span></span>
+<span id="cb24-4">    <span class="dt">int</span> n</span>
+<span id="cb24-5"><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-6">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb24-7">    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-8">        <span class="dt">float</span> v <span class="op">=</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">&gt;</span> <span class="fl">0.0</span><span class="bu">f</span> <span class="op">?</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb24-9">        out<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> v <span class="op">*</span> v<span class="op">;</span></span>
+<span id="cb24-10">    <span class="op">}</span></span>
+<span id="cb24-11"><span class="op">}</span></span>
+<span id="cb24-12"></span>
+<span id="cb24-13">__global__ <span class="dt">void</span> squared_relu_bwd_kernel<span class="op">(</span></span>
+<span id="cb24-14">    <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> grad_out<span class="op">,</span></span>
+<span id="cb24-15">    <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> x<span class="op">,</span></span>
+<span id="cb24-16">    <span class="dt">float</span><span class="op">*</span> grad_in<span class="op">,</span></span>
+<span id="cb24-17">    <span class="dt">int</span> n</span>
+<span id="cb24-18"><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-19">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb24-20">    <span class="cf">if</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb24-21">        <span class="dt">float</span> v <span class="op">=</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">&gt;</span> <span class="fl">0.0</span><span class="bu">f</span> <span class="op">?</span> x<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb24-22">        <span class="co">// d/dx[relu(x)^2] = 2*relu(x)</span></span>
+<span id="cb24-23">        grad_in<span class="op">[</span>i<span class="op">]</span> <span class="op">=</span> grad_out<span class="op">[</span>i<span class="op">]</span> <span class="op">*</span> <span class="fl">2.0</span><span class="bu">f</span> <span class="op">*</span> v<span class="op">;</span></span>
+<span id="cb24-24">    <span class="op">}</span></span>
+<span id="cb24-25"><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="troubleshooting" class="level3">
+<h3 class="anchored" data-anchor-id="troubleshooting">Troubleshooting</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>RuntimeError: CUDA error: an illegal memory access was encountered</code></td>
+<td>Kernel launched with wrong <code>n</code>, or tensor not actually on GPU</td>
+<td>Add <code>assert x.is_cuda</code>; double-check bounds math</td>
+</tr>
+<tr class="even">
+<td>Gradient is <code>None</code> after <code>.backward()</code></td>
+<td>Called <code>.forward()</code> directly instead of <code>.apply()</code></td>
+<td>Always use <code>MyOp.apply(x)</code></td>
+</tr>
+<tr class="odd">
+<td>Compile succeeds but result is silently wrong</td>
+<td>Non-contiguous or wrong-dtype tensor passed to <code>.data_ptr&lt;float&gt;()</code></td>
+<td>Validate <code>x.is_contiguous()</code> and <code>x.dtype == torch.float32</code> before calling the kernel</td>
+</tr>
+<tr class="even">
+<td>Compile error deep inside a PyTorch header</td>
+<td>Toolchain (GCC/CUDA) version mismatch with what PyTorch’s headers expect</td>
+<td>Check for a newer PyTorch release first; patch the venv’s header copy only as a last resort</td>
+</tr>
+<tr class="odd">
+<td>First compile takes 30+ seconds every time, even for tiny changes</td>
+<td><code>load_inline</code>’s cache key didn’t change, or cache was cleared</td>
+<td>Keep the <code>name=</code> argument stable across runs so the compiled <code>.so</code> is reused from <code>~/.cache/torch_extensions</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="aws-sagemaker-quick-reference" class="level3">
+<h3 class="anchored" data-anchor-id="aws-sagemaker-quick-reference">AWS SageMaker Quick Reference</h3>
+<p><em>No AWS-specific material for this chapter. Custom CUDA extension compilation is identical whether run locally or on a SageMaker GPU instance.</em></p>
+</section>
+</section>
+<section id="chapter-46-profiling-debugging-kernels" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-46-profiling-debugging-kernels">Chapter 46 — Profiling &amp; Debugging Kernels</h2>
+<section id="key-terms-8" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-8">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong><code>nvidia-smi</code></strong></td>
+<td>Free, scriptable, zero-instrumentation GPU utilisation glance; ships with every CUDA install; answers “is the GPU doing anything right now,” not why</td>
+</tr>
+<tr class="even">
+<td><strong>Nsight Systems (<code>nsys</code>)</strong></td>
+<td>System-wide timeline profiler: CPU/GPU activity, kernel/memcpy summaries, no elevated permissions needed</td>
+</tr>
+<tr class="odd">
+<td><strong>Nsight Compute (<code>ncu</code>)</strong></td>
+<td>Deep per-kernel hardware-counter profiler: occupancy, memory throughput, stall reasons; needs elevated permissions for full metrics</td>
+</tr>
+<tr class="even">
+<td><strong><code>compute-sanitizer</code></strong></td>
+<td>Runtime correctness checker: out-of-bounds access, races, uninitialised reads, bad sync</td>
+</tr>
+<tr class="odd">
+<td><strong><code>ERR_NVGPUCTRPERM</code></strong></td>
+<td>The error a non-privileged user hits collecting Nsight Compute hardware counters under default driver security policy</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-1" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-1">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>)</h3>
+<p>Three-kernel pipeline (vecAdd → sigmoid → tree reduction): <code>sumTreeReduction</code> dominates at 56.2% of total time despite looking like the “simplest” kernel. <code>compute-sanitizer --tool memcheck</code> caught an off-by-one (<code>i &lt;= n</code>) bug that <code>cudaGetLastError()</code> reported as “no error”: silent corruption, not a crash. <code>nvidia-smi</code> polled every 0.5s across a deliberately GPU-bound kernel showed a clean idle→100%→idle signature: 4% before, 100% throughout, 1% after.</p>
+</section>
+<section id="nvidia-smi-command" class="level3">
+<h3 class="anchored" data-anchor-id="nvidia-smi-command"><code>nvidia-smi</code> Command</h3>
+<div class="sourceCode" id="cb25"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb25-1"><span class="ex">nvidia-smi</span> <span class="at">--query-gpu</span><span class="op">=</span>utilization.gpu,memory.used <span class="at">--format</span><span class="op">=</span>csv,noheader</span></code></pre></div>
+</section>
+<section id="nsys-commands" class="level3">
+<h3 class="anchored" data-anchor-id="nsys-commands"><code>nsys</code> Commands</h3>
+<div class="sourceCode" id="cb26"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb26-1"><span class="ex">nsys</span> profile <span class="at">-o</span> my_profile <span class="at">--force-overwrite</span><span class="op">=</span>true ./my_program</span>
+<span id="cb26-2"><span class="ex">nsys</span> stats <span class="at">--report</span> cuda_gpu_kern_sum my_profile.nsys-rep</span>
+<span id="cb26-3"><span class="ex">nsys</span> stats <span class="at">--report</span> cuda_gpu_mem_time_sum my_profile.nsys-rep</span>
+<span id="cb26-4"><span class="ex">nsys</span> stats <span class="at">--report</span> cuda_api_sum my_profile.nsys-rep</span></code></pre></div>
+</section>
+<section id="ncu-commands" class="level3">
+<h3 class="anchored" data-anchor-id="ncu-commands"><code>ncu</code> Commands</h3>
+<div class="sourceCode" id="cb27"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb27-1"><span class="fu">sudo</span> ncu <span class="at">--set</span> full <span class="at">-o</span> my_kernel_profile ./my_program</span>
+<span id="cb27-2"><span class="fu">sudo</span> ncu <span class="at">--set</span> basic ./my_program</span>
+<span id="cb27-3"><span class="fu">sudo</span> ncu <span class="at">--kernel-name</span> mySpecificKernel ./my_program</span></code></pre></div>
+</section>
+<section id="compute-sanitizer-commands" class="level3">
+<h3 class="anchored" data-anchor-id="compute-sanitizer-commands"><code>compute-sanitizer</code> Commands</h3>
+<div class="sourceCode" id="cb28"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb28-1"><span class="co"># out-of-bounds / illegal access</span></span>
+<span id="cb28-2"><span class="ex">compute-sanitizer</span> <span class="at">--tool</span> memcheck ./my_program</span>
+<span id="cb28-3"><span class="co"># shared-memory races</span></span>
+<span id="cb28-4"><span class="ex">compute-sanitizer</span> <span class="at">--tool</span> racecheck ./my_program</span>
+<span id="cb28-5"><span class="co"># uninitialised device memory</span></span>
+<span id="cb28-6"><span class="ex">compute-sanitizer</span> <span class="at">--tool</span> initcheck ./my_program</span>
+<span id="cb28-7"><span class="co"># invalid __syncthreads() usage</span></span>
+<span id="cb28-8"><span class="ex">compute-sanitizer</span> <span class="at">--tool</span> synccheck ./my_program</span></code></pre></div>
+</section>
+<section id="diagnostic-decision-guide" class="level3">
+<h3 class="anchored" data-anchor-id="diagnostic-decision-guide">Diagnostic Decision Guide</h3>
+<pre class="text"><code>Program looks stuck or behaviour is unclear?
+├── Yes -&gt; nvidia-smi glance FIRST (free, zero code changes)
+└── No / already confirmed the GPU is busy
+    Wrong/inconsistent output, or unpredictable crash?
+    ├── Yes -&gt; compute-sanitizer FIRST
+    └── No, just slower than expected
+        ├── Multiple kernels? -&gt; nsys first
+        └── Already know which kernel is slow? -&gt; ncu</code></pre>
+</section>
+</section>
+<section id="chapter-47-capstone-a-fused-kernel" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-47-capstone-a-fused-kernel">Chapter 47 — Capstone: A Fused Kernel</h2>
+<section id="layernorm-formula" class="level3">
+<h3 class="anchored" data-anchor-id="layernorm-formula">LayerNorm Formula</h3>
+<pre class="text"><code>y = (x - mean(x)) / sqrt(var(x) + eps) * weight + bias</code></pre>
+</section>
+<section id="measured-results-reference-rig-20484096-input" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-20484096-input">Measured Results (Reference Rig, 2048×4096 input)</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Implementation</th>
+<th>Kernel launches</th>
+<th>Time</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Naive PyTorch decomposition</td>
+<td>7</td>
+<td>~0.118 ms</td>
+</tr>
+<tr class="even">
+<td>Native <code>F.layer_norm</code></td>
+<td>1</td>
+<td>~0.021 ms</td>
+</tr>
+<tr class="odd">
+<td>Capstone Triton kernel</td>
+<td>1</td>
+<td>~0.016 ms</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="fusion-decision-heuristic" class="level3">
+<h3 class="anchored" data-anchor-id="fusion-decision-heuristic">Fusion Decision Heuristic</h3>
+<div class="sourceCode" id="cb31"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb31-1"><span class="kw">def</span> is_good_fusion_candidate(operations_in_sequence):</span>
+<span id="cb31-2">    all_memory_bound <span class="op">=</span> <span class="bu">all</span>(</span>
+<span id="cb31-3">        op[<span class="st">'arithmetic_intensity'</span>] <span class="op">&lt;</span> op[<span class="st">'gpu_ridge_point'</span>]</span>
+<span id="cb31-4">        <span class="cf">for</span> op <span class="kw">in</span> operations_in_sequence</span>
+<span id="cb31-5">    )</span>
+<span id="cb31-6">    shares_data <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb31-7">    enough_ops <span class="op">=</span> <span class="bu">len</span>(operations_in_sequence) <span class="op">&gt;=</span> <span class="dv">2</span></span>
+<span id="cb31-8">    <span class="cf">if</span> all_memory_bound <span class="kw">and</span> shares_data <span class="kw">and</span> enough_ops:</span>
+<span id="cb31-9">        <span class="cf">return</span> <span class="st">'Good candidate'</span></span>
+<span id="cb31-10">    <span class="cf">if</span> <span class="kw">not</span> all_memory_bound:</span>
+<span id="cb31-11">        <span class="cf">return</span> <span class="st">'Check first: compute-bound ops may not benefit'</span></span>
+<span id="cb31-12">    <span class="cf">return</span> <span class="st">'Marginal: measure both versions'</span></span></code></pre></div>
+</section>
+<section id="verification-checklist" class="level3">
+<h3 class="anchored" data-anchor-id="verification-checklist">Verification Checklist</h3>
+<ol type="1">
+<li>Correctness against a reference implementation (float32 tolerance, ~1e-6)</li>
+<li>Kernel launch count via <code>torch.profiler</code> (expect exactly 1 for a fused kernel)</li>
+<li>Speed vs.&nbsp;BOTH the naive decomposition AND the vendor-optimised baseline</li>
+</ol>
+</section>
+<section id="troubleshooting-1" class="level3">
+<h3 class="anchored" data-anchor-id="troubleshooting-1">Troubleshooting</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Correctness check fails</td>
+<td>Numerical formula difference (e.g.&nbsp;single- vs.&nbsp;two-pass variance)</td>
+<td>Match the reference implementation’s exact formula</td>
+</tr>
+<tr class="even">
+<td>Fused kernel slower than naive</td>
+<td>Operations were compute-bound, or fusion didn’t reduce memory traffic</td>
+<td>Re-classify with the roofline model first</td>
+</tr>
+<tr class="odd">
+<td><code>torch.profiler</code> shows more kernels than expected</td>
+<td>Hidden PyTorch fallback op inside the “fused” wrapper</td>
+<td>Check every line of the wrapper for calls outside the kernel launch</td>
+</tr>
+<tr class="even">
+<td>Works for test shape, fails on others</td>
+<td>Hardcoded <code>BLOCK_SIZE</code> for one specific <code>n_cols</code></td>
+<td>Use <code>triton.next_power_of_2(n_cols)</code> and mask properly</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-48-the-performance-engineering-mindset" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-48-the-performance-engineering-mindset">Chapter 48 — The Performance Engineering Mindset</h2>
+<section id="key-terms-9" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-9">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Warm-up</strong></td>
+<td>Discarding the first N measurements of a repeated benchmark (one-time setup costs)</td>
+</tr>
+<tr class="even">
+<td><strong>Amdahl’s Law</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>Speedup</mtext><mo stretchy="false">(</mo><mi>N</mi><mo stretchy="false">)</mo><mo>=</mo><mn>1</mn><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mi>s</mi><mo>+</mo><mi>p</mi><mi mathvariant="normal">/</mi><mi>N</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{Speedup}(N) = 1 / (s + p/N)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">Speedup</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1/</span><span class="mopen">(</span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">p</span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mclose">)</span></span></span></span> where <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi></mrow><annotation encoding="application/x-tex">s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span></span></span></span> = serial fraction, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>=</mo><mn>1</mn><mo>−</mo><mi>s</mi></mrow><annotation encoding="application/x-tex">p = 1-s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span> = worker count</td>
+</tr>
+<tr class="odd">
+<td><strong>Serial fraction (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi></mrow><annotation encoding="application/x-tex">s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span></span></span></span>)</strong></td>
+<td>The portion of total work that cannot be parallelised regardless of hardware</td>
+</tr>
+<tr class="even">
+<td><strong>Parallelisation overhead</strong></td>
+<td>Real costs (process spawn, IPC, contention) Amdahl’s Law doesn’t model</td>
+</tr>
+<tr class="odd">
+<td><strong>Robust statistic</strong></td>
+<td>A summary (median, minimum) resistant to outlier measurements</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>: AMD Ryzen 9 5950X, 16C/32T)</h3>
+<p>Single naive measurement: 14.2 ms. Repeated (200x) minimum: 1.14 ms, median: 1.19 ms. The single measurement was ~12x the steady-state cost (NumPy/BLAS first-call initialisation).</p>
+<p>Amdahl’s Law, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>≈</mo><mn>0.127</mn></mrow><annotation encoding="application/x-tex">s \approx 0.127</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.127</span></span></span></span>: predicted vs.&nbsp;measured speedup tracks closely through 8 workers (4.23x predicted vs.&nbsp;4.09x measured), then diverges sharply past the physical core count (16 workers: 5.50x predicted vs.&nbsp;4.60x measured; 32: 6.46x predicted vs.&nbsp;4.74x measured). Real overhead Amdahl’s idealised formula doesn’t capture.</p>
+</section>
+<section id="correct-benchmarking-pattern" class="level3">
+<h3 class="anchored" data-anchor-id="correct-benchmarking-pattern">Correct Benchmarking Pattern</h3>
+<div class="sourceCode" id="cb32"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb32-1"><span class="im">import</span> timeit</span>
+<span id="cb32-2"></span>
+<span id="cb32-3"><span class="kw">def</span> warm_up_and_time(fn, warmup<span class="op">=</span><span class="dv">5</span>, repeat<span class="op">=</span><span class="dv">100</span>):</span>
+<span id="cb32-4">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(warmup):</span>
+<span id="cb32-5">        fn()</span>
+<span id="cb32-6">    times <span class="op">=</span> timeit.repeat(fn, number<span class="op">=</span><span class="dv">1</span>, repeat<span class="op">=</span>repeat)</span>
+<span id="cb32-7">    times.sort()</span>
+<span id="cb32-8">    <span class="cf">return</span> {<span class="st">'min'</span>: times[<span class="dv">0</span>], <span class="st">'median'</span>: times[<span class="bu">len</span>(times)<span class="op">//</span><span class="dv">2</span>],</span>
+<span id="cb32-9">            <span class="st">'mean'</span>: <span class="bu">sum</span>(times)<span class="op">/</span><span class="bu">len</span>(times), <span class="st">'max'</span>: times[<span class="op">-</span><span class="dv">1</span>]}</span></code></pre></div>
+</section>
+<section id="amdahls-law-formula-reference" class="level3">
+<h3 class="anchored" data-anchor-id="amdahls-law-formula-reference">Amdahl’s Law Formula Reference</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Quantity</th>
+<th>Formula</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Speedup with N workers</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mi>s</mi><mo>+</mo><mi>p</mi><mi mathvariant="normal">/</mi><mi>N</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">1/(s+p/N)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1/</span><span class="mopen">(</span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">p</span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mclose">)</span></span></span></span></td>
+</tr>
+<tr class="even">
+<td>Maximum possible speedup (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>→</mo><mi mathvariant="normal">∞</mi></mrow><annotation encoding="application/x-tex">N \to \infty</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span>)</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi mathvariant="normal">/</mi><mi>s</mi></mrow><annotation encoding="application/x-tex">1/s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1/</span><span class="mord mathnormal">s</span></span></span></span></td>
+</tr>
+<tr class="odd">
+<td>Estimating <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi></mrow><annotation encoding="application/x-tex">s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span></span></span></span> from fixed serial cost</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>=</mo><mtext>fixed_serial_time</mtext><mi mathvariant="normal">/</mi><mtext>total_1_worker_time</mtext></mrow><annotation encoding="application/x-tex">s = \text{fixed\_serial\_time} / \text{total\_1\_worker\_time}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.06em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">fixed_serial_time</span></span><span class="mord">/</span><span class="mord text"><span class="mord">total_1_worker_time</span></span></span></span></span></td>
+</tr>
+<tr class="even">
+<td>Estimating <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi></mrow><annotation encoding="application/x-tex">s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span></span></span></span> from measured speedup at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>=</mo><mo stretchy="false">(</mo><mi>N</mi><mi mathvariant="normal">/</mi><mtext>measured_speedup</mtext><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mi>N</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">s = (N/\text{measured\_speedup} - 1)/(N-1)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.06em;vertical-align:-0.31em;"></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord">/</span><span class="mord text"><span class="mord">measured_speedup</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mclose">)</span><span class="mord">/</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mclose">)</span></span></span></span></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-49-cpu-architecture-for-performance" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-49-cpu-architecture-for-performance">Chapter 49 — CPU Architecture for Performance</h2>
+<section id="key-terms-10" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-10">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Cache line</strong></td>
+<td>The unit of data (64 bytes on x86-64) fetched into cache on any access</td>
+</tr>
+<tr class="even">
+<td><strong>Cache miss</strong></td>
+<td>A memory access not found in the requested cache level, forcing a fetch from a slower level</td>
+</tr>
+<tr class="odd">
+<td><strong>Pointer chase</strong></td>
+<td>A benchmark pattern where each access depends on the value just read, defeating prefetching</td>
+</tr>
+<tr class="even">
+<td><strong>Branch prediction</strong></td>
+<td>The CPU’s speculative guess about which instruction path to execute before a conditional resolves</td>
+</tr>
+<tr class="odd">
+<td><strong>Loop-carried dependency</strong></td>
+<td>A dependency where iteration N+1 needs iteration N’s result, blocking concurrent execution</td>
+</tr>
+<tr class="even">
+<td><strong>Instruction-level parallelism (ILP)</strong></td>
+<td>A core’s ability to execute multiple independent instructions per cycle</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t-32kb-l1d-512kb-l2-32mb-l3ccd" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t-32kb-l1d-512kb-l2-32mb-l3ccd">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>: AMD Ryzen 9 5950X, 16C/32T, 32KB L1d, 512KB L2, 32MB L3/CCD)</h3>
+<p>Cache hierarchy latency (pointer chase): L1d ~1.4ns/access, L2 ~2.1-2.9ns, L3 ~4.9-14.0ns, DRAM ~35-83ns.</p>
+<p>Branch prediction (sorted vs.&nbsp;unsorted): Numba <code>@njit</code> (auto-vectorised) shows no real difference (4.98ms vs.&nbsp;4.80ms); pure CPython shows ~25% slowdown unsorted (12.81ms vs.&nbsp;16.04ms, branch-misses roughly double).</p>
+<p>ILP (single vs.&nbsp;four dependency chains): 3.74x-3.84x speedup in L2/L3-resident working sets, narrowing to 2.30x once DRAM-resident (400MB).</p>
+</section>
+<section id="perf-stat-event-cheat-sheet" class="level3">
+<h3 class="anchored" data-anchor-id="perf-stat-event-cheat-sheet"><code>perf stat</code> Event Cheat Sheet</h3>
+<div class="sourceCode" id="cb33"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb33-1"><span class="ex">perf</span> stat <span class="at">-e</span> cache-misses,cache-references <span class="at">--</span> <span class="op">&lt;</span>cmd<span class="op">&gt;</span></span>
+<span id="cb33-2"><span class="ex">perf</span> stat <span class="at">-e</span> branches,branch-misses,cycles,instructions <span class="at">--</span> <span class="op">&lt;</span>cmd<span class="op">&gt;</span></span>
+<span id="cb33-3"><span class="fu">cat</span> /proc/sys/kernel/perf_event_paranoid</span></code></pre></div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Event</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>cache-misses</code> / <code>cache-references</code></td>
+<td>Last-level cache miss rate</td>
+</tr>
+<tr class="even">
+<td><code>branches</code> / <code>branch-misses</code></td>
+<td>Branch count and misprediction count</td>
+</tr>
+<tr class="odd">
+<td><code>cycles</code> / <code>instructions</code></td>
+<td>IPC = instructions/cycles</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="memory-hierarchy-sizes" class="level3">
+<h3 class="anchored" data-anchor-id="memory-hierarchy-sizes">Memory Hierarchy Sizes</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Level</th>
+<th>Size</th>
+<th>Illustrative latency</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>L1d (per core)</td>
+<td>32 KiB</td>
+<td>~4 cycles (~1ns)</td>
+</tr>
+<tr class="even">
+<td>L2 (per core)</td>
+<td>512 KiB</td>
+<td>~12 cycles (~3ns)</td>
+</tr>
+<tr class="odd">
+<td>L3 (per CCD, 2 CCDs)</td>
+<td>32 MiB (64 MiB total)</td>
+<td>~35-40 cycles (~10ns)</td>
+</tr>
+<tr class="even">
+<td>DRAM</td>
+<td>System RAM</td>
+<td>~200+ cycles (~60-100ns)</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-50-profiling-cpu-code" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-50-profiling-cpu-code">Chapter 50 — Profiling CPU Code</h2>
+<section id="key-terms-11" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-11">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Deterministic profiling</strong></td>
+<td>Instrumenting every function call to record exact counts/timings (<code>cProfile</code>)</td>
+</tr>
+<tr class="even">
+<td><strong>Sampling/statistical profiling</strong></td>
+<td>Periodically recording the call stack at a fixed rate (<code>py-spy</code>)</td>
+</tr>
+<tr class="odd">
+<td><strong><code>tottime</code></strong></td>
+<td>Time spent in a function itself, excluding time in functions it called</td>
+</tr>
+<tr class="even">
+<td><strong><code>cumtime</code></strong></td>
+<td><code>tottime</code> plus time spent in all called functions</td>
+</tr>
+<tr class="odd">
+<td><strong><code>ptrace_scope</code></strong></td>
+<td>A Linux <code>yama</code> security setting controlling cross-process memory inspection via <code>ptrace</code></td>
+</tr>
+<tr class="even">
+<td><strong>Flame graph</strong></td>
+<td>Visualisation of sampled call stacks, width proportional to sample count</td>
+</tr>
+<tr class="odd">
+<td><strong><code>bpftrace</code></strong></td>
+<td>eBPF-based kernel-level tracer: attaches to syscall tracepoints, scheduler events, and more, below Python and native-instruction level alike</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-2" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-2">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>)</h3>
+<p><code>parse_records</code> (40,000 dict allocations) vs.&nbsp;<code>dedupe_slow</code> (O(n²) list membership check): <code>cProfile</code> attributes 97.9% of tottime (0.700s of 0.715s) to <code>dedupe_slow</code>; <code>py-spy</code> independently finds 226/227 samples (~99.6%) on the same line. <code>bpftrace</code>, tracing <code>read</code>/<code>write</code>/<code>openat</code>/<code>mmap</code>/<code>munmap</code>/<code>futex</code>/<code>brk</code>/<code>mprotect</code> for the same program’s PID, recorded zero counts for all eight: a third, independent technique confirming the same conclusion from below the interpreter, that the cost is 100% in-process compute with nothing for the kernel to do. Three different measurement techniques agreeing is strong confirmation, not coincidence.</p>
+</section>
+<section id="tool-selection-table" class="level3">
+<h3 class="anchored" data-anchor-id="tool-selection-table">Tool Selection Table</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Tool</th>
+<th>Grain</th>
+<th>Overhead</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>cProfile</code></td>
+<td>Function-level</td>
+<td>Moderate-high</td>
+<td>Development-time profiling of your own script</td>
+</tr>
+<tr class="even">
+<td><code>py-spy</code></td>
+<td>Line-level</td>
+<td>Low (sampling)</td>
+<td>Live/production processes you can’t modify</td>
+</tr>
+<tr class="odd">
+<td><code>perf</code></td>
+<td>Instruction-level</td>
+<td>Low</td>
+<td>Hardware mechanism questions, not Python-function attribution</td>
+</tr>
+<tr class="even">
+<td><code>bpftrace</code></td>
+<td>Syscall/kernel-event-level</td>
+<td>Very low</td>
+<td>Whether the process is touching the kernel at all; safe for continuous production use</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="command-cheat-sheet" class="level3">
+<h3 class="anchored" data-anchor-id="command-cheat-sheet">Command Cheat Sheet</h3>
+<div class="sourceCode" id="cb34"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb34-1"><span class="ex">python</span> <span class="at">-m</span> cProfile <span class="at">-s</span> cumulative script.py</span>
+<span id="cb34-2"></span>
+<span id="cb34-3"><span class="ex">py-spy</span> record <span class="at">-o</span> profile.svg <span class="at">--</span> python script.py</span>
+<span id="cb34-4"><span class="ex">py-spy</span> record <span class="at">-o</span> profile_raw.txt <span class="at">-f</span> raw <span class="at">-r</span> 300 <span class="at">--</span> python script.py</span>
+<span id="cb34-5"><span class="ex">py-spy</span> dump <span class="at">--pid</span> <span class="op">&lt;</span>PID<span class="op">&gt;</span></span>
+<span id="cb34-6"></span>
+<span id="cb34-7"><span class="fu">cat</span> /proc/sys/kernel/yama/ptrace_scope</span>
+<span id="cb34-8"><span class="ex">perf</span> stat <span class="at">-e</span> cycles,instructions,cache-misses <span class="dt">\</span></span>
+<span id="cb34-9">    <span class="at">--</span> python script.py</span>
+<span id="cb34-10"></span>
+<span id="cb34-11"><span class="co"># needs sudo / CAP_BPF+CAP_PERFMON:</span></span>
+<span id="cb34-12"><span class="fu">sudo</span> bpftrace <span class="at">-e</span> <span class="st">'</span></span>
+<span id="cb34-13"><span class="st">tracepoint:syscalls:sys_enter_read /pid == TARGET_PID/ {</span></span>
+<span id="cb34-14"><span class="st">    @syscalls["read"] = count();</span></span>
+<span id="cb34-15"><span class="st">}</span></span>
+<span id="cb34-16"><span class="st">interval:s:6 { exit(); }'</span></span></code></pre></div>
+<div class="sourceCode" id="cb35"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb35-1"><span class="im">import</span> cProfile, pstats</span>
+<span id="cb35-2">profiler <span class="op">=</span> cProfile.Profile()</span>
+<span id="cb35-3">profiler.enable()</span>
+<span id="cb35-4">your_function()</span>
+<span id="cb35-5">profiler.disable()</span>
+<span id="cb35-6">pstats.Stats(profiler).sort_stats(<span class="st">'cumulative'</span>).print_stats(<span class="dv">10</span>)</span></code></pre></div>
+</section>
+<section id="ptrace_scope-values" class="level3">
+<h3 class="anchored" data-anchor-id="ptrace_scope-values"><code>ptrace_scope</code> Values</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>Any same-UID process can ptrace any other</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td>Only a direct parent can ptrace (this environment’s setting)</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td>Only <code>CAP_SYS_PTRACE</code> processes can ptrace</td>
+</tr>
+<tr class="even">
+<td>3</td>
+<td>Ptrace disabled entirely until reboot</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-51-algorithmic-data-structure-optimization" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-51-algorithmic-data-structure-optimization">Chapter 51 — Algorithmic &amp; Data Structure Optimization</h2>
+<section id="key-terms-12" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-12">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Big-O / asymptotic complexity</strong></td>
+<td>How cost scales as input size <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> grows; says nothing about constant factors or memory layout</td>
+</tr>
+<tr class="even">
+<td><strong>Array-of-Structs (AoS)</strong></td>
+<td>Each record’s fields stored together: <code>[(x0,y0), (x1,y1), ...]</code></td>
+</tr>
+<tr class="odd">
+<td><strong>Struct-of-Arrays (SoA)</strong></td>
+<td>Each field stored in its own contiguous array: <code>xs=[x0,x1,...], ys=[y0,y1,...]</code></td>
+</tr>
+<tr class="even">
+<td><strong>Crossover point</strong></td>
+<td>The input size at which an asymptotically-better algorithm actually beats a simpler one in wall-clock time: empirical, not theoretical</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t-1" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t-1">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>: AMD Ryzen 9 5950X, 16C/32T)</h3>
+<p>Membership testing (<code>list</code> vs.&nbsp;<code>set</code>, worst case): the gap grows from 7.7x at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>100</mn></mrow><annotation encoding="application/x-tex">n=100</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">100</span></span></span></span> to 76,262.9x at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>1,000,000</mn></mrow><annotation encoding="application/x-tex">n=1{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span>. <code>set</code> stays ~O(1) while <code>list</code> grows linearly.</p>
+<p>AoS vs.&nbsp;SoA (summing one field across <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> records): speedup peaks at 163.1x (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>1,000,000</mn></mrow><annotation encoding="application/x-tex">n=1{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span>), narrowing to 85.4x at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>5,000,000</mn></mrow><annotation encoding="application/x-tex">n=5{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">5</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span> once the working set exceeds cache capacity for both layouts.</p>
+<p>Queue draining (<code>list.pop(0)</code> vs.&nbsp;<code>deque.popleft()</code>): speedup grows from 2.5x (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>1,000</mn></mrow><annotation encoding="application/x-tex">n=1{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span>) to 36.5x (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>20,000</mn></mrow><annotation encoding="application/x-tex">n=20{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">20</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span>).</p>
+</section>
+<section id="complexity-cheat-sheet" class="level3">
+<h3 class="anchored" data-anchor-id="complexity-cheat-sheet">Complexity Cheat Sheet</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Operation</th>
+<th><code>list</code></th>
+<th><code>set</code>/<code>dict</code></th>
+<th><code>deque</code></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Membership (<code>x in ...</code>)</td>
+<td>O(n)</td>
+<td>O(1) average</td>
+<td>O(n)</td>
+</tr>
+<tr class="even">
+<td>Append to end</td>
+<td>O(1) amortised</td>
+<td>O(1) average</td>
+<td>O(1)</td>
+</tr>
+<tr class="odd">
+<td>Pop/insert at front</td>
+<td>O(n)</td>
+<td>n/a</td>
+<td>O(1)</td>
+</tr>
+<tr class="even">
+<td>Random access by index</td>
+<td>O(1)</td>
+<td>n/a</td>
+<td>O(n)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="decision-table" class="level3">
+<h3 class="anchored" data-anchor-id="decision-table">Decision Table</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Access pattern</th>
+<th>Best structure</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Repeated membership checks, no ordering</td>
+<td><code>set</code></td>
+</tr>
+<tr class="even">
+<td>Repeated membership checks + value</td>
+<td><code>dict</code></td>
+</tr>
+<tr class="odd">
+<td>Reduce/scan over one field, many records</td>
+<td>Struct-of-arrays (NumPy)</td>
+</tr>
+<tr class="even">
+<td>Process all fields of one record repeatedly</td>
+<td>Array-of-structs</td>
+</tr>
+<tr class="odd">
+<td>FIFO/LIFO append+pop at either end</td>
+<td><code>deque</code></td>
+</tr>
+<tr class="even">
+<td>Frequent random-index access</td>
+<td><code>list</code> / NumPy array</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-52-vectorization-simd" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-52-vectorization-simd">Chapter 52 — Vectorization &amp; SIMD</h2>
+<section id="key-terms-13" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-13">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>SIMD</strong></td>
+<td>Single Instruction, Multiple Data: one CPU instruction operating on several values (e.g.&nbsp;4 <code>float64</code>s in one 256-bit AVX2 register) simultaneously</td>
+</tr>
+<tr class="even">
+<td><strong>Vectorization</strong></td>
+<td>Expressing an operation as whole-array arithmetic so a compiler/library can emit SIMD instructions, instead of a per-element scalar loop</td>
+</tr>
+<tr class="odd">
+<td><strong>BLAS</strong></td>
+<td>Basic Linear Algebra Subprograms: the standard library interface NumPy’s matrix operations delegate to (OpenBLAS in this environment)</td>
+</tr>
+<tr class="even">
+<td><strong>DYNAMIC_ARCH</strong></td>
+<td>An OpenBLAS build option that detects the actual CPU at runtime and dispatches to a matching optimized code path (e.g.&nbsp;AVX2, AVX-512) rather than a generic fallback</td>
+</tr>
+<tr class="odd">
+<td><strong>Compute-bound</strong></td>
+<td>A workload limited by how fast the CPU can execute instructions/arithmetic</td>
+</tr>
+<tr class="even">
+<td><strong>Memory-bandwidth-bound</strong></td>
+<td>A workload limited by how fast data can move between DRAM and the CPU, regardless of available compute throughput</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t-64mb-l3" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t-64mb-l3">Measured Results (Reference Rig: AMD Ryzen 9 5950X, 16C/32T, 64MB L3)</h3>
+<section id="elementwise-operation-python-loop-vs.-numpy" class="level4">
+<h4 class="anchored" data-anchor-id="elementwise-operation-python-loop-vs.-numpy">Elementwise Operation: Python Loop vs.&nbsp;NumPy</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>n</th>
+<th>Python (median)</th>
+<th>NumPy (median)</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>10,000</td>
+<td>0.528 ms</td>
+<td>0.0060 ms</td>
+<td>87.8x</td>
+</tr>
+<tr class="even">
+<td>100,000</td>
+<td>3.294 ms</td>
+<td>0.0258 ms</td>
+<td>127.7x</td>
+</tr>
+<tr class="odd">
+<td>1,000,000</td>
+<td>34.859 ms</td>
+<td>0.2357 ms</td>
+<td>147.9x</td>
+</tr>
+<tr class="even">
+<td>10,000,000</td>
+<td>406.618 ms</td>
+<td>36.194 ms</td>
+<td>11.2x</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-cache-cliff-implied-memory-bandwidth-vs.-working-set-size" class="level4">
+<h4 class="anchored" data-anchor-id="the-cache-cliff-implied-memory-bandwidth-vs.-working-set-size">The Cache Cliff: Implied Memory Bandwidth vs.&nbsp;Working-Set Size</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>n</th>
+<th>Working set</th>
+<th>Time</th>
+<th>Implied bandwidth</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1,000,000</td>
+<td>16.0 MB</td>
+<td>0.2486 ms</td>
+<td>64.4 GB/s</td>
+</tr>
+<tr class="even">
+<td>2,000,000</td>
+<td>32.0 MB</td>
+<td>0.7134 ms</td>
+<td>44.9 GB/s</td>
+</tr>
+<tr class="odd">
+<td>4,000,000</td>
+<td>64.0 MB</td>
+<td>2.6069 ms</td>
+<td>24.6 GB/s</td>
+</tr>
+<tr class="even">
+<td>6,000,000</td>
+<td>96.0 MB</td>
+<td>21.7291 ms</td>
+<td>4.4 GB/s</td>
+</tr>
+<tr class="odd">
+<td>8,000,000</td>
+<td>128.0 MB</td>
+<td>29.7712 ms</td>
+<td>4.3 GB/s</td>
+</tr>
+<tr class="even">
+<td>10,000,000</td>
+<td>160.0 MB</td>
+<td>38.7251 ms</td>
+<td>4.1 GB/s</td>
+</tr>
+</tbody>
+</table>
+<p><em>Cliff falls between 64MB and 96MB: this CPU’s 64MB L3 boundary (Chapter 49).</em></p>
+</section>
+<section id="matmul-simd-only-vs.-simdmulti-core" class="level4">
+<h4 class="anchored" data-anchor-id="matmul-simd-only-vs.-simdmulti-core">Matmul: SIMD-Only vs.&nbsp;SIMD+Multi-Core</h4>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Matrix size</th>
+<th>Single-threaded (SIMD only)</th>
+<th>Multi-threaded (default)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>500×500</td>
+<td>69.6 GFLOPS</td>
+<td>378.1 GFLOPS</td>
+</tr>
+<tr class="even">
+<td>1000×1000</td>
+<td>68.5 GFLOPS</td>
+<td>257.4 GFLOPS</td>
+</tr>
+<tr class="odd">
+<td>2000×2000</td>
+<td>67.9 GFLOPS</td>
+<td>495.5 GFLOPS</td>
+</tr>
+</tbody>
+</table>
+<p>Pure Python triple-loop matmul (n=100): 39.77ms vs.&nbsp;NumPy: 0.0446ms → 891x speedup (combined SIMD + multi-core + cache-blocking).</p>
+</section>
+<section id="honest-counter-example-data-dependent-control-flow-collatz-length-n1..20000" class="level4">
+<h4 class="anchored" data-anchor-id="honest-counter-example-data-dependent-control-flow-collatz-length-n1..20000">Honest Counter-Example: Data-Dependent Control Flow (Collatz Length, n=1..20,000)</h4>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Implementation</th>
+<th>Time</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Pure Python loop</td>
+<td>77.57 ms</td>
+<td>1.0x (baseline)</td>
+</tr>
+<tr class="even">
+<td>“Vectorized” (list comp over NumPy array)</td>
+<td>79.16 ms</td>
+<td>0.98x: no benefit</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="decision-checklist-will-vectorization-help" class="level3">
+<h3 class="anchored" data-anchor-id="decision-checklist-will-vectorization-help">Decision Checklist: Will Vectorization Help?</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question</th>
+<th>If yes</th>
+<th>If no</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Same operation applies to every element?</td>
+<td>Good candidate</td>
+<td>Vectorization has no shared structure to exploit</td>
+</tr>
+<tr class="even">
+<td>Iteration count fixed, not data-dependent?</td>
+<td>Good candidate</td>
+<td>Per-element loops (e.g.&nbsp;Collatz) won’t benefit</td>
+</tr>
+<tr class="odd">
+<td>Working set fits comfortably in cache?</td>
+<td>Expect near-peak SIMD throughput</td>
+<td>Expect throughput to flatten at DRAM bandwidth regardless of vectorization</td>
+</tr>
+<tr class="even">
+<td>Already vectorized, want more speed?</td>
+<td>Consider multi-core (Chapter 53)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="common-imports-commands" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports-commands">Common Imports / Commands</h3>
+<div class="sourceCode" id="cb36"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb36-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb36-2"><span class="im">import</span> timeit</span>
+<span id="cb36-3"><span class="im">import</span> subprocess, sys, os</span>
+<span id="cb36-4"></span>
+<span id="cb36-5">np.show_config()   <span class="co"># confirm BLAS backend and CPU dispatch</span></span></code></pre></div>
+<div class="sourceCode" id="cb37"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb37-1"><span class="co"># isolate SIMD-only performance, no multi-core</span></span>
+<span id="cb37-2"><span class="va">OPENBLAS_NUM_THREADS</span><span class="op">=</span>1 <span class="ex">python</span> script.py</span></code></pre></div>
+</section>
+</section>
+<section id="chapter-53-parallelism-on-cpu" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-53-parallelism-on-cpu">Chapter 53 — Parallelism on CPU</h2>
+<section id="key-terms-14" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-14">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>GIL (Global Interpreter Lock)</strong></td>
+<td>CPython’s lock ensuring only one thread executes Python bytecode at a time per process</td>
+</tr>
+<tr class="even">
+<td><strong>CPU-bound</strong></td>
+<td>Limited by computation speed: the GIL fully serialises this across threads</td>
+</tr>
+<tr class="odd">
+<td><strong>I/O-bound</strong></td>
+<td>Limited by waiting on external resources: the GIL is released during the wait</td>
+</tr>
+<tr class="even">
+<td><strong>Process</strong></td>
+<td>An independent OS process with its own interpreter and GIL: genuine parallelism for CPU-bound work</td>
+</tr>
+<tr class="odd">
+<td><strong>Thread</strong></td>
+<td>A lighter-weight unit sharing one process’s interpreter and GIL</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="decision-table-1" class="level3">
+<h3 class="anchored" data-anchor-id="decision-table-1">Decision Table</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Workload type</th>
+<th>Best tool</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>CPU-bound</td>
+<td><code>multiprocessing</code> / <code>ProcessPoolExecutor</code></td>
+<td>Only way to get real multi-core parallelism in standard CPython</td>
+</tr>
+<tr class="even">
+<td>I/O-bound</td>
+<td><code>threading</code> / <code>ThreadPoolExecutor</code></td>
+<td>Same scaling as multiprocessing, far less overhead</td>
+</tr>
+<tr class="odd">
+<td>CPU-bound, need reliability/convenience</td>
+<td><code>joblib</code></td>
+<td>~48% overhead vs.&nbsp;raw multiprocessing, better crash-recovery/API</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t-2" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-amd-ryzen-9-5950x-16c32t-2">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>: AMD Ryzen 9 5950X, 16C/32T)</h3>
+<p>CPU-bound: threading gives a flat ~1.1x “speedup” regardless of worker count (1-8), while multiprocessing scales close to linearly (1.15x → 8.62x at 8 workers). I/O-bound: both threading and multiprocessing scale close to linearly (~7.95x and ~7.73x at 8 workers respectively). <code>joblib</code> measured 48% slower than raw <code>multiprocessing.Pool</code> on an 8-way CPU-bound task. Pool-creation overhead (tiny task, repeated pool creation every iteration): ~46x slower than reusing one pool.</p>
+</section>
+<section id="api-cheat-sheet" class="level3">
+<h3 class="anchored" data-anchor-id="api-cheat-sheet">API Cheat Sheet</h3>
+<div class="sourceCode" id="cb38"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb38-1"><span class="cf">with</span> mp.Pool(processes<span class="op">=</span><span class="dv">8</span>) <span class="im">as</span> pool:</span>
+<span id="cb38-2">    results <span class="op">=</span> pool.<span class="bu">map</span>(fn, items)</span>
+<span id="cb38-3"></span>
+<span id="cb38-4"><span class="cf">with</span> ProcessPoolExecutor(max_workers<span class="op">=</span><span class="dv">8</span>) <span class="im">as</span> ex:</span>
+<span id="cb38-5">    results <span class="op">=</span> <span class="bu">list</span>(ex.<span class="bu">map</span>(fn, items))</span>
+<span id="cb38-6"></span>
+<span id="cb38-7"><span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span><span class="dv">16</span>) <span class="im">as</span> ex:</span>
+<span id="cb38-8">    results <span class="op">=</span> <span class="bu">list</span>(ex.<span class="bu">map</span>(fn, items))</span>
+<span id="cb38-9"></span>
+<span id="cb38-10">results <span class="op">=</span> Parallel(n_jobs<span class="op">=</span><span class="dv">8</span>)(delayed(fn)(item) <span class="cf">for</span> item <span class="kw">in</span> items)</span></code></pre></div>
+</section>
+</section>
+<section id="chapter-54-memory-io-optimization" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-54-memory-io-optimization">Chapter 54 — Memory &amp; I/O Optimization</h2>
+<section id="key-terms-15" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-15">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Buffering</strong></td>
+<td>An intermediate memory region batching small reads/writes into fewer, larger system calls</td>
+</tr>
+<tr class="even">
+<td><strong><code>mmap</code></strong></td>
+<td>Mapping a file’s pages directly into a process’s virtual address space</td>
+</tr>
+<tr class="odd">
+<td><strong>Page fault</strong></td>
+<td>A hardware trap when accessing a virtual page not yet resident, causing the OS to load it</td>
+</tr>
+<tr class="even">
+<td><strong><code>__slots__</code></strong></td>
+<td>A class declaration replacing per-instance <code>__dict__</code> with fixed named storage slots</td>
+</tr>
+<tr class="odd">
+<td><strong>Amortised growth</strong></td>
+<td>A container’s over-allocation strategy keeping average per-append cost low</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-amd-ryzen-9-5950x" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-amd-ryzen-9-5950x">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>: AMD Ryzen 9 5950X)</h3>
+<p>Read chunk size (210MB file): 1 byte chunks take 8,322.8ms (25.2 MB/s); 1MB chunks take 13.7ms (15,258.4 MB/s), over 600x difference. <code>buffering=</code> parameter has far smaller effect (12.9-13.1ms across most settings, only degrading at 16MB buffering).</p>
+<p><code>mmap</code> vs.&nbsp;<code>seek()</code>+<code>read()</code>: cold pass, <code>mmap</code> is <em>slower</em> (94.4ms vs.&nbsp;77.0ms, 0.82x) since the first access still pays page-fault cost; warm pass, <code>mmap</code> is 12.5x faster (7.2ms vs.&nbsp;90.3ms) once pages are resident.</p>
+<p><code>__slots__</code>: 26.7% memory reduction (120 → 88 bytes/object) on a two-attribute class, 100,000 objects.</p>
+<p>List preallocation: append-growth (149.1ms) vs.&nbsp;preallocated fill-by-index (142.4ms), negligible difference; CPython already amortises list growth.</p>
+</section>
+<section id="decision-checklist" class="level3">
+<h3 class="anchored" data-anchor-id="decision-checklist">Decision Checklist</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Reading a large file sequentially?</td>
+<td>Use 64KB-1MB chunks; dominates all other I/O tuning</td>
+</tr>
+<tr class="even">
+<td>Repeated/random access to a large file?</td>
+<td>Consider <code>mmap</code>, expect no benefit on the first pass</td>
+</tr>
+<tr class="odd">
+<td>Millions of small, fixed-attribute objects?</td>
+<td>Add <code>__slots__</code></td>
+</tr>
+<tr class="even">
+<td>About to preallocate a plain Python <code>list</code>?</td>
+<td>Don’t bother: preallocate NumPy arrays instead</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="common-imports-idioms" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports-idioms">Common Imports / Idioms</h3>
+<div class="sourceCode" id="cb39"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb39-1"><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">'rb'</span>) <span class="im">as</span> f:</span>
+<span id="cb39-2">    <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb39-3">        data <span class="op">=</span> f.read(<span class="dv">1024</span> <span class="op">*</span> <span class="dv">1024</span>)</span>
+<span id="cb39-4">        <span class="cf">if</span> <span class="kw">not</span> data:</span>
+<span id="cb39-5">            <span class="cf">break</span></span>
+<span id="cb39-6"></span>
+<span id="cb39-7"><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">'rb'</span>) <span class="im">as</span> f:</span>
+<span id="cb39-8">    mm <span class="op">=</span> mmap.mmap(f.fileno(), <span class="dv">0</span>, access<span class="op">=</span>mmap.ACCESS_READ)</span>
+<span id="cb39-9"></span>
+<span id="cb39-10"><span class="kw">class</span> Record:</span>
+<span id="cb39-11">    <span class="va">__slots__</span> <span class="op">=</span> (<span class="st">'id'</span>, <span class="st">'value'</span>)</span></code></pre></div>
+</section>
+</section>
+<section id="chapter-55-knowing-when-to-move-to-gpu" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-55-knowing-when-to-move-to-gpu">Chapter 55 — Knowing When to Move to GPU</h2>
+<section id="key-terms-16" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-16">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Arithmetic intensity</strong></td>
+<td>FLOPs performed per byte of data moved: predicts whether an operation can be compute-bound</td>
+</tr>
+<tr class="even">
+<td><strong>Ridge point</strong></td>
+<td>The intensity threshold, specific to a hardware pair, separating memory-bound from compute-bound</td>
+</tr>
+<tr class="odd">
+<td><strong>Roofline model</strong></td>
+<td>Achievable throughput vs.&nbsp;arithmetic intensity, capped by bandwidth (low intensity) or peak compute (high)</td>
+</tr>
+<tr class="even">
+<td><strong>Pinned (page-locked) memory</strong></td>
+<td>Host memory that cannot be paged out, intended to speed DMA transfers to/from GPU</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="measured-results-reference-rig-amd-ryzen-9-5950x-nvidia-rtx-5090" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-amd-ryzen-9-5950x-nvidia-rtx-5090">Measured Results (Reference Rig<span class="ref-rig-mark">†</span>: AMD Ryzen 9 5950X + NVIDIA RTX 5090)</h3>
+<p>Pinned vs.&nbsp;pageable memory (100M floats, H2D): 1.08x speedup (27.65ms vs.&nbsp;29.79ms), real, but far below the commonly-quoted 2-3x.</p>
+<p>Elementwise op (<code>x*2+1</code>, constant intensity ~0.25 FLOPs/byte): GPU never wins at any tested size (best case 0.98x at n=100,000, worst 0.11x at n=1,000).</p>
+<p>Matmul (intensity grows with n): crossover between n=256 (0.77x) and n=512 (1.08x); peak speedup 3.21x at n=2048.</p>
+</section>
+<section id="decision-formula" class="level3">
+<h3 class="anchored" data-anchor-id="decision-formula">Decision Formula</h3>
+<pre class="text"><code>arithmetic_intensity = total_FLOPs / total_bytes_moved
+
+if intensity is low AND does not grow with problem size:
+    keep on CPU, regardless of data size
+
+if intensity grows with problem size (e.g. O(n) for matmul):
+    measure the crossover point on your actual hardware
+    move to GPU only past that measured point</code></pre>
+</section>
+<section id="common-flopsbytes-formulas" class="level3">
+<h3 class="anchored" data-anchor-id="common-flopsbytes-formulas">Common FLOPs/Bytes Formulas</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Operation</th>
+<th>FLOPs</th>
+<th>Bytes moved (float32)</th>
+<th>Intensity behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Elementwise (<code>a*x+b</code>)</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>n</mi></mrow><annotation encoding="application/x-tex">2n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">2</span><span class="mord mathnormal">n</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>n</mi><mo>×</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">2n \times 4</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">4</span></span></span></span></td>
+<td>Constant (~0.25)</td>
+</tr>
+<tr class="even">
+<td>Vector dot product</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>n</mi></mrow><annotation encoding="application/x-tex">2n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">2</span><span class="mord mathnormal">n</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>n</mi><mo>×</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">2n \times 4</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">4</span></span></span></span></td>
+<td>Constant</td>
+</tr>
+<tr class="odd">
+<td>Matrix-vector (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>×</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \times n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span>)</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><msup><mi>n</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">2n^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">2</span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∼</mo><msup><mi>n</mi><mn>2</mn></msup><mo>×</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">\sim n^2 \times 4</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.3669em;"></span><span class="mrel">∼</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8974em;vertical-align:-0.0833em;"></span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">4</span></span></span></span></td>
+<td>Constant (~0.5)</td>
+</tr>
+<tr class="even">
+<td>Matrix-matrix (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>×</mo><mi>n</mi><mo>×</mo><mi>n</mi></mrow><annotation encoding="application/x-tex">n \times n \times n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span>)</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><msup><mi>n</mi><mn>3</mn></msup></mrow><annotation encoding="application/x-tex">2n^3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">2</span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span></span></span></span></span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∼</mo><mn>3</mn><msup><mi>n</mi><mn>2</mn></msup><mo>×</mo><mn>4</mn></mrow><annotation encoding="application/x-tex">\sim 3n^2 \times 4</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.3669em;"></span><span class="mrel">∼</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8974em;vertical-align:-0.0833em;"></span><span class="mord">3</span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">4</span></span></span></span></td>
+<td>Grows as <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="common-imports-idioms-1" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports-idioms-1">Common Imports / Idioms</h3>
+<div class="sourceCode" id="cb41"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb41-1"><span class="im">import</span> torch</span>
+<span id="cb41-2">torch.cuda.is_available()</span>
+<span id="cb41-3"><span class="co"># H2D transfer</span></span>
+<span id="cb41-4">x_gpu <span class="op">=</span> x_cpu.to(<span class="st">'cuda'</span>)</span>
+<span id="cb41-5"><span class="co"># pin host memory first</span></span>
+<span id="cb41-6">x_pinned <span class="op">=</span> x_cpu.pin_memory()</span>
+<span id="cb41-7"><span class="co"># required before/after timing GPU ops</span></span>
+<span id="cb41-8">torch.cuda.synchronize()</span></code></pre></div>
+</section>
+</section>
+<section id="chapter-56-profiling-mixed-cpugpu-pipelines" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-56-profiling-mixed-cpugpu-pipelines">Chapter 56 — Profiling Mixed CPU/GPU Pipelines</h2>
+<section id="measured-results-reference-rig-3" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-3">Measured Results (Reference Rig)</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Slow (Python-loop)</th>
+<th>Fast (vectorized)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Whole-process time</td>
+<td>1,599.1ms</td>
+<td>1,432.8ms (1.12x)</td>
+</tr>
+<tr class="even">
+<td>Isolated loop time (20 batches)</td>
+<td>239.9ms</td>
+<td>97.9ms (2.45x)</td>
+</tr>
+<tr class="odd">
+<td>GPU busy time (nsys)</td>
+<td>0.851ms</td>
+<td>0.849ms</td>
+</tr>
+<tr class="even">
+<td>GPU utilisation</td>
+<td>~0.35%</td>
+<td>~0.87%</td>
+</tr>
+</tbody>
+</table>
+<p>Shared fixed costs (both versions): <code>import torch</code> ~780ms, CUDA init ~185ms.</p>
+</section>
+<section id="nsys-commands-1" class="level3">
+<h3 class="anchored" data-anchor-id="nsys-commands-1"><code>nsys</code> Commands</h3>
+<div class="sourceCode" id="cb42"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb42-1"><span class="ex">nsys</span> profile <span class="at">-o</span> my_profile <span class="at">--force-overwrite</span> true <span class="dt">\</span></span>
+<span id="cb42-2">    <span class="at">--</span> python my_script.py</span>
+<span id="cb42-3"><span class="ex">nsys</span> stats <span class="at">--report</span> cuda_gpu_kern_sum <span class="dt">\</span></span>
+<span id="cb42-4">    <span class="at">--report</span> cuda_gpu_mem_time_sum my_profile.nsys-rep</span></code></pre></div>
+</section>
+<section id="gpu-utilisation-formula" class="level3">
+<h3 class="anchored" data-anchor-id="gpu-utilisation-formula">GPU Utilisation Formula</h3>
+<pre class="text"><code>utilisation = gpu_busy_time / wall_clock_loop_time</code></pre>
+</section>
+<section id="fixing-low-gpu-utilisation-in-order" class="level3">
+<h3 class="anchored" data-anchor-id="fixing-low-gpu-utilisation-in-order">Fixing Low GPU Utilisation, in Order</h3>
+<ol type="1">
+<li>Vectorize/optimise CPU-side preprocessing</li>
+<li>Increase batch size (amortise round-trip cost over more work)</li>
+<li>Overlap CPU and GPU work with async transfers + multiple CUDA streams</li>
+</ol>
+</section>
+<section id="isolating-timing-from-process-overhead" class="level3">
+<h3 class="anchored" data-anchor-id="isolating-timing-from-process-overhead">Isolating Timing from Process Overhead</h3>
+<div class="sourceCode" id="cb44"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb44-1">t_import_start <span class="op">=</span> time.perf_counter()</span>
+<span id="cb44-2"><span class="im">import</span> torch</span>
+<span id="cb44-3">t_import_done <span class="op">=</span> time.perf_counter()</span>
+<span id="cb44-4">t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb44-5"><span class="co"># loop under test</span></span>
+<span id="cb44-6">t_loop <span class="op">=</span> time.perf_counter() <span class="op">-</span> t0</span></code></pre></div>
+</section>
+<section id="common-pitfalls" class="level3">
+<h3 class="anchored" data-anchor-id="common-pitfalls">Common Pitfalls</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Suspiciously small speedup comparing two script versions</td>
+<td>Whole-process timing dominated by import/init overhead</td>
+<td>Instrument and report the specific loop/region separately</td>
+</tr>
+<tr class="even">
+<td>“GPU-bound” assumed without checking</td>
+<td>No utilisation measurement taken</td>
+<td>Compute GPU busy time / wall-clock time via nsys</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-57-capstone-end-to-end-optimization" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-57-capstone-end-to-end-optimization">Chapter 57 — Capstone: End-to-End Optimization</h2>
+<section id="measured-results-reference-rig-300k-row-pipeline" class="level3">
+<h3 class="anchored" data-anchor-id="measured-results-reference-rig-300k-row-pipeline">Measured Results (Reference Rig, 300K-row pipeline)</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Naive</th>
+<th>Fixed</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Load</td>
+<td>215.6ms</td>
+<td>111.1ms (<code>pandas.read_csv</code>)</td>
+<td>1.94x</td>
+</tr>
+<tr class="even">
+<td>Feature engineering</td>
+<td>773.2ms</td>
+<td>381.9ms (<code>.isin(set)</code> + vectorized)</td>
+<td>2.02x</td>
+</tr>
+<tr class="odd">
+<td>Model scoring</td>
+<td>8,052.0ms (extrapolated)</td>
+<td>232.1ms (batched forward pass)</td>
+<td>34.7x</td>
+</tr>
+<tr class="even">
+<td><strong>CPU-only total</strong></td>
+<td>9,040.8ms</td>
+<td><strong>725.2ms</strong></td>
+<td><strong>12.5x</strong></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="the-gpu-cold-start-trap-measured" class="level3">
+<h3 class="anchored" data-anchor-id="the-gpu-cold-start-trap-measured">The GPU Cold-Start Trap, Measured</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Measurement</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>First (cold) CUDA call</td>
+<td>443.9ms: looks 0.52x (slower than CPU)</td>
+</tr>
+<tr class="even">
+<td>Warm CUDA call (wall)</td>
+<td>3.7ms</td>
+</tr>
+<tr class="odd">
+<td>Warm CUDA call (pure compute, <code>cuda.synchronize()</code>)</td>
+<td>1.923ms: 62.1x faster than CPU-batched</td>
+</tr>
+<tr class="even">
+<td>Full pipeline, warm GPU scoring</td>
+<td><strong>496.8ms, 18.2x overall vs.&nbsp;naive</strong></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="nsight-confirmation-batching-not-the-gpu" class="level3">
+<h3 class="anchored" data-anchor-id="nsight-confirmation-batching-not-the-gpu">Nsight Confirmation: Batching, Not “the GPU”</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>GPU-side time</th>
+<th>Kernel launches</th>
+<th>Memory-op launches</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>2,000 individual calls</td>
+<td>12.740ms</td>
+<td>10,000</td>
+<td>6,006</td>
+</tr>
+<tr class="even">
+<td>1 batched call (same 2,000 rows)</td>
+<td>0.045ms</td>
+<td>6</td>
+<td>9</td>
+</tr>
+</tbody>
+</table>
+<p>283x less actual GPU-side time for identical output.</p>
+</section>
+<section id="the-investigation-loop" class="level3">
+<h3 class="anchored" data-anchor-id="the-investigation-loop">The Investigation Loop</h3>
+<pre class="text"><code>1. Profile the current pipeline (cProfile / nsys).
+2. Identify the single largest confirmed bottleneck.
+3. Apply the fix the evidence points to.
+4. Re-measure the WHOLE pipeline.
+5. Repeat until further fixes aren't worth the effort.</code></pre>
+</section>
+<section id="gpu-benchmarking-checklist" class="level3">
+<h3 class="anchored" data-anchor-id="gpu-benchmarking-checklist">GPU Benchmarking Checklist</h3>
+<ul class="task-list">
+<li><label><input type="checkbox">Warm-up call executed and discarded before timing</label></li>
+<li><label><input type="checkbox"><code>torch.cuda.synchronize()</code> called before reading elapsed time</label></li>
+<li><label><input type="checkbox">Comparison made against the best CPU-side version, not the naive one</label></li>
+<li><label><input type="checkbox">Kernel launch count verified (nsys) if a “no speedup” result seems surprising</label></li>
+</ul>
+
+
+</section>
+</section>

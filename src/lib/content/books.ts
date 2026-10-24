@@ -44,7 +44,10 @@ export const books: Book[] = [
 		chapters: 17,
 		status: 'building',
 		tone: 'cyan',
-		// buyHref: '<universal link>', // ‹store link when published. Use a universal link, not one regional Amazon store (BACKLOG.md #4)›
+		readHref: '/books/modern-ai',
+		pdfHref: placeholder('pdf'),
+		buyHref: placeholder('amazon'), // a universal link, not one regional Amazon store (BACKLOG.md #4)
+		payHref: placeholder('pay')
 	},
 	{
 		slug: 'systems-performance',
@@ -56,7 +59,10 @@ export const books: Book[] = [
 		chapters: 20,
 		status: 'building',
 		tone: 'violet',
-		// buyHref: '<universal link>', // ‹store link when published. Use a universal link, not one regional Amazon store (BACKLOG.md #4)›
+		readHref: '/books/systems-performance',
+		pdfHref: placeholder('pdf'),
+		buyHref: placeholder('amazon'), // a universal link, not one regional Amazon store (BACKLOG.md #4)
+		payHref: placeholder('pay')
 	},
 	{
 		slug: 'applied-ai-domains',
@@ -68,6 +74,9 @@ export const books: Book[] = [
 		chapters: 26,
 		status: 'building',
 		tone: 'gold',
-		// buyHref: '<universal link>', // ‹store link when published. Use a universal link, not one regional Amazon store (BACKLOG.md #4)›
+		readHref: '/books/applied-ai-domains',
+		pdfHref: placeholder('pdf'),
+		buyHref: placeholder('amazon'), // a universal link, not one regional Amazon store (BACKLOG.md #4)
+		payHref: placeholder('pay')
 	}
 ];

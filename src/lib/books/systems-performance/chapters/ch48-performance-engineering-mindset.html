@@ -1,0 +1,282 @@
+<p>“This is slow” is a feeling, not an engineering statement. Performance engineering starts by turning that feeling into a number, then a location (which specific line, function, or resource is actually responsible), and only then a fix. Skipping straight to “I think the bottleneck is X, let me rewrite X” is the single most common and most expensive mistake in this discipline. It is entirely possible to spend a week optimizing code that was never the bottleneck while the actual slow part sits untouched. This chapter establishes the two disciplines the rest of this book depends on: benchmarking correctly, and knowing in advance, via Amdahl’s Law, the theoretical ceiling on what any given optimization effort can possibly achieve.</p>
+<section id="motivation" class="level2" data-number="48.1">
+<h2 data-number="48.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">48.1</span> Motivation</h2>
+<p>Two ideas anchor everything else in this book. First, <strong>correct benchmarking is harder than it looks</strong>, and getting it wrong produces confidently wrong conclusions. A single measurement of almost anything on a real computer can be dominated by one-time setup costs that have nothing to do with steady-state performance. Second, <strong>Amdahl’s Law</strong> tells you, before writing a line of optimization code, the absolute ceiling on how much a given fix can possibly help, so a genuinely unfixable bottleneck can be told apart from one that simply hasn’t had the right fix applied yet. Together these two ideas form the discipline every later chapter assumes: measure correctly, and know what you’re measuring against before committing real effort.</p>
+</section>
+<section id="exposition" class="level2" data-number="48.2">
+<h2 data-number="48.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">48.2</span> Exposition</h2>
+<section id="the-single-measurement-trap" class="level3" data-number="48.2.1">
+<h3 data-number="48.2.1" class="anchored" data-anchor-id="the-single-measurement-trap"><span class="header-section-number">48.2.1</span> The Single-Measurement Trap</h3>
+<p>A small NumPy matrix multiplication (<code>200×200 @ 200×200</code>), timed once with a naive <code>time.perf_counter()</code> call, took <strong>15.261 ms</strong><span class="ref-rig-mark">†</span>. Timing the <em>identical</em> operation 200 times and looking at the distribution tells a very different story:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Statistic</th>
+<th>Time</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Single naive measurement</td>
+<td>15.261 ms</td>
+</tr>
+<tr class="even">
+<td>Repeated (200x): minimum</td>
+<td>1.147 ms</td>
+</tr>
+<tr class="odd">
+<td>Repeated (200x): median</td>
+<td>1.178 ms</td>
+</tr>
+<tr class="even">
+<td>Repeated (200x): mean</td>
+<td>1.221 ms</td>
+</tr>
+<tr class="odd">
+<td>Repeated (200x): maximum</td>
+<td>4.521 ms</td>
+</tr>
+</tbody>
+</table>
+<p>The single naive measurement was, in fact, close to the single slowest of all 200 repetitions, a <strong>13.0x overestimate</strong> of the operation’s real steady-state cost. The cause: the first call pays for NumPy/BLAS’s one-time initialization (thread-pool setup, library lazy-loading), a cost that has nothing to do with the operation’s steady-state speed. This is the same class of trap as the GPU-kernel material’s “first CUDA kernel launch pays for context initialization” lesson (Chapter 39), a general principle, not a library-specific quirk: the first measurement of almost anything on a computer includes setup costs that a single naive timing cannot distinguish from the real cost.</p>
+<p>The fix is always the same shape: warm up (run the operation once or several times, discard those runs), then measure many repetitions, and report a robust statistic: minimum or median, never the mean alone. A few unlucky OS scheduling interruptions can badly skew a mean upward, while the minimum reflects best-case, most-representative-of-steady-state performance, and the median reflects typical real-world cost including some (but not extreme) noise.</p>
+</section>
+<section id="amdahls-law-the-ceiling-you-can-compute-in-advance" class="level3" data-number="48.2.2">
+<h3 data-number="48.2.2" class="anchored" data-anchor-id="amdahls-law-the-ceiling-you-can-compute-in-advance"><span class="header-section-number">48.2.2</span> Amdahl’s Law: The Ceiling You Can Compute in Advance</h3>
+<p>If a fraction <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi></mrow><annotation encoding="application/x-tex">s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span></span></span></span> of a program’s time is strictly serial (it cannot be parallelized no matter how many workers are thrown at it) and the remaining fraction <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>=</mo><mn>1</mn><mo>−</mo><mi>s</mi></mrow><annotation encoding="application/x-tex">p = 1 - s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span></span></span></span> is perfectly parallelizable, the maximum possible speedup from <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span> workers is:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Speedup</mtext><mo stretchy="false">(</mo><mi>N</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mn>1</mn><mrow><mi>s</mi><mo>+</mo><mi>p</mi><mi mathvariant="normal">/</mi><mi>N</mi></mrow></mfrac></mrow><annotation encoding="application/x-tex">\text{Speedup}(N) = \frac{1}{s + p/N}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">Speedup</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.2574em;vertical-align:-0.936em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.3214em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">p</span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.936em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+<p>As <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>→</mo><mi mathvariant="normal">∞</mi></mrow><annotation encoding="application/x-tex">N \to \infty</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span>, this approaches <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi mathvariant="normal">/</mi><mi>s</mi></mrow><annotation encoding="application/x-tex">1/s</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1/</span><span class="mord mathnormal">s</span></span></span></span>, a hard ceiling set entirely by the serial fraction, no matter how much parallel hardware is added. A program that is 90% parallelizable (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>=</mo><mn>0.1</mn></mrow><annotation encoding="application/x-tex">s = 0.1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.1</span></span></span></span>) can never go faster than 10x, even with infinite cores.</p>
+<p>A workload with a fixed 0.3-second serial setup cost plus a parallelizable chunk of CPU work, run across 1, 2, 4, 8, 16, and 32 worker processes on this book’s 16-core/32-thread reference rig, gives a measured serial fraction of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>≈</mo><mn>0.110</mn></mrow><annotation encoding="application/x-tex">s \approx 0.110</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.110</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>≈</mo><mn>0.890</mn></mrow><annotation encoding="application/x-tex">p \approx 0.890</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6776em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.890</span></span></span></span>:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Workers</th>
+<th>Amdahl prediction</th>
+<th>Measured speedup</th>
+<th>Gap</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>1.00x</td>
+<td>1.00x</td>
+<td>0.00</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>1.80x</td>
+<td>1.89x</td>
+<td>-0.08</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>3.01x</td>
+<td>3.26x</td>
+<td>-0.26</td>
+</tr>
+<tr class="even">
+<td>8</td>
+<td>4.52x</td>
+<td>4.60x</td>
+<td>-0.08</td>
+</tr>
+<tr class="odd">
+<td>16 (= physical core count)</td>
+<td>6.03x</td>
+<td>5.47x</td>
+<td>0.56</td>
+</tr>
+<tr class="even">
+<td>32 (= hyperthread count)</td>
+<td>7.25x</td>
+<td>4.81x</td>
+<td>2.44</td>
+</tr>
+</tbody>
+</table>
+<p>At low worker counts the measured speedup tracks Amdahl’s prediction closely, in this run, even slightly ahead of it, well within the noise of process-scheduling variance. Past the physical core count (16), a real and growing shortfall opens up: at 32 workers, measured speedup falls 2.44x short of the idealized prediction. This gap is itself an important lesson, not measurement error. Amdahl’s Law assumes <em>zero</em> overhead from parallelizing: no process-spawn cost, no inter-process communication, no resource contention. Real multiprocessing has all of these, and the gap widens sharply once execution moves from the 16 physical cores into the 16 additional hyperthreads (17-32), which do not provide genuine additional execution resources for CPU-bound integer work the way physical cores do.</p>
+<p><strong>The practical use of Amdahl’s Law isn’t the exact number. It’s the sanity check.</strong> Before spending a week parallelizing a workload, estimate its serial fraction and compute the ceiling. If the ceiling is 3x and the goal is 20x, parallelizing harder is the wrong plan. The serial fraction itself needs to shrink, or the total work needs to shrink, or different hardware is needed entirely, exactly the question Chapter 55 answers for GPU offload.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="48.3">
+<h2 data-number="48.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">48.3</span> Trade-offs and Limits</h2>
+<p>Rigorous benchmarking, warm-up, repetition, robust statistics, is worth its overhead any time a number will inform a real decision: buying more hardware, rewriting a function, confirming an optimization is even real. It is especially necessary when comparing two implementations, since a single-shot comparison can easily have its conclusion flipped by measurement noise alone. A quick, rough single <code>time.perf_counter()</code> measurement is fine for a first “is this obviously way too slow” gut check before investing in proper measurement, but never for a comparison between alternatives, and never for a number that will be reported to someone else.</p>
+<p>Amdahl’s Law is a ceiling, not a forecast. It is the wrong tool for estimating exact production throughput (real overhead pulls measured results below the prediction, as seen above) and it says nothing about <em>how</em> to reduce the serial fraction. It only says that reducing it, rather than adding workers, is the lever worth pulling once the ceiling has been hit. It also assumes fixed problem size. Gustafson’s law, not covered in depth here, addresses the alternative regime of scaling the problem size along with the hardware.</p>
+</section>
+<section id="procedures" class="level2" data-number="48.4">
+<h2 data-number="48.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">48.4</span> Procedures</h2>
+<p id="proc-48-1"><strong>Procedure 48.1 (Benchmark a Function Correctly).</strong> <em>When to use:</em> any time a trustworthy timing number is needed, before comparing two implementations, before claiming an optimization worked.</p>
+<div id="lst-benchmark-fn" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-benchmark-fn-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;48.1: Warm-up plus repetition plus robust statistics, the correct benchmarking pattern
+</figcaption>
+<div aria-describedby="lst-benchmark-fn-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> timeit</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="kw">def</span> benchmark(fn, warmup<span class="op">=</span><span class="dv">5</span>, repeat<span class="op">=</span><span class="dv">100</span>):</span>
+<span id="cb1-4">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(warmup):</span>
+<span id="cb1-5">        fn()</span>
+<span id="cb1-6">    times <span class="op">=</span> <span class="bu">sorted</span>(timeit.repeat(fn, number<span class="op">=</span><span class="dv">1</span>, repeat<span class="op">=</span>repeat))</span>
+<span id="cb1-7">    <span class="cf">return</span> {</span>
+<span id="cb1-8">        <span class="st">'min_ms'</span>: times[<span class="dv">0</span>] <span class="op">*</span> <span class="dv">1000</span>,</span>
+<span id="cb1-9">        <span class="st">'median_ms'</span>: times[<span class="bu">len</span>(times) <span class="op">//</span> <span class="dv">2</span>] <span class="op">*</span> <span class="dv">1000</span>,</span>
+<span id="cb1-10">        <span class="st">'mean_ms'</span>: <span class="bu">sum</span>(times) <span class="op">/</span> <span class="bu">len</span>(times) <span class="op">*</span> <span class="dv">1000</span>,</span>
+<span id="cb1-11">    }</span>
+<span id="cb1-12"></span>
+<span id="cb1-13">result <span class="op">=</span> benchmark(<span class="kw">lambda</span>: <span class="bu">sum</span>(<span class="bu">range</span>(<span class="dv">1_000_000</span>)))</span>
+<span id="cb1-14"><span class="bu">print</span>(result)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>warmup</code> (3-10 calls, more for anything doing lazy initialization such as NumPy or a first database connection) discards calls before timing starts. <code>repeat</code> (50-200 for microbenchmarks, fewer for expensive operations) sets how many timed repetitions to collect. Report the minimum for “what’s the best this can do” and the median for “what does this typically cost in practice.” <strong>Common mistake:</strong> reporting a single <code>time.perf_counter()</code> measurement as “the” speed of an operation. This chapter’s own single-measurement trap shows this can overstate cost by more than 10x for any operation with first-call setup cost.</p>
+<p id="proc-48-2"><strong>Procedure 48.2 (Estimate Amdahl’s Ceiling Before Optimizing).</strong> <em>When to use:</em> before investing time parallelizing a workload. Know the theoretical maximum being worked toward.</p>
+<div id="lst-amdahl-ceiling" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-amdahl-ceiling-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;48.2: Computing Amdahl’s Law’s speedup and hard ceiling from a measured serial fraction
+</figcaption>
+<div aria-describedby="lst-amdahl-ceiling-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> amdahl_speedup(serial_fraction, n_workers):</span>
+<span id="cb2-2">    p <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> serial_fraction</span>
+<span id="cb2-3">    <span class="cf">return</span> <span class="dv">1</span> <span class="op">/</span> (serial_fraction <span class="op">+</span> p <span class="op">/</span> n_workers)</span>
+<span id="cb2-4"></span>
+<span id="cb2-5"><span class="kw">def</span> amdahl_ceiling(serial_fraction):</span>
+<span id="cb2-6">    <span class="co"># the limit as n_workers -&gt; infinity</span></span>
+<span id="cb2-7">    <span class="cf">return</span> <span class="dv">1</span> <span class="op">/</span> serial_fraction</span>
+<span id="cb2-8"></span>
+<span id="cb2-9"><span class="co"># If profiling shows 15% of a pipeline's time is a strictly serial</span></span>
+<span id="cb2-10"><span class="co"># step:</span></span>
+<span id="cb2-11">ceiling <span class="op">=</span> amdahl_ceiling(<span class="fl">0.15</span>)</span>
+<span id="cb2-12"><span class="bu">print</span>(<span class="ss">f"Max possible speedup, any parallelism: </span><span class="sc">{</span>ceiling<span class="sc">:.1f}</span><span class="ss">x"</span>)</span>
+<span id="cb2-13">speedup_8 <span class="op">=</span> amdahl_speedup(<span class="fl">0.15</span>, <span class="dv">8</span>)</span>
+<span id="cb2-14"><span class="bu">print</span>(<span class="ss">f"Realistic speedup with 8 workers: </span><span class="sc">{</span>speedup_8<span class="sc">:.2f}</span><span class="ss">x"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> estimating the serial fraction from intuition (“most of this should parallelize fine”) rather than actually profiling it (Chapter 50). A serial fraction that “feels like” 5% is very often actually 15-20% once measured. File I/O, a final aggregation step, or a shared-resource lock are common, easy-to-underestimate serial costs.</p>
+<p id="proc-48-3"><strong>Procedure 48.3 (Empirically Verify Amdahl’s Law on a Real Workload).</strong> <em>When to use:</em> confirming a real workload’s parallel scaling matches, or falls short of, theory, before committing to a specific worker count in production.</p>
+<div id="lst-amdahl-verify" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-amdahl-verify-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;48.3: Measuring real speedup across worker counts and comparing to Amdahl’s prediction
+</figcaption>
+<div aria-describedby="lst-amdahl-verify-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> time</span>
+<span id="cb3-2"><span class="im">import</span> multiprocessing <span class="im">as</span> mp</span>
+<span id="cb3-3"></span>
+<span id="cb3-4"><span class="kw">def</span> measure_scaling(work_fn, work_args_list, worker_counts):</span>
+<span id="cb3-5">    results <span class="op">=</span> {}</span>
+<span id="cb3-6">    <span class="cf">for</span> n <span class="kw">in</span> worker_counts:</span>
+<span id="cb3-7">        t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb3-8">        <span class="cf">if</span> n <span class="op">==</span> <span class="dv">1</span>:</span>
+<span id="cb3-9">            [work_fn(a) <span class="cf">for</span> a <span class="kw">in</span> work_args_list]</span>
+<span id="cb3-10">        <span class="cf">else</span>:</span>
+<span id="cb3-11">            <span class="cf">with</span> mp.Pool(n) <span class="im">as</span> pool:</span>
+<span id="cb3-12">                pool.<span class="bu">map</span>(work_fn, work_args_list)</span>
+<span id="cb3-13">        results[n] <span class="op">=</span> time.perf_counter() <span class="op">-</span> t0</span>
+<span id="cb3-14">    baseline <span class="op">=</span> results[worker_counts[<span class="dv">0</span>]]</span>
+<span id="cb3-15">    <span class="cf">return</span> {n: baseline <span class="op">/</span> t <span class="cf">for</span> n, t <span class="kw">in</span> results.items()}</span>
+<span id="cb3-16"></span>
+<span id="cb3-17"><span class="co"># speedups = measure_scaling(my_cpu_bound_fn, my_work_items, [1, 2,</span></span>
+<span id="cb3-18"><span class="co"># 4, 8, 16, 32])</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> testing only up to the machine’s physical core count and extrapolating linearly beyond it. This chapter’s own measurement shows the speedup curve bending noticeably once execution crosses from physical cores into hyperthreads (16 into 32 on the reference rig). Hyperthreads help I/O-bound or mixed workloads more than pure CPU-bound integer work, and assuming linear scaling there overestimates a production deployment’s real throughput.</p>
+</section>
+<section id="worked-example" class="level2" data-number="48.5">
+<h2 data-number="48.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">48.5</span> Worked Example</h2>
+<p>The companion notebook reproduces both measured effects above directly on this book’s reference rig, and the numbers reported through this chapter are exactly what it produces. The single-measurement trap section times an identical NumPy matmul two ways:</p>
+<div id="lst-single-measurement" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-single-measurement-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;48.4: Reproducing the single-measurement trap: one naive timing versus 200 repeated, robustly-summarized ones
+</figcaption>
+<div aria-describedby="lst-single-measurement-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> time, timeit</span>
+<span id="cb4-2"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb4-3"></span>
+<span id="cb4-4"><span class="kw">def</span> compute():</span>
+<span id="cb4-5">    x <span class="op">=</span> np.random.randn(<span class="dv">200</span>, <span class="dv">200</span>)</span>
+<span id="cb4-6">    <span class="cf">return</span> x <span class="op">@</span> x</span>
+<span id="cb4-7"></span>
+<span id="cb4-8">t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb4-9">compute()</span>
+<span id="cb4-10">single_time_ms <span class="op">=</span> (time.perf_counter() <span class="op">-</span> t0) <span class="op">*</span> <span class="dv">1000</span></span>
+<span id="cb4-11"></span>
+<span id="cb4-12">raw_times <span class="op">=</span> timeit.repeat(compute, number<span class="op">=</span><span class="dv">1</span>, repeat<span class="op">=</span><span class="dv">200</span>)</span>
+<span id="cb4-13">times_ms <span class="op">=</span> <span class="bu">sorted</span>(t <span class="op">*</span> <span class="dv">1000</span> <span class="cf">for</span> t <span class="kw">in</span> raw_times)</span>
+<span id="cb4-14">median_ms <span class="op">=</span> times_ms[<span class="bu">len</span>(times_ms) <span class="op">//</span> <span class="dv">2</span>]</span>
+<span id="cb4-15"><span class="bu">print</span>(</span>
+<span id="cb4-16">    <span class="ss">f'Single naive measurement (</span><span class="sc">{</span>single_time_ms<span class="sc">:.3f}</span><span class="ss"> ms) '</span></span>
+<span id="cb4-17">    <span class="ss">f'vs median (</span><span class="sc">{</span>median_ms<span class="sc">:.3f}</span><span class="ss"> ms): '</span></span>
+<span id="cb4-18">    <span class="ss">f'</span><span class="sc">{</span>single_time_ms <span class="op">/</span> median_ms<span class="sc">:.1f}</span><span class="ss">x overestimate'</span></span>
+<span id="cb4-19">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This produces exactly the 15.261 ms single measurement against a 1.178 ms median, a 13.0x overestimate, reported above.</p>
+<p>The Amdahl’s Law section runs a fixed 0.3-second serial setup plus a parallelizable CPU workload across the same six worker counts, then estimates the serial fraction directly from the known fixed cost and the one-worker time:</p>
+<div id="lst-amdahl-empirical" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-amdahl-empirical-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;48.5: Estimating the serial fraction and comparing measured speedup against Amdahl’s prediction
+</figcaption>
+<div aria-describedby="lst-amdahl-empirical-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">serial_time_measured <span class="op">=</span> <span class="fl">0.3</span></span>
+<span id="cb5-2"><span class="co"># times[1] is the 1-worker wall-clock time</span></span>
+<span id="cb5-3">p <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> (serial_time_measured <span class="op">/</span> times[<span class="dv">1</span>])</span>
+<span id="cb5-4">s <span class="op">=</span> <span class="dv">1</span> <span class="op">-</span> p</span>
+<span id="cb5-5"></span>
+<span id="cb5-6"><span class="cf">for</span> w <span class="kw">in</span> worker_counts:</span>
+<span id="cb5-7">    amdahl_speedup <span class="op">=</span> <span class="dv">1</span> <span class="op">/</span> (s <span class="op">+</span> p <span class="op">/</span> w)</span>
+<span id="cb5-8">    measured_speedup <span class="op">=</span> times[<span class="dv">1</span>] <span class="op">/</span> times[w]</span>
+<span id="cb5-9">    gap <span class="op">=</span> amdahl_speedup <span class="op">-</span> measured_speedup</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>With <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>s</mi><mo>≈</mo><mn>0.110</mn></mrow><annotation encoding="application/x-tex">s \approx 0.110</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal">s</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.110</span></span></span></span>, this reproduces the six-row table above exactly, including the widening gap at 16 and 32 workers: real parallelization overhead (process management, hyperthread contention for CPU-bound integer work) that Amdahl’s idealized formula does not model at all. Amdahl’s Law gives an upper bound, not a guarantee. Treat it as the ceiling to sanity-check a plan against, not a precise forecast of what will actually be measured.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="48.6">
+<h2 data-number="48.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">48.6</span> History and Further Reading</h2>
+<p>Amdahl’s original paper, “Validity of the Single Processor Approach to Achieving Large Scale Computing Capabilities” <span class="citation" data-cites="amdahl1967validity">(<a href="#ref-amdahl1967validity" role="doc-biblioref">Amdahl 1967</a>)</span>, is three pages and worth reading directly. The formula this chapter builds on appears there in essentially its modern form. Gustafson’s “Reevaluating Amdahl’s Law” <span class="citation" data-cites="gustafson1988reevaluating">(<a href="#ref-gustafson1988reevaluating" role="doc-biblioref">Gustafson 1988</a>)</span> is the standard counter-perspective, addressing the regime where problem size scales along with available hardware rather than staying fixed, which this chapter does not cover in depth. The Python <code>timeit</code> module’s own documentation is worth reading for its guidance on avoiding common benchmarking mistakes beyond what this chapter covers. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 1, applies this same profile-before-you-optimise discipline at GPU cluster scale, where the analogous measurement is “goodput,” the share of a cluster’s theoretical peak throughput actually spent on useful work, rather than raw FLOPS or device utilisation, worth reading once this chapter’s single-measurement trap has been felt directly. Cautaerts and Ghorbanfekr’s <em>GPU-Accelerated Computing with Python 3 and CUDA</em> <span class="citation" data-cites="cautaerts2026gpuaccelerated">(<a href="#ref-cautaerts2026gpuaccelerated" role="doc-biblioref">Cautaerts and Ghorbanfekr 2026</a>)</span>, Chapter 1, works through the identical Amdahl’s-law speedup-estimation exercise this chapter opens with, then measures the actual, empirically-realised benefit of parallelisation against that estimate on a real workload, the same estimate-then-verify discipline this chapter argues for.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="48.7">
+<h2 data-number="48.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">48.7</span> How This Connects</h2>
+<p>This chapter is this book’s entry point and builds on nothing before it. Every later chapter assumes its two disciplines. Chapter 50’s profiling tools exist to locate what this chapter’s mindset says to go find. Chapter 53’s parallelism chapter directly extends this chapter’s Amdahl’s Law treatment with the mechanism (the GIL) that explains why <code>multiprocessing</code>, not threading, was the right tool for the CPU-bound measurement above. It is often confused with “premature optimization avoidance” (“don’t optimize until you’ve profiled”). Related but distinct: this chapter is about correct <em>measurement</em>, while avoiding premature optimization is about correct <em>sequencing</em> (profile first, then act). Both matter, and Chapter 50 covers the profiling side in depth.</p>
+</section>
+<section id="exercises" class="level2" data-number="48.8">
+<h2 data-number="48.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">48.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-48-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain, in your own words, why the single naive measurement of <code>compute()</code> (15.261 ms) was so much larger than the 200-repetition median (1.178 ms). Name the specific mechanism responsible.</p></li>
+<li id="ex-48-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A colleague reports “I sped up my function by 3x” based on one <code>time.perf_counter()</code> call before and one after. Using this chapter’s single-measurement trap, write two or three sentences on why this claim shouldn’t be trusted yet.</p></li>
+<li id="ex-48-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 48.1, benchmark two implementations of a function that sums the squares of a list of 100,000 integers: a plain Python loop and a list comprehension. Report the median time for each and state which is faster on your machine.</p></li>
+<li id="ex-48-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 48.2, compute Amdahl’s ceiling and the realistic 8-worker speedup for a pipeline profiled at 22% serial. State whether reaching a 6x speedup goal for this pipeline is achievable with any amount of added parallelism.</p></li>
+<li id="ex-48-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s Amdahl table shows measured speedup slightly <em>exceeding</em> the prediction at 2, 4, and 8 workers, before falling short at 16 and 32. Propose an explanation for how measured speedup could exceed an idealized theoretical prediction at all, given that Amdahl’s Law assumes zero overhead.</p></li>
+<li id="ex-48-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team wants to parallelize a workload currently taking 10 hours, and needs it under 1 hour. Profiling finds the serial fraction is 8%. Using Amdahl’s ceiling, write the two or three sentences you would tell this team about whether their goal is achievable by adding workers alone.</p></li>
+<li id="ex-48-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Amdahl’s original 1967 paper (or a reliable secondary summary). Identify one assumption in the original argument that this chapter’s empirical measurement (the growing gap past 16 workers) directly demonstrates breaking down in practice.</p></li>
+<li id="ex-48-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read enough of Gustafson’s “Reevaluating Amdahl’s Law” to state, in your own words, how the “scaled speedup” framing differs from Amdahl’s fixed-problem-size framing. Give one example of a real workload where Gustafson’s framing is the more honest way to talk about parallel scaling.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="48.9">
+<h2 data-number="48.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">48.9</span> Mental Model</h2>
+<p>A stopwatch held by an unsteady hand, clicked once, tells you almost nothing. A hundred clicks, with the obviously-fumbled first one discarded, tells you the truth. Amdahl’s Law is the physics lecture sat through before the race even starts, telling you the fastest possible time no amount of training can beat, given how much of the course is uphill (serial) versus flat (parallelizable).</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-amdahl1967validity" class="csl-entry" role="listitem">
+Amdahl, Gene M. 1967. <span>“Validity of the Single Processor Approach to Achieving Large Scale Computing Capabilities.”</span> <em>Proceedings of the April 18-20, 1967, Spring Joint Computer Conference (AFIPS ’67)</em>, 483–85.
+</div>
+<div id="ref-cautaerts2026gpuaccelerated" class="csl-entry" role="listitem">
+Cautaerts, Niels, and Hossein Ghorbanfekr. 2026. <em>GPU-Accelerated Computing with Python 3 and CUDA: From Low-Level Kernels to Real-World Applications in Scientific Computing and Machine Learning</em>. Packt Publishing.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+<div id="ref-gustafson1988reevaluating" class="csl-entry" role="listitem">
+Gustafson, John L. 1988. <span>“Reevaluating Amdahl’s Law.”</span> <em>Communications of the ACM</em> 31 (5): 532–33.
+</div>
+</div>
+</section>

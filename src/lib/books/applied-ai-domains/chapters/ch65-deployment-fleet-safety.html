@@ -1,0 +1,219 @@
+<p>Book 2’s MLOps &amp; CI/CD chapter covered CI/CD gates and model registries. Book 2’s monitoring chapter covered drift detection and retraining triggers. Both assume the thing being deployed is a service that can be updated, monitored, and rolled back near-instantly, because the worst-case failure mode is a wrong API response. This chapter asks: what changes when the model controls something physical? Almost everything about the mechanics stays the same. A registry, gates, monitoring, and rollback are all still needed. What changes is the stakes and the constraints. A robot mid-task when a bad update lands can’t simply “retry the request.” A collision isn’t a 500 error to fix and redeploy. It can be irreversible.</p>
+<section id="motivation" class="level2" data-number="65.1">
+<h2 data-number="65.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">65.1</span> Motivation</h2>
+<p>The organising principle of this entire chapter: never let one thing be the only thing standing between a decision and a bad outcome. Not the learned policy’s own judgement alone. Not a single deployment step alone. Every technique below is a specific instance of adding an independent layer that can catch what the layer before it missed. Worked Example 65 demonstrates this twice, with real numbers: an independent safety monitor caught 100% of a learned policy’s out-of-distribution collisions without needing the policy itself to improve, and a staged rollout caught a bad update after only a small fraction of a fleet was exposed, instead of the entire fleet. Neither technique fixed the underlying problem. The policy was still bad at the task; the update was still bad. Each one bounded the damage while the underlying problem got fixed properly.</p>
+</section>
+<section id="exposition" class="level2" data-number="65.2">
+<h2 data-number="65.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">65.2</span> Exposition</h2>
+<section id="ota-over-the-air-updates" class="level3" data-number="65.2.1">
+<h3 data-number="65.2.1" class="anchored" data-anchor-id="ota-over-the-air-updates"><span class="header-section-number">65.2.1</span> OTA (Over-the-Air) Updates</h3>
+<p>Updating software on a fleet of physical devices has constraints a cloud deployment doesn’t. A device might be mid-task: applying an update to a robot arm mid-grasp is not the same as applying one to a stateless web server between requests. A device might be offline: intermittent connectivity (<a href="/books/applied-ai-domains/ch64-edge-compute-iot-networking" class="quarto-xref"><span>Chapter 64</span></a>) means “update the whole fleet now” often isn’t achievable even if desired. Rollback isn’t instant: a bad cloud deployment can often be rolled back in seconds, but a bad update already running on a physical device needs that device to receive, verify, and apply a second update, which takes time the device might spend doing the wrong thing. Staged/canary rollout is the standard mitigation: deploy to a small subset first, monitor a real performance signal from that subset, and only proceed to the full fleet if it looks healthy, automatically halting and rolling back the canary group if it doesn’t. The core trade-off is rollback threshold sensitivity: too strict and genuinely good updates get blocked; too loose and real regressions slip through the canary stage. There’s no setting that eliminates both, only a deliberate choice of which error is more acceptable for a given fleet.</p>
+</section>
+<section id="digital-twins-vs.-training-simulators" class="level3" data-number="65.2.2">
+<h3 data-number="65.2.2" class="anchored" data-anchor-id="digital-twins-vs.-training-simulators"><span class="header-section-number">65.2.2</span> Digital Twins vs.&nbsp;Training Simulators</h3>
+<p>Easy to conflate with <a href="/books/applied-ai-domains/ch62-simulation-isaac-sim-lab" class="quarto-xref"><span>Chapter 62</span></a>’s simulator, but they serve opposite purposes. A training simulator is deliberately not trying to match one specific reality. Domain randomization exists precisely to cover a distribution of possible realities, so the trained policy generalises. A digital twin is a virtual replica of one specific real asset, kept in sync with that asset’s actual sensor data, used for monitoring, diagnostics, and “what if” analysis on that exact device. Accuracy to the one real thing is the entire point, the opposite of domain randomization’s goal. Use a simulator to train broadly; use a digital twin to understand or predict one specific deployed device’s behaviour.</p>
+</section>
+<section id="safety-critical-monitoring-and-fail-safes" class="level3" data-number="65.2.3">
+<h3 data-number="65.2.3" class="anchored" data-anchor-id="safety-critical-monitoring-and-fail-safes"><span class="header-section-number">65.2.3</span> Safety-Critical Monitoring and Fail-Safes</h3>
+<p>A learned policy, however well-trained, should never be the only thing preventing a dangerous outcome, for exactly the reason <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a> demonstrated: it can fail confidently, with no warning, the moment it’s outside its training distribution. Independent safety layers include hard-coded override/safety monitors, simple, independently-verifiable rules that can override the learned policy’s output, deliberately not consulting the learned policy’s own confidence or reasoning, because a check that trusts the thing it’s checking isn’t a check; watchdog timers, if a control loop doesn’t report “I’m still working correctly” within an expected interval, assume something failed and trigger a safe fallback rather than continuing on stale or absent decisions; and graceful degradation, when a sensor fails or model confidence is low, the system should have a defined, safe reduced-capability mode, not silently continue operating on bad or missing input.</p>
+</section>
+<section id="human-robot-interaction-and-regulatory-landmarks" class="level3" data-number="65.2.4">
+<h3 data-number="65.2.4" class="anchored" data-anchor-id="human-robot-interaction-and-regulatory-landmarks"><span class="header-section-number">65.2.4</span> Human-Robot Interaction and Regulatory Landmarks</h3>
+<p>Where robots and people share physical space, safety has a legibility dimension that’s easy to overlook: motion needs to be predictable to nearby humans, not just collision-free by some internal metric. Safety zones (speed and separation monitoring: the robot slows or stops as a human gets closer) and clear emergency-stop mechanisms are standard practice, not optional extras. Standards like ISO 10218 (industrial robot safety) and ISO/TS 15066 (collaborative robot safety, covering human-robot proximity and contact force limits) exist specifically for this domain. This is a fast-moving, jurisdiction- and application-specific area, and this chapter is evidence that formal safety standards exist and are relevant, not current regulatory guidance; always consult current, domain-specific, qualified regulatory expertise before deploying a physical AI system in a context where these standards apply.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="65.3">
+<h2 data-number="65.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">65.3</span> Trade-offs and Limits</h2>
+<p>Staged rollouts are slower than deploying everywhere at once. That’s the cost of the safety margin they buy. For a fleet where a bad update is genuinely low-stakes (easily and instantly reversible, no physical consequence), the overhead may not be worth it; for anything physical, it almost always is. A safety monitor’s threshold trades missed dangers (too loose) against unnecessary interventions that degrade legitimate task performance (too tight). A real system needs this tuned against the actual cost of each error type. Worth restating because it’s easy to forget under deadline pressure: a safety layer is not a fix. Worked Example 65’s safety monitor eliminated collisions but did nothing for the policy’s underlying task-success rate. Shipping a system with a safety net and calling the underlying capability gap solved is a mistake. The net buys time and bounds damage, it doesn’t replace <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>’s DAgger-style fix for the actual policy.</p>
+</section>
+<section id="procedures" class="level2" data-number="65.4">
+<h2 data-number="65.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">65.4</span> Procedures</h2>
+<p id="proc-65-1"><strong>Procedure 65.1 (Build an Independent Safety Monitor).</strong> <em>When to use:</em> any learned policy controlling something physical, without exception.</p>
+<div id="lst-safety-monitor" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-safety-monitor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;65.1: A simple, independently-verifiable override rule
+</figcaption>
+<div aria-describedby="lst-safety-monitor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> safety_monitor(</span>
+<span id="cb1-2">    proposed_action,</span>
+<span id="cb1-3">    current_state,</span>
+<span id="cb1-4">    min_clearance<span class="op">=</span><span class="fl">0.3</span>,</span>
+<span id="cb1-5">):</span>
+<span id="cb1-6">    predicted_position <span class="op">=</span> (</span>
+<span id="cb1-7">        current_state.position <span class="op">+</span> proposed_action.delta</span>
+<span id="cb1-8">    )</span>
+<span id="cb1-9">    nearest_dist <span class="op">=</span> distance_to_nearest_obstacle(predicted_position)</span>
+<span id="cb1-10">    <span class="cf">if</span> nearest_dist <span class="op">&lt;</span> min_clearance:</span>
+<span id="cb1-11">        <span class="co"># override: do not consult the policy</span></span>
+<span id="cb1-12">        <span class="cf">return</span> safe_fallback_action(current_state)</span>
+<span id="cb1-13">    <span class="cf">return</span> proposed_action</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> letting the safety monitor consult the learned policy’s own confidence score before overriding. A check that trusts the thing it’s checking isn’t a check; the monitor’s rule must be independently verifiable, not derived from the policy it’s guarding against.</p>
+<p id="proc-65-2"><strong>Procedure 65.2 (Run a Staged/Canary Fleet Rollout).</strong> <em>When to use:</em> any OTA update to a fleet of physical devices.</p>
+<div id="lst-safety-canary" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-safety-canary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;65.2: Canary group first, full fleet only if it looks healthy
+</figcaption>
+<div aria-describedby="lst-safety-canary-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> staged_rollout(</span>
+<span id="cb2-2">    update,</span>
+<span id="cb2-3">    fleet,</span>
+<span id="cb2-4">    canary_fraction<span class="op">=</span><span class="fl">0.05</span>,</span>
+<span id="cb2-5">    threshold<span class="op">=</span><span class="fl">0.85</span>,</span>
+<span id="cb2-6">):</span>
+<span id="cb2-7">    canary <span class="op">=</span> sample(fleet, canary_fraction)</span>
+<span id="cb2-8">    canary.<span class="bu">apply</span>(update)</span>
+<span id="cb2-9">    canary_success_rate <span class="op">=</span> measure_performance(canary)</span>
+<span id="cb2-10">    baseline_success_rate <span class="op">=</span> measure_performance(fleet <span class="op">-</span> canary)</span>
+<span id="cb2-11">    <span class="cf">if</span> canary_success_rate <span class="op">&gt;=</span> threshold <span class="op">*</span> baseline_success_rate:</span>
+<span id="cb2-12">        (fleet <span class="op">-</span> canary).<span class="bu">apply</span>(update)</span>
+<span id="cb2-13">        <span class="cf">return</span> <span class="st">"proceed"</span></span>
+<span id="cb2-14">    canary.rollback()</span>
+<span id="cb2-15">    <span class="cf">return</span> <span class="st">"halted"</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> setting the rollback threshold without weighing the actual cost of each error type. Too strict blocks genuinely good updates (false positives, wasted deployment cycles); too loose lets real regressions reach most of the fleet before being caught (false negatives, real damage).</p>
+</section>
+<section id="worked-example" class="level2" data-number="65.5">
+<h2 data-number="65.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">65.5</span> Worked Example</h2>
+<p>A behaviour-cloned policy (final training loss 0.01537) tested on 40 out-of-distribution states, first without any safety layer, then with Procedure 65.1’s independent safety monitor added: same policy, same states, nothing about the policy itself changed:</p>
+<div id="lst-safety-worked-monitor" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-safety-worked-monitor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;65.3: Identical policy and test states, safety monitor toggled
+</figcaption>
+<div aria-describedby="lst-safety-worked-monitor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">raw_results <span class="op">=</span> evaluate(policy, test_states, safety_monitor<span class="op">=</span><span class="va">None</span>)</span>
+<span id="cb3-2">guarded_results <span class="op">=</span> evaluate(</span>
+<span id="cb3-3">    policy,</span>
+<span id="cb3-4">    test_states,</span>
+<span id="cb3-5">    safety_monitor<span class="op">=</span>safety_monitor,</span>
+<span id="cb3-6">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Configuration</th>
+<th>Reached target</th>
+<th>Collisions</th>
+<th>Mean closest approach</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Raw policy (no safety monitor)</td>
+<td>0/40</td>
+<td><strong>11/40</strong></td>
+<td>0.674</td>
+</tr>
+<tr class="even">
+<td><strong>With safety monitor (same policy, same states)</strong></td>
+<td>0/40</td>
+<td><strong>0/40</strong></td>
+<td>0.810</td>
+</tr>
+</tbody>
+</table>
+<p>The safety monitor eliminated every collision, 11/40 down to 0/40, without the policy improving at all: task success stayed at 0/40 in both conditions. This is Motivation’s central claim made numeric: the safety layer bounded the damage completely, but it did nothing whatsoever for the underlying capability gap. Shipping this system with the safety monitor and calling the policy problem solved would be a mistake. <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>’s actual fix (more or better demonstrations, DAgger-style correction) is still required; the monitor only ensures failures are safe, not that they stop happening.</p>
+<p>A staged rollout (Procedure 65.2, 5% canary group, 10 of 200 devices) tested against two scenarios:</p>
+<div id="lst-safety-worked-rollout" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-safety-worked-rollout-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;65.4: Same rollout logic, a genuinely good update and a genuinely bad one
+</figcaption>
+<div aria-describedby="lst-safety-worked-rollout-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">result_a <span class="op">=</span> staged_rollout(good_update, fleet_200)</span>
+<span id="cb4-2">result_b <span class="op">=</span> staged_rollout(bad_update, fleet_200)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Scenario</th>
+<th>Baseline success</th>
+<th>Canary success</th>
+<th>Proceeds to full fleet?</th>
+<th>Devices exposed to the bad update</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>A: Genuinely good update</td>
+<td>0.923</td>
+<td>0.936</td>
+<td><strong>True</strong></td>
+<td>0 / 200</td>
+</tr>
+<tr class="even">
+<td>B: Bad update (real regression)</td>
+<td>0.922</td>
+<td><strong>0.542</strong></td>
+<td><strong>False</strong></td>
+<td><strong>10 / 200</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Scenario B’s canary group correctly detected the regression, success rate dropping from a 0.922 baseline to 0.542 in the canary, and halted before the update reached the remaining 190 devices. For direct comparison, the identical bad update deployed all-at-once with no canary stage: full-fleet success rate <strong>0.551</strong>, essentially the canary’s regressed rate, but now across <strong>all 200 devices</strong> rather than 10. The staged rollout didn’t fix the bad update. It was still a bad update, still 0.542-0.551 success rate wherever it landed, but it cut the blast radius by 20x (10 exposed devices instead of 200), buying time to catch and fix the actual problem before most of the fleet ever saw it.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># AWS IoT Device Management supports staged/canary OTA</span></span>
+<span id="cb5-2"><span class="co"># rollouts natively via "job rollout configuration":</span></span>
+<span id="cb5-3"><span class="co"># percentage-based staged deployment with configurable</span></span>
+<span id="cb5-4"><span class="co"># failure thresholds, directly implementing Procedure</span></span>
+<span id="cb5-5"><span class="co"># 65.2's pattern at fleet scale, integrated with IoT</span></span>
+<span id="cb5-6"><span class="co"># Core's device shadow state for monitoring.</span></span></code></pre></div>
+<p><strong>When this chapter’s canary methodology matters for a SageMaker/IoT deployment:</strong> the exact 20x blast-radius reduction measured in Worked Example 65 (10 vs.&nbsp;200 devices exposed) is the quantified argument for configuring AWS IoT jobs with a staged rollout rather than an all-at-once deployment. The cost is deployment latency (Trade-offs), the benefit is a directly measurable bound on how many physical devices a bad update can reach before detection.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="65.6">
+<h2 data-number="65.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">65.6</span> History and Further Reading</h2>
+<p>Leveson’s “Engineering a Safer World” <span class="citation" data-cites="leveson2011engineeringsaferworld">(<a href="#ref-leveson2011engineeringsaferworld" role="doc-biblioref">Leveson 2011</a>)</span> is the systems-safety text the defense-in-depth framing throughout this chapter draws on, and generalises well beyond robotics. ISO 10218-1/2 covers industrial robot safety requirements; ISO/TS 15066 covers collaborative robot safety, human-proximity and force limits, both cited as illustrative references, not current compliance guidance.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="65.7">
+<h2 data-number="65.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">65.7</span> How This Connects</h2>
+<p>This chapter builds on Book 2’s Responsible AI chapter (contrast: that chapter’s bias/fairness/governance concerns are about digital AI harms; this chapter’s concerns are about physical, often irreversible, harms, a different risk category, different mitigations), Book 2’s MLOps &amp; CI/CD chapter (gates extended to physical fleets with OTA-specific constraints), and Book 2’s Monitoring chapter (drift monitoring extended to fleets that may be intermittently connected). It enables <a href="/books/applied-ai-domains/ch66-capstone-physical-ai" class="quarto-xref"><span>Chapter 66</span></a>, whose deployment/safety plan draws directly on this chapter. It’s often confused with a training simulator versus a digital twin, covered explicitly in Exposition, worth re-reading if these still feel interchangeable.</p>
+</section>
+<section id="exercises" class="level2" data-number="65.8">
+<h2 data-number="65.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">65.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-65-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State this chapter’s organising principle (“defense in depth”) in one sentence, and explain why a safety monitor consulting the policy’s own confidence score would violate it.</p></li>
+<li id="ex-65-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain the difference between a training simulator and a digital twin in one or two sentences, and state which one domain randomization applies to.</p></li>
+<li id="ex-65-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s safety-monitor results (11/40 collisions without, 0/40 with, task success 0/40 in both), explain why reporting only the collision numbers without also reporting the unchanged task-success rate would risk a misleading impression of what the safety monitor accomplished.</p></li>
+<li id="ex-65-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s rollout comparison (staged: 10/200 devices exposed to the bad update; all-at-once: 200/200), compute the blast-radius reduction factor, and explain what specifically about Scenario B’s canary success rate (0.542 vs.&nbsp;0.922 baseline) triggered the halt before the full fleet was exposed.</p></li>
+<li id="ex-65-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team ships a robot with a safety monitor that successfully eliminates all collisions in testing, and considers the project’s safety work complete. Using this chapter’s Trade-offs section and Worked Example, write the two or three sentences you’d say before agreeing.</p></li>
+<li id="ex-65-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 65.2’s rollback threshold is a tunable parameter. Describe a concrete fleet scenario where setting the threshold too strict (blocking updates too easily) would itself become a real operational cost, not just a minor inconvenience.</p></li>
+<li id="ex-65-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about ISO/TS 15066’s Speed and Separation Monitoring (SSM) requirement for collaborative robots. Explain in your own words why SSM’s requirement, that a robot’s speed must decrease as a human gets closer, is a form of defense in depth distinct from a simple emergency-stop button.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="65.9">
+<h2 data-number="65.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">65.9</span> Mental Model</h2>
+<p>Every technique in this chapter answers the same question from a different angle: if this specific thing goes wrong (a bad policy decision, a bad update, a sensor failure, a human stepping too close) what stops it from becoming a real-world harm? “The model is usually right” is never a sufficient answer for a physical system; “here is the independent layer that catches it when the model is wrong” is. This chapter’s Worked Example made both halves of that answer numeric: an independent monitor turned 11 real collisions into zero without the policy improving at all, and a canary stage turned 200 exposed devices into 10 without the bad update becoming any less bad. Defense in depth bounds damage, it doesn’t fix the underlying problem, and both are visible, measured, and distinct in the same set of results.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-leveson2011engineeringsaferworld" class="csl-entry" role="listitem">
+Leveson, Nancy. 2011. <em>Engineering a Safer World: Systems Thinking Applied to Safety</em>. MIT Press.
+</div>
+</div>
+</section>

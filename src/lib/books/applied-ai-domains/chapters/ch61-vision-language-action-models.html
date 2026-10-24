@@ -1,0 +1,222 @@
+<p><a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a> turns raw sensor data into structured observations. <a href="/books/applied-ai-domains/ch60-world-models-predictive-learning" class="quarto-xref"><span>Chapter 60</span></a> predicts how those observations will change. Neither one, on its own, tells a robot what to do. Something has to go from “here’s what I see, here’s what I’ve been asked to do” to a motor command. Traditionally that meant hand-engineering a policy for each task, one program for grasping, another for navigation, another for placing an object in a bin, none of which transferred to a new object, a new instruction phrasing, or a new environment. A vision-language-action (VLA) model is the alternative: a single model that takes an image and a natural-language instruction and outputs an action, trained end-to-end on data from many tasks, so the broad visual and linguistic generalisation of an internet-pretrained model transfers to the action-prediction problem too.</p>
+<section id="motivation" class="level2" data-number="61.1">
+<h2 data-number="61.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">61.1</span> Motivation</h2>
+<p>The insight that makes VLA models work is simple once Book 2’s transformers and prompt engineering chapters are in hand: a transformer that predicts the next language token and a transformer that predicts the next action token are doing the same computation. If an action can be represented as a token, a discrete symbol from some fixed vocabulary, then “predict what to do next” becomes just another instance of autoregressive next-token prediction, the same mechanism a chatbot uses to predict the next word. This is exactly what RT-2 (Robotics Transformer 2) did: take a vision-language model already pretrained on internet-scale image-text data, discretise the robot’s continuous action space (arm position deltas, gripper state) into bins, represent each bin as an extra token appended to the model’s existing vocabulary, and fine-tune on robot trajectories labelled with these action tokens. The model that used to output “the cat sat on the <strong><em>” now also outputs ”move the arm </em></strong>”: same architecture, same training objective, extended vocabulary. Worked Example 61 below trains a minimal VLA and runs a targeted ablation proving it genuinely conditions on both modalities, not just one.</p>
+</section>
+<section id="exposition" class="level2" data-number="61.2">
+<h2 data-number="61.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">61.2</span> Exposition</h2>
+<section id="three-architectural-families" class="level3" data-number="61.2.1">
+<h3 data-number="61.2.1" class="anchored" data-anchor-id="three-architectural-families"><span class="header-section-number">61.2.1</span> Three Architectural Families</h3>
+<p>Discrete action tokens (RT-2) bin a continuous action space into a vocabulary, predicted autoregressively like language: reuses the entire LLM training/inference stack unchanged, but discretisation loses precision for fine manipulation. Open-weight VLA backbones (OpenVLA, built on Llama) use the same discrete-token idea on an open LLM backbone: same trade-offs as RT-2, but inspectable and fine-tunable by anyone rather than locked behind an API. Continuous action heads (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>π</mi><mn>0</mn></msub></mrow><annotation encoding="application/x-tex">\pi_0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>-style models) use a small diffusion or flow-matching head to predict a chunk of continuous actions directly, conditioned on the VLM’s output embedding: full continuous precision, better for smooth/fast manipulation, but needs a separate action-generation mechanism bolted onto the VLM, more moving parts. The discrete-token approach’s appeal is architectural laziness in the best sense: it needs no new machinery, just a bigger vocabulary and more training data. The continuous-head approach exists because binning inherently loses precision. For tasks like inserting a key into a lock, a discretised action space might not have a bin fine enough to succeed.</p>
+</section>
+<section id="why-internet-pretraining-transfers-to-robot-actions" class="level3" data-number="61.2.2">
+<h3 data-number="61.2.2" class="anchored" data-anchor-id="why-internet-pretraining-transfers-to-robot-actions"><span class="header-section-number">61.2.2</span> Why Internet Pretraining Transfers to Robot Actions</h3>
+<p>A VLA model built on a pretrained VLM backbone inherits that backbone’s visual and linguistic generalisation. It has already seen millions of images of objects in the world and learned what “the red mug” or “the object on the left” refers to, long before it saw a single robot trajectory. This is why VLA models generalise to novel objects and instruction phrasings far better than a policy trained from scratch on robot data alone, which only ever saw the specific objects and phrasings in its usually small, expensive-to-collect training set. The action-conditioned part of training is comparatively small and narrow; the visual/language competence it’s built on is broad and comes largely for free.</p>
+</section>
+<section id="where-world-models-fit-in" class="level3" data-number="61.2.3">
+<h3 data-number="61.2.3" class="anchored" data-anchor-id="where-world-models-fit-in"><span class="header-section-number">61.2.3</span> Where World Models Fit In</h3>
+<p>Some VLA training recipes add an auxiliary objective borrowed directly from <a href="/books/applied-ai-domains/ch60-world-models-predictive-learning" class="quarto-xref"><span>Chapter 60</span></a>: alongside predicting the next action, also predict what the next observation (or its embedding) will look like. The theory is that a model forced to predict consequences, not just imitate actions, learns richer internal structure, closer to understanding why an action works, not just that it was in the training data. This is an active research direction, not yet standard in every VLA architecture.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="61.3">
+<h2 data-number="61.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">61.3</span> Trade-offs and Limits</h2>
+<p>The visual/language half of a VLA transfers broadly from pretraining, but the action-conditioned half still needs real (or simulated, <a href="/books/applied-ai-domains/ch62-simulation-isaac-sim-lab" class="quarto-xref"><span>Chapter 62</span></a>) robot trajectory data, which is expensive and slow to collect compared to scraping the web for images and text. Control loops often need to run at 50-1000 Hz, and a multi-billion-parameter transformer forward pass does not fit inside a 20ms budget on typical hardware without serious optimisation. This is exactly why <a href="/books/applied-ai-domains/ch64-edge-compute-iot-networking" class="quarto-xref"><span>Chapter 64</span></a> exists: VLA inference in practice usually runs at a lower frequency than the underlying control loop, with a faster low-level controller handling the gap between VLA decisions. Binning a continuous action space trades precision for architectural simplicity. Coarse tasks (navigate to a room) tolerate this fine; precise tasks (thread a needle) may need a continuous action head instead.</p>
+</section>
+<section id="procedures" class="level2" data-number="61.4">
+<h2 data-number="61.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">61.4</span> Procedures</h2>
+<p id="proc-61-1"><strong>Procedure 61.1 (Choose an Action Representation).</strong> <em>When to use:</em> at the start of any VLA project, before writing any training code.</p>
+<div id="lst-vla-discretize" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vla-discretize-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;61.1: A simple bin-based discretisation scheme, if going the token route
+</figcaption>
+<div aria-describedby="lst-vla-discretize-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> discretize_action(</span>
+<span id="cb1-2">    continuous_action,</span>
+<span id="cb1-3">    n_bins<span class="op">=</span><span class="dv">256</span>,</span>
+<span id="cb1-4">    action_range<span class="op">=</span>(<span class="op">-</span><span class="fl">1.0</span>, <span class="fl">1.0</span>),</span>
+<span id="cb1-5">):</span>
+<span id="cb1-6">    lo, hi <span class="op">=</span> action_range</span>
+<span id="cb1-7">    clipped <span class="op">=</span> np.clip(continuous_action, lo, hi)</span>
+<span id="cb1-8">    <span class="cf">return</span> <span class="bu">int</span>((clipped <span class="op">-</span> lo) <span class="op">/</span> (hi <span class="op">-</span> lo) <span class="op">*</span> (n_bins <span class="op">-</span> <span class="dv">1</span>))</span>
+<span id="cb1-9"></span>
+<span id="cb1-10"><span class="kw">def</span> undiscretize_action(</span>
+<span id="cb1-11">    bin_idx,</span>
+<span id="cb1-12">    n_bins<span class="op">=</span><span class="dv">256</span>,</span>
+<span id="cb1-13">    action_range<span class="op">=</span>(<span class="op">-</span><span class="fl">1.0</span>, <span class="fl">1.0</span>),</span>
+<span id="cb1-14">):</span>
+<span id="cb1-15">    lo, hi <span class="op">=</span> action_range</span>
+<span id="cb1-16">    <span class="cf">return</span> lo <span class="op">+</span> (bin_idx <span class="op">+</span> <span class="fl">0.5</span>) <span class="op">/</span> n_bins <span class="op">*</span> (hi <span class="op">-</span> lo)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> picking too few bins for a dimension that needs precision (e.g.&nbsp;32 bins for gripper closure force) and then blaming the model architecture when the real problem is the discretisation grid.</p>
+<p id="proc-61-2"><strong>Procedure 61.2 (Structure a VLA Fine-Tuning Dataset).</strong> <em>When to use:</em> before collecting or assembling training data for action-conditioned fine-tuning.</p>
+<div id="lst-vla-dataset" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vla-dataset-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;61.2: Minimum required fields per training example
+</figcaption>
+<div aria-describedby="lst-vla-dataset-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">example <span class="op">=</span> {</span>
+<span id="cb2-2">    <span class="co"># observation at time t</span></span>
+<span id="cb2-3">    <span class="st">"image"</span>: ...,</span>
+<span id="cb2-4">    <span class="st">"instruction"</span>: <span class="st">"pick up the red block and place it in the bin"</span>,</span>
+<span id="cb2-5">    <span class="co"># the action actually taken at time t</span></span>
+<span id="cb2-6">    <span class="st">"action"</span>: [...],</span>
+<span id="cb2-7">    <span class="st">"episode_id"</span>: <span class="st">"ep_0042"</span>, <span class="st">"timestep"</span>: <span class="dv">17</span>, <span class="st">"success"</span>: <span class="va">True</span>,</span>
+<span id="cb2-8">}</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Structuring guidance:</strong> include the full instruction text, not a task ID. The point of a VLA is generalising to instruction phrasing it hasn’t seen verbatim. Vary phrasing for the same underlying task during data collection if possible, which is what teaches generalisation across phrasing rather than memorising one exact string.</p>
+</section>
+<section id="worked-example" class="level2" data-number="61.5">
+<h2 data-number="61.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">61.5</span> Worked Example</h2>
+<p>A minimal VLA trained from scratch on a synthetic grid-world task: image observation, natural-language instruction, discrete action token output:</p>
+<div id="lst-vla-worked-train" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vla-worked-train-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;61.3: Training loss over 30 epochs
+</figcaption>
+<div aria-describedby="lst-vla-worked-train-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">30</span>):</span>
+<span id="cb3-2">    loss <span class="op">=</span> train_step(</span>
+<span id="cb3-3">        vla_model,</span>
+<span id="cb3-4">        image_batch,</span>
+<span id="cb3-5">        instruction_batch,</span>
+<span id="cb3-6">        action_batch,</span>
+<span id="cb3-7">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Epoch</th>
+<th>Loss</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>1.3462</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td>0.3856</td>
+</tr>
+<tr class="odd">
+<td>10</td>
+<td>0.0028</td>
+</tr>
+<tr class="even">
+<td>20</td>
+<td>0.0003</td>
+</tr>
+<tr class="odd">
+<td>29 (final)</td>
+<td><strong>0.0001</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Loss converges to near-zero, but per <a href="/books/applied-ai-domains/ch60-world-models-predictive-learning" class="quarto-xref"><span>Chapter 60</span></a>’s lesson about not trusting a loss curve alone, the real question is whether the model is genuinely conditioning on <em>both</em> the image and the instruction, or has found a shortcut that only needs one. A targeted ablation answers this directly by scrambling one modality at a time at evaluation time:</p>
+<div id="lst-vla-worked-ablation" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vla-worked-ablation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;61.4: Full accuracy vs.&nbsp;each modality scrambled independently
+</figcaption>
+<div aria-describedby="lst-vla-worked-ablation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">full_acc <span class="op">=</span> evaluate(vla_model, test_images, test_instructions)</span>
+<span id="cb4-2">instr_scrambled_acc <span class="op">=</span> evaluate(</span>
+<span id="cb4-3">    vla_model,</span>
+<span id="cb4-4">    test_images,</span>
+<span id="cb4-5">    shuffle(test_instructions),</span>
+<span id="cb4-6">)</span>
+<span id="cb4-7">image_scrambled_acc <span class="op">=</span> evaluate(</span>
+<span id="cb4-8">    vla_model,</span>
+<span id="cb4-9">    shuffle(test_images),</span>
+<span id="cb4-10">    test_instructions,</span>
+<span id="cb4-11">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Condition</th>
+<th>Accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Full (both modalities intact)</td>
+<td><strong>1.000</strong></td>
+</tr>
+<tr class="even">
+<td>Instruction scrambled (image intact)</td>
+<td>0.618</td>
+</tr>
+<tr class="odd">
+<td>Image scrambled (instruction intact)</td>
+<td>0.278</td>
+</tr>
+<tr class="even">
+<td>Majority-class baseline</td>
+<td>0.316</td>
+</tr>
+</tbody>
+</table>
+<p>Three findings, all measured rather than assumed. First, full accuracy (1.000) confirms the model solved the task completely when given genuine, matched image-instruction pairs. Second, both scrambling conditions drop accuracy well below full, proving the model genuinely depends on both modalities, not shortcutting past either one entirely (a model ignoring the instruction would show no drop when it’s scrambled; neither modality shows that). Third, and more informative: the two scrambled conditions aren’t symmetric. Scrambling the instruction (0.618) still leaves the model well above the majority-class baseline (0.316). The image alone carries substantial task-relevant signal on this dataset. Scrambling the image (0.278) drops accuracy to <em>below</em> the majority-class baseline. Without correct visual grounding, the model’s instruction-conditioned guesses are actively worse than simply guessing the most common action. This asymmetry is a genuine, task-specific finding about which modality this particular synthetic task leans on more heavily, not a general claim that vision always matters more than language for VLA models. A different task could show the opposite pattern, which is exactly why this ablation is worth running rather than assuming.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">from</span> sagemaker.pytorch <span class="im">import</span> PyTorch</span>
+<span id="cb5-2"></span>
+<span id="cb5-3">estimator <span class="op">=</span> PyTorch(</span>
+<span id="cb5-4">    entry_point<span class="op">=</span><span class="st">'train_vla.py'</span>,</span>
+<span id="cb5-5">    instance_type<span class="op">=</span><span class="st">'ml.p4d.24xlarge'</span>,</span>
+<span id="cb5-6">    hyperparameters<span class="op">=</span>{</span>
+<span id="cb5-7">        <span class="st">'action_bins'</span>: <span class="dv">256</span>,</span>
+<span id="cb5-8">        <span class="st">'co_finetune_web_data'</span>: <span class="va">True</span>,</span>
+<span id="cb5-9">    },</span>
+<span id="cb5-10">)</span></code></pre></div>
+<p><strong>When this chapter’s ablation methodology matters for a SageMaker deployment:</strong> before promoting a VLA checkpoint to a robot-facing endpoint, running Procedure 61.1’s discretisation choice alongside this chapter’s modality-ablation check as an automated evaluation gate (in the style of Book 2’s MLOps &amp; CI/CD chapter) catches a model that has learned to ignore one modality, a failure mode invisible in training loss alone, exactly as Worked Example 61 demonstrated.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="61.6">
+<h2 data-number="61.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">61.6</span> History and Further Reading</h2>
+<p>Brohan et al.’s “RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control” <span class="citation" data-cites="brohan2023rt2">(<a href="#ref-brohan2023rt2" role="doc-biblioref">Brohan et al. 2023</a>)</span> is the discrete-action-token architecture this chapter’s tutorial is a toy version of. Kim et al.’s “OpenVLA: An Open-Source Vision-Language-Action Model” <span class="citation" data-cites="kim2024openvla">(<a href="#ref-kim2024openvla" role="doc-biblioref">Kim et al. 2024</a>)</span> is the open-weight, reproducible counterpart to RT-2’s closed approach. Physical Intelligence’s “<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>π</mi><mn>0</mn></msub></mrow><annotation encoding="application/x-tex">\pi_0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>: A Vision-Language-Action Flow Model for General Robot Control” <span class="citation" data-cites="black2024pi0">(<a href="#ref-black2024pi0" role="doc-biblioref">Black et al. 2024</a>)</span> describes the continuous/flow-matching action head alternative to discrete tokens.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="61.7">
+<h2 data-number="61.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">61.7</span> How This Connects</h2>
+<p>This chapter builds on Book 2’s transformers chapter (the attention/autoregressive-generation mechanism underlying every VLA’s action prediction), Book 2’s prompt engineering chapter (the language half of a VLA is, mechanically, an instruction-following language model), and <a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a> (VLA vision encoders do the same job as a dedicated perception pipeline, just trained jointly with the action head rather than as a separate stage). It enables <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>, where a VLA-style policy is fine-tuned inside a simulator using imitation learning and reinforcement learning. It’s often confused with a generic multimodal chatbot that can describe an image and discuss what a robot should do, still purely language output, versus a VLA model, which outputs an actual action token consumed by a control system. Describing what to do and deciding what to do are architecturally different outputs, even when both are built on similar transformer backbones.</p>
+</section>
+<section id="exercises" class="level2" data-number="61.8">
+<h2 data-number="61.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">61.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-61-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the “embarrassingly simple” insight that makes VLA models work, connecting next-token prediction for language to next-action prediction.</p></li>
+<li id="ex-61-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three architectural families for representing actions (discrete tokens, open-weight discrete backbones, continuous heads) and state one trade-off for each.</p></li>
+<li id="ex-61-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s ablation results (instruction-scrambled 0.618, image-scrambled 0.278, baseline 0.316), explain why the image-scrambled condition falling BELOW the majority-class baseline is more informative than it simply being lower than the instruction-scrambled condition.</p></li>
+<li id="ex-61-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s full-accuracy result (1.000) alongside both scrambled conditions being well below it, explain what specific claim this combination proves about the model that the loss curve alone (converging to 0.0001) could not have proven.</p></li>
+<li id="ex-61-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team reports “our VLA model’s training loss converged beautifully, it’s ready to deploy.” Using this chapter’s Worked Example, write the two or three sentences you’d say before agreeing.</p></li>
+<li id="ex-61-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 61.1 warns about picking too few bins for a precision-sensitive action dimension. Describe a concrete robotic task where 32 bins for gripper closure force would likely cause visible task failures, and explain what those failures would look like.</p></li>
+<li id="ex-61-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>π</mi><mn>0</mn></msub></mrow><annotation encoding="application/x-tex">\pi_0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>’s flow-matching action head as an alternative to RT-2’s discrete tokens. Explain in your own words why a continuous action head is better suited to representing “several equally valid ways to grasp an object” than a discrete token vocabulary is.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="61.9">
+<h2 data-number="61.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">61.9</span> Mental Model</h2>
+<p>A VLA model is a language model whose vocabulary got bigger. It didn’t need a fundamentally new architecture to go from predicting words to predicting motor commands. It needed the same architecture, a wider output vocabulary, and training data that pairs observations and instructions with the actions that followed. Everything hard about VLA models, data collection, inference latency, precision, is an engineering problem layered on top of that simple idea, not a departure from it. This chapter’s Worked Example is a reminder that a converged loss curve proves the model fit <em>something</em>; only a targeted ablation, deliberately breaking one modality at a time, proves it fit the <em>right</em> something.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-black2024pi0" class="csl-entry" role="listitem">
+Black, Kevin, Noah Brown, Danny Driess, et al. 2024. <span>“<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>π</mi><mn>0</mn></msub></mrow><annotation encoding="application/x-tex">\pi_0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">0</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>: A Vision-Language-Action Flow Model for General Robot Control.”</span> <em>arXiv Preprint arXiv:2410.24164</em>.
+</div>
+<div id="ref-brohan2023rt2" class="csl-entry" role="listitem">
+Brohan, Anthony, Noah Brown, Justice Carbajal, et al. 2023. <span>“RT-2: Vision-Language-Action Models Transfer Web Knowledge to Robotic Control.”</span> <em>Conference on Robot Learning</em>.
+</div>
+<div id="ref-kim2024openvla" class="csl-entry" role="listitem">
+Kim, Moo Jin, Karl Pertsch, Siddharth Karamcheti, et al. 2024. <span>“OpenVLA: An Open-Source Vision-Language-Action Model.”</span> <em>arXiv Preprint arXiv:2406.09246</em>.
+</div>
+</div>
+</section>

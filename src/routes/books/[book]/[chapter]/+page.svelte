@@ -15,7 +15,7 @@
 	function scrollRegions(node: HTMLElement) {
 		const mark = () => {
 			for (const el of node.querySelectorAll<HTMLElement>('table, .katex-display, pre')) {
-				const scrolls = el.scrollWidth > el.clientWidth + 1;
+				const scrolls = el.scrollWidth > el.clientWidth;
 				if (scrolls && !el.hasAttribute('tabindex')) {
 					el.setAttribute('tabindex', '0');
 					el.setAttribute('role', 'region');
@@ -30,6 +30,9 @@
 		mark();
 		const ro = new ResizeObserver(mark);
 		ro.observe(node);
+		// Web fonts can widen a table after the first check, without resizing the text column.
+		document.fonts?.ready.then(mark);
+		window.addEventListener('load', mark, { once: true });
 		return { destroy: () => ro.disconnect() };
 	}
 </script>
@@ -125,7 +128,6 @@
 	.chapter-text :global([role='region']:focus-visible) { outline: 2px solid var(--nd-ink); outline-offset: 2px; }
 	.chapter-text :global(pre.sourceCode) { margin: 0; padding: var(--nd-space-4) var(--nd-space-5); overflow-x: auto; color: #ecebff; background: transparent; font-size: var(--nd-text-sm); line-height: 1.6; }
 	.chapter-text :global(pre.sourceCode code) { font-family: var(--nd-font-mono); background: none; padding: 0; color: inherit; }
-	.chapter-text :global(pre.sourceCode code > span) { display: block; min-height: 1.6em; }
 	.chapter-text :global(.sourceCode .kw), .chapter-text :global(.sourceCode .cf), .chapter-text :global(.sourceCode .im) { color: #ff2bd6; }
 	.chapter-text :global(.sourceCode .st), .chapter-text :global(.sourceCode .ss), .chapter-text :global(.sourceCode .vs), .chapter-text :global(.sourceCode .ch) { color: #3ff0b8; }
 	.chapter-text :global(.sourceCode .dv), .chapter-text :global(.sourceCode .bn), .chapter-text :global(.sourceCode .fl), .chapter-text :global(.sourceCode .cn) { color: #f6bd6a; }

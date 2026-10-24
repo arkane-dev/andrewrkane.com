@@ -1,0 +1,269 @@
+<p><a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a> turns raw sensor data into a structured picture of what’s out there right now. That’s necessary but not sufficient for acting in the world. A robot also needs some way to answer “if I do X, what will the world look like next?” without actually doing X on real, expensive, breakable hardware first. A world model is exactly that: a learned model of how the world (or the robot’s observations of it) evolves in response to actions, used to predict, imagine, or plan ahead of time. It’s the difference between a robot that can only react to what it currently senses and one that can ask “what if” before committing to a motion.</p>
+<section id="motivation" class="level2" data-number="60.1">
+<h2 data-number="60.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">60.1</span> Motivation</h2>
+<p>There are three broad families of world model. Pixel-space generative models predict the next frame, pixel by pixel, the world-model equivalent of a text-generation LLM, but for video; most of a frame’s pixels are irrelevant, unpredictable detail, and a model that spends capacity predicting those wastes effort that should go toward predicting what actually matters. Latent/representation predictors (the JEPA family) predict the next embedding instead of the next frame. Explicit dynamics models predict the next state directly, in a hand-defined state space. Worked Example 60 below builds and measures a real JEPA-style model, including the failure mode its central architectural trick exists to prevent.</p>
+</section>
+<section id="exposition" class="level2" data-number="60.2">
+<h2 data-number="60.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">60.2</span> Exposition</h2>
+<section id="latent-space-predictive-models-the-jepa-family" class="level3" data-number="60.2.1">
+<h3 data-number="60.2.1" class="anchored" data-anchor-id="latent-space-predictive-models-the-jepa-family"><span class="header-section-number">60.2.1</span> Latent-Space Predictive Models: the JEPA Family</h3>
+<p>JEPA (Joint Embedding Predictive Architecture) predicts an embedding, the output of a learned encoder, instead of a masked or future patch’s raw pixels, using a second, separately-updated encoder to produce the prediction target. This sidesteps the pixel-noise problem directly: an embedding can, and should, discard irrelevant texture/lighting noise while keeping the structure that actually matters, so the prediction task only has to get the meaningful part right. I-JEPA (Image JEPA) does this for still images: mask out several patches of an image, and predict their embeddings from the visible patches’ embeddings. V-JEPA (Video JEPA) extends this temporally: mask out a spatio-temporal block of a video clip, forcing the model to learn something about how scenes change over time, not just what a single frame looks like. The architecture has three pieces: a context encoder (embeds visible patches/frames, the only network receiving gradients directly), a target encoder (embeds masked patches to produce prediction targets, structurally identical to the context encoder but updated as an exponential moving average, EMA, of it, with no gradient of its own), and a predictor (given the context encoder’s output plus positional information about where the masked region is, predicts what the target encoder would output there).</p>
+</section>
+<section id="why-the-ema-target-encoder-isnt-optional" class="level3" data-number="60.2.2">
+<h3 data-number="60.2.2" class="anchored" data-anchor-id="why-the-ema-target-encoder-isnt-optional"><span class="header-section-number">60.2.2</span> Why the EMA Target Encoder Isn’t Optional</h3>
+<p>If the target encoder were just the same, freely-trainable network as the context encoder, the training objective has a trivial solution that has nothing to do with prediction: collapse every input to nearly the same output embedding. Then any prediction is “correct” by construction, because there’s nothing left to distinguish. Loss goes to near zero, and the model has learned nothing. This is representation collapse, the central engineering problem every self-supervised joint-embedding method has to solve. JEPA and BYOL use an EMA target encoder that updates slowly and receives no gradient. The target the predictor chases can’t collapse in lockstep with the context encoder, because it isn’t being trained to make the loss easy. SimSiam uses stop-gradient on one branch plus an architectural asymmetry. VICReg uses no separate target encoder at all, instead adding an explicit regularisation term that directly penalises low variance across the batch, making collapse costly rather than architecturally impossible. Worked Example 60 doesn’t just describe this. It removes the EMA mechanism and measures collapse happening directly.</p>
+</section>
+<section id="explicit-dynamics-models" class="level3" data-number="60.2.3">
+<h3 data-number="60.2.3" class="anchored" data-anchor-id="explicit-dynamics-models"><span class="header-section-number">60.2.3</span> Explicit Dynamics Models</h3>
+<p>The classical alternative, from model-based reinforcement learning: define a state space by hand (position, velocity, joint angles), and train a model to predict <code>next_state = f(state, action)</code> directly. This is what planning via rollouts uses: simulate several candidate action sequences forward through the learned dynamics model, score each resulting trajectory, and take the best one, all without touching real hardware. It’s more interpretable and sample-efficient than learning from raw pixels, but only works when a good, low-dimensional state space can be defined by hand, exactly the problem perception and JEPA-style representation learning exist to solve when a hand-designed state space isn’t available or isn’t rich enough.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="60.3">
+<h2 data-number="60.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">60.3</span> Trade-offs and Limits</h2>
+<p>Pixel-space models produce genuinely useful outputs on their own (a predicted frame can be looked at directly) which latent-space embeddings don’t give without an additional decoder or probe, but pixel-space models pay for that with far more compute spent on unpredictable detail. Latent-space models are more sample- and compute-efficient for downstream tasks, but their embeddings are opaque without an additional decoder or probe. A hand-designed state space is interpretable and can be very sample-efficient, but only scales to problems simple enough to define by hand; learned representations scale to raw sensory input at the cost of interpretability. The EMA momentum itself is a trade-off: too low (target encoder updates too fast) risks reintroducing collapse, since the target starts moving in lockstep with the online network again; too high (target barely updates) slows learning, since the prediction target is stale relative to what the context encoder currently knows.</p>
+</section>
+<section id="procedures" class="level2" data-number="60.4">
+<h2 data-number="60.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">60.4</span> Procedures</h2>
+<p id="proc-60-1"><strong>Procedure 60.1 (Implement a Masking Scheme for Patch-Based Prediction).</strong> <em>When to use:</em> building the training loop for any JEPA-style masked-prediction model.</p>
+<div id="lst-worldmodel-mask" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-worldmodel-mask-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;60.1: Random context/target split, always leaving some visible context
+</figcaption>
+<div aria-describedby="lst-worldmodel-mask-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> mask_indices(n_patches, mask_ratio<span class="op">=</span><span class="fl">0.5</span>, min_context<span class="op">=</span><span class="dv">1</span>):</span>
+<span id="cb1-2">    idx <span class="op">=</span> np.random.permutation(n_patches)</span>
+<span id="cb1-3">    n_mask <span class="op">=</span> <span class="bu">min</span>(</span>
+<span id="cb1-4">        <span class="bu">int</span>(n_patches <span class="op">*</span> mask_ratio),</span>
+<span id="cb1-5">        n_patches <span class="op">-</span> min_context,</span>
+<span id="cb1-6">    )</span>
+<span id="cb1-7">    context_idx, target_idx <span class="op">=</span> idx[n_mask:], idx[:n_mask]</span>
+<span id="cb1-8">    <span class="cf">return</span> context_idx, target_idx</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> masking too little makes the task trivial (the predictor can nearly copy adjacent visible patches); masking too much leaves the predictor with no useful context to condition on. Both reduce how much the encoder is forced to learn.</p>
+<p id="proc-60-2"><strong>Procedure 60.2 (Implement an EMA Target Encoder Update).</strong> <em>When to use:</em> any joint-embedding model (JEPA, BYOL-style) needing a target network that updates without receiving its own gradients.</p>
+<div id="lst-worldmodel-ema" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-worldmodel-ema-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;60.2: EMA update, applied after every optimizer step
+</figcaption>
+<div aria-describedby="lst-worldmodel-ema-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="at">@torch.no_grad</span>()</span>
+<span id="cb2-2"><span class="kw">def</span> ema_update(target_model, online_model, momentum<span class="op">=</span><span class="fl">0.996</span>):</span>
+<span id="cb2-3">    <span class="cf">for</span> pt, po <span class="kw">in</span> <span class="bu">zip</span>(</span>
+<span id="cb2-4">        target_model.parameters(),</span>
+<span id="cb2-5">        online_model.parameters(),</span>
+<span id="cb2-6">    ):</span>
+<span id="cb2-7">        pt.mul_(momentum).add_(po, alpha<span class="op">=</span><span class="dv">1</span> <span class="op">-</span> momentum)</span>
+<span id="cb2-8"><span class="co"># target_model initialised identically to online_model, then frozen</span></span>
+<span id="cb2-9"><span class="co"># (requires_grad_(False))</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Typical momentum values:</strong> 0.99–0.999 for models trained many thousands of steps; a short toy run can use a fixed value around 0.99–0.996. Too low and the target chases the online network too closely, risking collapse; too high and the target barely moves, slowing learning.</p>
+<p id="proc-60-3"><strong>Procedure 60.3 (Check for Representation Collapse).</strong> <em>When to use:</em> a joint-embedding model’s loss looks suspiciously good, very low, very fast, which is the first symptom to check, not celebrate.</p>
+<div id="lst-worldmodel-collapse-check" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-worldmodel-collapse-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;60.3: Embedding variance across a batch: the direct diagnostic, not the loss curve
+</figcaption>
+<div aria-describedby="lst-worldmodel-collapse-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="at">@torch.no_grad</span>()</span>
+<span id="cb3-2"><span class="kw">def</span> embedding_health_check(encoder, patch_batch):</span>
+<span id="cb3-3">    z <span class="op">=</span> encoder(patch_batch).mean(dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb3-4">    std_per_dim <span class="op">=</span> z.std(dim<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb3-5">    <span class="cf">return</span> std_per_dim.mean().item()</span>
+<span id="cb3-6"><span class="co"># Healthy: std comparable to a freshly-initialised random encoder's</span></span>
+<span id="cb3-7"><span class="co"># spread.</span></span>
+<span id="cb3-8"><span class="co"># Suspect collapse if it's ~10x+ smaller.</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="60.5">
+<h2 data-number="60.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">60.5</span> Worked Example</h2>
+<p>A minimal JEPA trained from scratch on synthetic images for 60 epochs:</p>
+<div id="lst-worldmodel-worked-train" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-worldmodel-worked-train-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;60.4: Training loss over 60 epochs
+</figcaption>
+<div aria-describedby="lst-worldmodel-worked-train-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">60</span>):</span>
+<span id="cb4-2">    loss <span class="op">=</span> train_step(</span>
+<span id="cb4-3">        context_encoder,</span>
+<span id="cb4-4">        target_encoder,</span>
+<span id="cb4-5">        predictor,</span>
+<span id="cb4-6">        batch,</span>
+<span id="cb4-7">    )</span>
+<span id="cb4-8">    ema_update(target_encoder, context_encoder, momentum<span class="op">=</span><span class="fl">0.996</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Epoch</th>
+<th>Loss</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>0.00414</td>
+</tr>
+<tr class="even">
+<td>10</td>
+<td>0.00101</td>
+</tr>
+<tr class="odd">
+<td>30</td>
+<td>0.00134</td>
+</tr>
+<tr class="even">
+<td>50</td>
+<td>0.00101</td>
+</tr>
+<tr class="odd">
+<td>59 (final)</td>
+<td><strong>0.00083</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Loss drops steeply in the first few epochs then plateaus. Most of the easy structure is picked up fast. Before trusting this as “real prediction,” Procedure 60.3’s spirit demands a sharper check than the loss curve alone: does the predictor actually use its input, or has it found a trivial shortcut (always predicting the batch mean)?</p>
+<div id="lst-worldmodel-worked-sanity" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-worldmodel-worked-sanity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;60.5: Real predictor vs.&nbsp;a trivial mean-prediction baseline
+</figcaption>
+<div aria-describedby="lst-worldmodel-worked-sanity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">real_mse <span class="op">=</span> eval_predictor(</span>
+<span id="cb5-2">    predictor,</span>
+<span id="cb5-3">    context_encoder,</span>
+<span id="cb5-4">    target_encoder,</span>
+<span id="cb5-5">    test_batch,</span>
+<span id="cb5-6">)</span>
+<span id="cb5-7">baseline_mse <span class="op">=</span> eval_mean_baseline(target_encoder, test_batch)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Predictor</th>
+<th>MSE</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Real, input-conditioned predictor</td>
+<td><strong>0.00080</strong></td>
+</tr>
+<tr class="even">
+<td>“Always predict the mean” baseline</td>
+<td>0.03201</td>
+</tr>
+</tbody>
+</table>
+<p>The real predictor beats the trivial mean baseline by <strong>40.1x</strong>, genuine, input-conditioned prediction, not a dataset-average shortcut hiding behind a low-looking loss number.</p>
+<p>A linear probe (Exposition’s “sample efficiency through selective prediction” claim, tested directly) checks whether the learned embedding supports a downstream task, shape classification, that was never an explicit training target:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Encoder</th>
+<th>Linear probe accuracy (5 classes, chance = 0.20)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Trained JEPA encoder</td>
+<td><strong>0.488</strong></td>
+</tr>
+<tr class="even">
+<td>Random-init encoder</td>
+<td>0.436</td>
+</tr>
+</tbody>
+</table>
+<p>The trained encoder beats both chance and a random-init baseline, though modestly on this toy-scale task. Real signal, not a dramatic result, and reported honestly as such rather than oversold.</p>
+<p>Finally, the EMA mechanism (Procedure 60.2) is deliberately removed to watch representation collapse happen directly:</p>
+<div id="lst-worldmodel-worked-collapse" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-worldmodel-worked-collapse-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;60.6: Same training loop, EMA target encoder replaced with a freely-trainable copy
+</figcaption>
+<div aria-describedby="lst-worldmodel-worked-collapse-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># everything else identical</span></span>
+<span id="cb6-2">collapsed_run <span class="op">=</span> train_jepa(use_ema_target<span class="op">=</span><span class="va">False</span>, epochs<span class="op">=</span><span class="dv">60</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Run</th>
+<th>Final loss</th>
+<th>Embedding std</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Healthy (with EMA)</td>
+<td>0.000833</td>
+<td>0.00540</td>
+</tr>
+<tr class="even">
+<td><strong>Collapsed (no EMA)</strong></td>
+<td><strong>0.000003</strong></td>
+<td><strong>0.00039</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The collapsed run’s loss is <em>lower</em>, 0.000003 versus 0.000833, which looks like a better result if only the loss curve is watched. But its embedding spread is roughly 14x smaller: every input is being mapped to nearly the same point, exactly Exposition’s predicted trivial solution. A loss curve alone cannot tell these two outcomes apart; Procedure 60.3’s variance check is what distinguishes “the model learned to predict well” from “the model learned to stop saying anything at all.”</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<p>World-model training (JEPA-style or otherwise) is a standard PyTorch training loop from SageMaker’s perspective. A <code>PyTorch</code> estimator on a <code>ml.g5</code>/<code>ml.p4d</code> instance runs Procedures 60.1-60.2 unmodified. The one operational addition worth building in for this specific architecture: log the embedding-variance health check (Procedure 60.3) as a custom CloudWatch metric alongside the training loss, since, as this chapter’s Worked Example demonstrates directly, a training dashboard showing only loss would flag the collapsed run as the <em>better</em> one.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="60.6">
+<h2 data-number="60.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">60.6</span> History and Further Reading</h2>
+<p>Assran et al.’s “Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture” <span class="citation" data-cites="assran2023ijepa">(<a href="#ref-assran2023ijepa" role="doc-biblioref">Assran et al. 2023</a>)</span> is the original I-JEPA paper this chapter’s tutorial is a toy version of. Bardes et al.’s “V-JEPA” <span class="citation" data-cites="bardes2024vjepa">(<a href="#ref-bardes2024vjepa" role="doc-biblioref">Bardes et al. 2024</a>)</span> extends the same idea temporally. Grill et al.’s “Bootstrap Your Own Latent” (BYOL) <span class="citation" data-cites="grill2020byol">(<a href="#ref-grill2020byol" role="doc-biblioref">Grill et al. 2020</a>)</span> is the original source of the EMA-target-encoder trick. Bardes, Ponce &amp; LeCun’s “VICReg” <span class="citation" data-cites="bardes2022vicreg">(<a href="#ref-bardes2022vicreg" role="doc-biblioref">Bardes et al. 2022</a>)</span> is the explicit-regularisation alternative to an EMA target encoder. Book 1’s Information Theory chapter provides the entropy/compression argument for why latent-space prediction beats pixel-space prediction.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="60.7">
+<h2 data-number="60.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">60.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a> (a world model predicts the next structured representation, which presupposes a structured representation of the current observation already exists) and Book 1’s Information Theory chapter (the “don’t waste capacity modelling irrelevant entropy” argument for latent-space prediction is a direct application of that chapter’s entropy/compression framing). It enables <a href="/books/applied-ai-domains/ch61-vision-language-action-models" class="quarto-xref"><span>Chapter 61</span></a>, which sometimes trains with world-model-style auxiliary objectives alongside action prediction, and <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>, where model-based planning uses a learned world model to evaluate candidate actions without touching hardware. It’s often confused with video generation models built to produce visually pleasing or realistic output (a product goal) versus world models built to be a useful, compact, predictive representation for planning (an engineering goal). The two overlap in technique but not in objective. It’s also easily confused with plain autoencoders: an autoencoder’s target is its own input; a JEPA’s target is a different, separately-encoded view of a related input. The asymmetry between context and target is the whole point, and Worked Example 60’s collapse experiment shows exactly what happens when that asymmetry is removed.</p>
+</section>
+<section id="exercises" class="level2" data-number="60.8">
+<h2 data-number="60.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">60.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-60-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three broad families of world model and state, for each, what it predicts (frame, embedding, or state).</p></li>
+<li id="ex-60-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name JEPA’s three architectural components and state which one receives gradients directly during training.</p></li>
+<li id="ex-60-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s healthy-vs-collapsed comparison (loss 0.000833 vs.&nbsp;0.000003, embedding std 0.00540 vs.&nbsp;0.00039), explain why a monitoring dashboard tracking only training loss would have flagged the WORSE run as the better one, and what specifically Procedure 60.3’s check adds that loss alone doesn’t provide.</p></li>
+<li id="ex-60-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s mean-baseline comparison (real predictor MSE 0.00080 vs.&nbsp;mean-baseline MSE 0.03201, a 40.1x gap), explain why this specific check is necessary even when Procedure 60.3’s variance check already looks healthy. What different failure mode does each check rule out?</p></li>
+<li id="ex-60-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague sees a JEPA-style model’s loss drop unusually fast during training and reports “great, the model converged early.” Using this chapter’s Worked Example, write the two or three sentences you’d say before accepting that as good news.</p></li>
+<li id="ex-60-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 60.1 warns that masking too little makes the task trivial. Describe concretely what a predictor could learn to do with a 5% mask ratio that it couldn’t do with a 50% mask ratio, and why that shortcut wouldn’t require learning genuine scene structure.</p></li>
+<li id="ex-60-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about VICReg’s variance-covariance regularisation approach, mentioned in this chapter’s Exposition as an alternative to an EMA target encoder. Explain in your own words why VICReg doesn’t need a second (target) encoder at all, unlike JEPA and BYOL.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="60.9">
+<h2 data-number="60.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">60.9</span> Mental Model</h2>
+<p>A world model answers one question: if the world currently looks like this, what happens next? Pixel-space models answer it in exhaustive, expensive detail. JEPA-style latent models answer it in a compressed, learned vocabulary that, if trained well, keeps what matters and discards what doesn’t. The entire architectural apparatus of a separate, slowly-updating target encoder exists for one reason: to stop the model from cheating its way to a low loss by refusing to say anything at all. This chapter’s Worked Example made that cheating visible and measurable: a 0.000003 loss that represents nothing learned, right next to a 0.000833 loss that represents real, input-conditioned, 40x-better-than-baseline prediction.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-assran2023ijepa" class="csl-entry" role="listitem">
+Assran, Mahmoud, Quentin Duval, Ishan Misra, et al. 2023. <span>“Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture.”</span> <em>Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition</em>, 15619–29.
+</div>
+<div id="ref-bardes2024vjepa" class="csl-entry" role="listitem">
+Bardes, Adrien, Quentin Garrido, Jean Ponce, et al. 2024. <span>“Revisiting Feature Prediction for Learning Visual Representations from Video.”</span> <em>arXiv Preprint arXiv:2404.08471</em>.
+</div>
+<div id="ref-bardes2022vicreg" class="csl-entry" role="listitem">
+Bardes, Adrien, Jean Ponce, and Yann LeCun. 2022. <span>“VICReg: Variance-Invariance-Covariance Regularization for Self-Supervised Learning.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+<div id="ref-grill2020byol" class="csl-entry" role="listitem">
+Grill, Jean-Bastien, Florian Strub, Florent Altché, et al. 2020. <span>“Bootstrap Your Own Latent: A New Approach to Self-Supervised Learning.”</span> <em>Advances in Neural Information Processing Systems</em> 33.
+</div>
+</div>
+</section>

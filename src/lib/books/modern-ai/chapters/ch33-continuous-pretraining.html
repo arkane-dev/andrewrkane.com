@@ -1,0 +1,231 @@
+<p>Foundation models like Llama, Mistral, and Claude are trained on enormous amounts of general internet text. They know a great deal about the world, but may know very little about a specific organisation’s world. A model trained on Common Crawl knows what a bond is in casual conversation. It may not know the precise conventions used in a firm’s credit agreements. This gap between general capability and specialist usefulness is what continuous pretraining exists to close.</p>
+<section id="motivation" class="level2" data-number="33.1">
+<h2 data-number="33.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">33.1</span> Motivation</h2>
+<p>Continuous pretraining (CPT) takes an already-pretrained model and continues training it on the same objective, next-token prediction, but on domain-specific text instead of general web data. This is distinct from two adjacent techniques covered elsewhere in this book. Instruction fine-tuning (Chapter 34) teaches a model <em>how to behave</em>: how to respond to instructions, format answers, be helpful, changing communication style without touching what it knows. RAG (<a href="/books/modern-ai/ch31-rag-vector-databases" class="quarto-xref"><span>Chapter 31</span></a>) gives a model access to external knowledge at inference time without touching its weights at all. CPT teaches a model <em>what to know</em>, baking domain knowledge directly into the weights. The analogy: CPT is residency training after medical school. The doctor already knows medicine. Residency immerses them in a specific clinical environment until its vocabulary and reasoning patterns become second nature. IFT is bedside manner training. It changes how the doctor communicates, not what they know. Worked Example 33 below measures whether that gap is actually present in a real model before assuming CPT is needed.</p>
+</section>
+<section id="exposition" class="level2" data-number="33.2">
+<h2 data-number="33.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">33.2</span> Exposition</h2>
+<section id="why-the-pretraining-objective-transfers" class="level3" data-number="33.2.1">
+<h3 data-number="33.2.1" class="anchored" data-anchor-id="why-the-pretraining-objective-transfers"><span class="header-section-number">33.2.1</span> Why the Pretraining Objective Transfers</h3>
+<p>A pretrained model learns to predict the next token, and to do this well it must develop internal representations of syntax, semantics, factual relationships, and domain conventions, entirely self-supervised, no labels required. CPT exploits this directly. Feeding a pretrained model a large corpus of domain text and continuing next-token-prediction training makes it learn the domain’s vocabulary, co-occurrence patterns, and reasoning conventions, producing a model that <em>thinks</em> in the domain’s language rather than one that merely knows a few domain facts.</p>
+</section>
+<section id="when-cpt-is-appropriate" class="level3" data-number="33.2.2">
+<h3 data-number="33.2.2" class="anchored" data-anchor-id="when-cpt-is-appropriate"><span class="header-section-number">33.2.2</span> When CPT Is Appropriate</h3>
+<p>CPT makes sense when a domain has characteristics poorly represented in general pretraining data: specialised vocabulary with different meanings from everyday usage, novel notation (legal citations, scientific formulae, proprietary code dialects), domain-specific reasoning patterns, or knowledge that postdates the model’s training cutoff. If the domain is already well-represented (standard Python programming, for instance), CPT is rarely worth its cost. Prompt engineering or IFT is almost always cheaper. The right way to check which situation applies is a measured perplexity comparison, not an assumption about how specialised a domain “feels.”</p>
+</section>
+<section id="catastrophic-forgetting" class="level3" data-number="33.2.3">
+<h3 data-number="33.2.3" class="anchored" data-anchor-id="catastrophic-forgetting"><span class="header-section-number">33.2.3</span> Catastrophic Forgetting</h3>
+<p>The central risk in CPT is catastrophic forgetting: continued training on domain text can degrade general capabilities as gradients optimise heavily for the new distribution. The standard mitigation is data mixing: blending domain text with general-purpose text from the original pretraining distribution, commonly 80–90% domain to 10–20% general, though the right ratio is domain-dependent and needs empirical evaluation. Other mitigations include lower learning rates (typically 10–100× lower than original pretraining), replay buffers (periodically re-including original-distribution examples), and running CPT through LoRA adapters instead of updating all weights, limiting the parameter budget that can drift.</p>
+</section>
+<section id="compute-requirements-flops-and-memory" class="level3" data-number="33.2.4">
+<h3 data-number="33.2.4" class="anchored" data-anchor-id="compute-requirements-flops-and-memory"><span class="header-section-number">33.2.4</span> Compute Requirements: FLOPs and Memory</h3>
+<p>CPT cost separates into two independent constraints. FLOPs determine how long training takes: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi><mo>≈</mo><mn>6</mn><mi>N</mi><mi>D</mi></mrow><annotation encoding="application/x-tex">C \approx 6ND</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord">6</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span></span></span></span>, where <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span> is parameter count (<a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a>’s formula, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>≈</mo><mn>12</mn><mo>⋅</mo><msub><mi>n</mi><mtext>layers</mtext></msub><mo>⋅</mo><msubsup><mi>d</mi><mtext>model</mtext><mn>2</mn></msubsup></mrow><annotation encoding="application/x-tex">N \approx 12 \cdot n_{\text{layers}} \cdot d_{\text{model}}^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">12</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7306em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">layers</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0972em;vertical-align:-0.2831em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.4169em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">model</span></span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>) and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>D</mi></mrow><annotation encoding="application/x-tex">D</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span></span></span></span> is training tokens. The 6 comes from roughly 2 FLOPs/parameter/token forward and 4 backward. Dividing <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi></mrow><annotation encoding="application/x-tex">C</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span></span></span></span> by a GPU’s <em>achieved</em> FLOPs (typically 30–50% of spec-sheet peak, due to communication and memory-bandwidth stalls) gives wall-clock time. Memory determines whether training fits at all, independent of how long it takes. Mixed-precision Adam training needs roughly 16 bytes per parameter (2 for bf16 weights, 2 for bf16 gradients, 4+4+4 for fp32 master weights and Adam’s two moment buffers) before activation memory is even counted. Three standard techniques bring this down. ZeRO sharding splits optimiser state, gradients, or weights themselves across GPUs. Gradient checkpointing recomputes activations during backward instead of storing them, at roughly 20% extra compute time. LoRA freezes the base model’s 2-bytes/param weights and trains only small low-rank adapters, dropping the trainable-portion memory from 16 bytes/param to near zero.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="33.3">
+<h2 data-number="33.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">33.3</span> Trade-offs and Limits</h2>
+<p>CPT works well when a domain has genuinely specialised language absent from the original training corpus, high-quality domain text is available (10M+ tokens minimum, 1B+ preferred), multi-GPU training budget exists, and the model needs to <em>reason</em> in the domain rather than just answer questions about it. It breaks down on small domain corpora (the model memorises rather than generalises), well-represented domains (the base model may already suffice: Worked Example 33 shows this can be true even when intuition suggests otherwise), no GPU budget (RAG is the cheaper alternative), and cases needing behavioural change rather than knowledge. That’s IFT’s job, not CPT’s.</p>
+</section>
+<section id="procedures" class="level2" data-number="33.4">
+<h2 data-number="33.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">33.4</span> Procedures</h2>
+<p id="proc-33-1"><strong>Procedure 33.1 (Test Whether a Domain Gap Actually Exists).</strong> <em>When to use:</em> before committing any CPT budget. Fail fast if the base model is already adequate.</p>
+<div id="lst-cpt-gap-test" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cpt-gap-test-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;33.1: Perplexity-ratio domain gap test
+</figcaption>
+<div aria-describedby="lst-cpt-gap-test-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> domain_gap_test(model, tokenizer, general_texts, domain_texts):</span>
+<span id="cb1-2">    <span class="kw">def</span> avg_perplexity(texts):</span>
+<span id="cb1-3">        total_loss, total_tokens <span class="op">=</span> <span class="dv">0</span>, <span class="dv">0</span></span>
+<span id="cb1-4">        <span class="cf">for</span> text <span class="kw">in</span> texts:</span>
+<span id="cb1-5">            inputs <span class="op">=</span> tokenizer(text, return_tensors<span class="op">=</span><span class="st">'pt'</span>)</span>
+<span id="cb1-6">            outputs <span class="op">=</span> model(<span class="op">**</span>inputs, labels<span class="op">=</span>inputs[<span class="st">'input_ids'</span>])</span>
+<span id="cb1-7">            n <span class="op">=</span> inputs[<span class="st">'input_ids'</span>].shape[<span class="dv">1</span>]</span>
+<span id="cb1-8">            total_loss <span class="op">+=</span> outputs.loss.item() <span class="op">*</span> n</span>
+<span id="cb1-9">            total_tokens <span class="op">+=</span> n</span>
+<span id="cb1-10">        <span class="cf">return</span> math.exp(total_loss <span class="op">/</span> total_tokens)</span>
+<span id="cb1-11"></span>
+<span id="cb1-12">    ratio <span class="op">=</span> (</span>
+<span id="cb1-13">        avg_perplexity(domain_texts)</span>
+<span id="cb1-14">        <span class="op">/</span> avg_perplexity(general_texts)</span>
+<span id="cb1-15">    )</span>
+<span id="cb1-16">    <span class="co"># ratio &lt; 1.2: base model handles the domain well enough</span></span>
+<span id="cb1-17">    <span class="co"># ratio &gt; 2.0: large gap, CPT likely valuable</span></span>
+<span id="cb1-18">    <span class="cf">return</span> ratio</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-33-2"><strong>Procedure 33.2 (Estimate GPU Memory and Time Before Starting a Run).</strong> <em>When to use:</em> before requesting a training instance. Catch an out-of-memory failure on paper, not after an 8-hour job crashes at step 1.</p>
+<div id="lst-cpt-capacity" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cpt-capacity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;33.2: Capacity check from N, memory rule, and achieved FLOPs
+</figcaption>
+<div aria-describedby="lst-cpt-capacity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> estimate_training_capacity(</span>
+<span id="cb2-2">    n_layers,</span>
+<span id="cb2-3">    d_model,</span>
+<span id="cb2-4">    n_domain_tokens,</span>
+<span id="cb2-5">    gpu_memory_gb<span class="op">=</span><span class="dv">80</span>,</span>
+<span id="cb2-6">    gpu_peak_tflops<span class="op">=</span><span class="dv">312</span>,</span>
+<span id="cb2-7">    utilisation<span class="op">=</span><span class="fl">0.4</span>,</span>
+<span id="cb2-8">    n_gpus<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb2-9">    use_lora<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb2-10">    lora_frac<span class="op">=</span><span class="fl">0.01</span>,</span>
+<span id="cb2-11">):</span>
+<span id="cb2-12">    n_params <span class="op">=</span> <span class="dv">12</span> <span class="op">*</span> n_layers <span class="op">*</span> d_model <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb2-13">    <span class="cf">if</span> use_lora:</span>
+<span id="cb2-14">        memory_bytes <span class="op">=</span> <span class="dv">2</span> <span class="op">*</span> n_params <span class="op">+</span> <span class="dv">16</span> <span class="op">*</span> (n_params <span class="op">*</span> lora_frac)</span>
+<span id="cb2-15">    <span class="cf">else</span>:</span>
+<span id="cb2-16">        memory_bytes <span class="op">=</span> <span class="dv">16</span> <span class="op">*</span> n_params</span>
+<span id="cb2-17">    flops <span class="op">=</span> <span class="dv">6</span> <span class="op">*</span> n_params <span class="op">*</span> n_domain_tokens</span>
+<span id="cb2-18">    hours <span class="op">=</span> (</span>
+<span id="cb2-19">        flops</span>
+<span id="cb2-20">        <span class="op">/</span> (gpu_peak_tflops <span class="op">*</span> <span class="fl">1e12</span> <span class="op">*</span> utilisation <span class="op">*</span> n_gpus)</span>
+<span id="cb2-21">        <span class="op">/</span> <span class="dv">3600</span></span>
+<span id="cb2-22">    )</span>
+<span id="cb2-23">    <span class="cf">return</span> {<span class="st">'memory_gb'</span>: memory_bytes <span class="op">/</span> <span class="fl">1e9</span>, <span class="st">'gpu_hours'</span>: hours}</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> sizing a run off <code>gpu_peak_tflops</code> instead of achieved FLOPs. Real training utilisation is typically 30–50% of the spec-sheet number, so a naive estimate using peak FLOPs underestimates wall-clock time by 2–3x.</p>
+<p id="proc-33-3"><strong>Procedure 33.3 (Run a CPT Data Curation Pipeline).</strong> <em>When to use:</em> preparing any raw domain corpus for training. Never train directly on unfiltered scraped text.</p>
+<div id="lst-cpt-pipeline" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cpt-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;33.3: The curation pipeline, in order
+</figcaption>
+<div aria-describedby="lst-cpt-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Raw domain corpus
+  → Deduplication (exact-match hash + near-dedup via MinHash LSH)
+  → Quality filtering (language ID, length filtering,
+    perplexity filtering, domain classifier)
+  → Format normalisation (strip HTML, normalise whitespace)
+  → Tokenise + pack into fixed-length chunks</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> skipping deduplication. Duplicate documents cause the model to memorise rather than generalise, and directly inflate training cost by processing the same tokens multiple times for no benefit.</p>
+</section>
+<section id="worked-example" class="level2" data-number="33.5">
+<h2 data-number="33.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">33.5</span> Worked Example</h2>
+<p><code>domain_gap_test</code> (Procedure 33.1) run against real GPT-2 small, comparing five general-domain sentences to five formal legal-contract sentences:</p>
+<div id="lst-cpt-worked-gap" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cpt-worked-gap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;33.4: Measured perplexity, general vs.&nbsp;legal text, real GPT-2
+</figcaption>
+<div aria-describedby="lst-cpt-worked-gap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># everyday sentences</span></span>
+<span id="cb4-2">ppl_general <span class="op">=</span> avg_perplexity(general_texts)</span>
+<span id="cb4-3"><span class="co"># contract/legal boilerplate</span></span>
+<span id="cb4-4">ppl_legal   <span class="op">=</span> avg_perplexity(legal_texts)</span>
+<span id="cb4-5">ratio <span class="op">=</span> ppl_legal <span class="op">/</span> ppl_general</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Text type</th>
+<th>Perplexity</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>General (“The weather today is sunny…”)</td>
+<td><strong>31.54</strong></td>
+</tr>
+<tr class="even">
+<td>Legal (“Notwithstanding the foregoing, the indemnifying party…”)</td>
+<td><strong>26.53</strong></td>
+</tr>
+<tr class="odd">
+<td><strong>Gap ratio (legal/general)</strong></td>
+<td><strong>0.84x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>This is not the result Motivation’s framing would predict. Per Procedure 33.1’s own thresholds, a ratio below 1.2 means “the base model handles this domain well enough.” 0.84 is not just below that threshold. It means GPT-2 finds the <em>legal</em> text more predictable than the everyday sentences, the opposite of the assumed direction. Per-sentence perplexities explain why. Formulaic legal phrases like “notwithstanding the foregoing” (14.1) and “the lessee hereby covenants and agrees to indemnify” (17.0) score <em>lower</em> perplexity than a mundane sentence like “he plays guitar every weekend with his friends at the local park” (61.2). Legal boilerplate is highly templated and repetitive: exactly the kind of low-entropy, formulaic phrasing that appears constantly across the web (contracts, terms-of-service pages, licensing text). GPT-2’s pretraining corpus likely contains a great deal of it, even though “legal language” intuitively feels specialised and rare. This is Exposition’s core warning made concrete. Intuition about which domains are “hard” for a base model is not reliable. Procedure 33.1’s measured test, not assumption, is what should gate a CPT investment decision. A domain that <em>feels</em> highly specialised (medical, legal, technical) may in fact be well-represented in web-scale pretraining data precisely because of how much formal/templated text of that kind exists publicly online. A domain that feels mundane can still show high perplexity if its specific phrasing is unusual enough.</p>
+<p>Applying Exposition’s FLOPs and memory formulas to GPT-2 small itself (124,439,808 actual parameters, formula estimate 84,934,656 without the embedding matrix, consistent with <a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a>’s Worked Example) for a hypothetical 1-million-token domain CPT run:</p>
+<div id="lst-cpt-worked-cost" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cpt-worked-cost-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;33.5: Cost formulas applied to a real, small model
+</figcaption>
+<div aria-describedby="lst-cpt-worked-cost-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># D = 1,000,000 tokens</span></span>
+<span id="cb5-2">C <span class="op">=</span> <span class="dv">6</span> <span class="op">*</span> n_params_actual <span class="op">*</span> D</span>
+<span id="cb5-3"><span class="co"># full fine-tune</span></span>
+<span id="cb5-4">mem_full <span class="op">=</span> <span class="dv">16</span> <span class="op">*</span> n_params_actual</span>
+<span id="cb5-5"><span class="co"># LoRA, 1% adapter fraction</span></span>
+<span id="cb5-6">mem_lora <span class="op">=</span> <span class="dv">2</span><span class="op">*</span>n_params_actual <span class="op">+</span> <span class="dv">16</span><span class="op">*</span>(n_params_actual<span class="op">*</span><span class="fl">0.01</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This gives <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi><mo>≈</mo><mn>7.47</mn><mo>×</mo><msup><mn>10</mn><mn>14</mn></msup></mrow><annotation encoding="application/x-tex">C \approx 7.47 \times 10^{14}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">7.47</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">14</span></span></span></span></span></span></span></span></span></span></span></span> FLOPs, full fine-tune memory of <strong>1.99 GB</strong>, and LoRA memory of <strong>0.27 GB</strong>: a 7.4x memory reduction for this model size, directionally consistent with (though larger than) the “3-4x” figure Exposition cites for bigger models, since the frozen-weight term (2 bytes/param) dominates LoRA’s cost more completely relative to the full 16-bytes/param figure at smaller scale.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker.huggingface <span class="im">import</span> HuggingFace</span>
+<span id="cb6-2"></span>
+<span id="cb6-3">estimator <span class="op">=</span> HuggingFace(</span>
+<span id="cb6-4">    <span class="co"># 8x A100</span></span>
+<span id="cb6-5">    entry_point<span class="op">=</span><span class="st">'cpt_train.py'</span>,</span>
+<span id="cb6-6">    instance_type<span class="op">=</span><span class="st">'ml.p4d.24xlarge'</span>,</span>
+<span id="cb6-7">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb6-8">    transformers_version<span class="op">=</span><span class="st">'4.46'</span>,</span>
+<span id="cb6-9">    pytorch_version<span class="op">=</span><span class="st">'2.3'</span>,</span>
+<span id="cb6-10">    hyperparameters<span class="op">=</span>{</span>
+<span id="cb6-11">        <span class="st">'learning_rate'</span>: <span class="fl">1e-5</span>,</span>
+<span id="cb6-12">        <span class="st">'domain_mix_ratio'</span>: <span class="fl">0.85</span>,</span>
+<span id="cb6-13">    },</span>
+<span id="cb6-14">)</span>
+<span id="cb6-15">estimator.fit({</span>
+<span id="cb6-16">    <span class="st">'domain_data'</span>: s3_domain_path,</span>
+<span id="cb6-17">    <span class="st">'general_data'</span>: s3_general_path,</span>
+<span id="cb6-18">})</span></code></pre></div>
+<p><strong>When to prefer SageMaker HyperPod over Training Jobs:</strong> Training Jobs suit runs fitting on 1–8 GPUs (the scale in this chapter’s cost examples). HyperPod is for dozens-to-hundreds-of-GPU distributed runs, managing cluster lifecycle and automatic node-failure recovery: critical for the multi-day training runs that larger CPT budgets (13B+, 10B+ tokens) require.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="33.6">
+<h2 data-number="33.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">33.6</span> History and Further Reading</h2>
+<p>Touvron et al.’s “Llama 2” paper describes the two-phase CPT-then-IFT pipeline used in practice, directly matching this chapter’s “How This Connects” note on the two techniques being combined <span class="citation" data-cites="touvron2023llama2">(<a href="#ref-touvron2023llama2" role="doc-biblioref"><span class="nocase">Touvron et al.</span> 2023</a>)</span>. Murphy (Advanced), Ch. 1–2, gives the probabilistic foundations underlying the next-token-prediction objective this chapter builds on <span class="citation" data-cites="murphy2023pmladvanced">(<a href="#ref-murphy2023pmladvanced" role="doc-biblioref">Murphy 2023</a>)</span>. Burkov’s <em>Hundred-Page Language Models Book</em>, Section 5.1, “Why Larger Is Better,” gives the scaling-behaviour rationale for why continuing to pretrain on domain data works at all <span class="citation" data-cites="burkov2025hundredpagellm">(<a href="#ref-burkov2025hundredpagellm" role="doc-biblioref">Burkov 2025</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="33.7">
+<h2 data-number="33.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">33.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a> (the architecture and parameter-count formula) and Chapter 27’s NLP fundamentals. It enables Chapter 34’s instruction fine-tuning. CPT and IFT are frequently combined in practice, CPT first for domain knowledge, IFT second for behaviour. It’s often confused with IFT. The key distinction is that CPT is self-supervised on raw text (next-token prediction, no labels), while IFT is supervised on (instruction, response) pairs: different objectives entirely, not just different data.</p>
+</section>
+<section id="exercises" class="level2" data-number="33.8">
+<h2 data-number="33.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">33.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-33-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the three-way distinction between CPT, IFT, and RAG in one sentence each, using the “what it changes” framing from Motivation.</p></li>
+<li id="ex-33-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Write the FLOPs formula <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi><mo>≈</mo><mn>6</mn><mi>N</mi><mi>D</mi></mrow><annotation encoding="application/x-tex">C \approx 6ND</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord">6</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord mathnormal" style="margin-right:0.0278em;">D</span></span></span></span> and state what each of the two terms represents.</p></li>
+<li id="ex-33-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-cpt-worked-gap" class="quarto-xref">Listing&nbsp;<span>33.4</span></a>’s measured result (gap ratio 0.84x, legal text scoring <em>lower</em> perplexity than general text), explain what decision Procedure 33.1’s own thresholds would recommend here, and why this result would have surprised someone who assumed “legal language is specialised, so it must have high perplexity.”</p></li>
+<li id="ex-33-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-cpt-worked-cost" class="quarto-xref">Listing&nbsp;<span>33.5</span></a>’s measured memory figures (full fine-tune 1.99GB vs.&nbsp;LoRA 0.27GB for GPT-2 small), compute the actual memory reduction factor, and explain why this is larger than the “3-4x” figure Exposition cites as typical for bigger models.</p></li>
+<li id="ex-33-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team assumes their internal engineering wiki (full of unusual internal jargon and acronyms) definitely needs CPT without testing first. Using this chapter’s Worked Example, write the two or three sentences you’d say about what they should do before committing budget.</p></li>
+<li id="ex-33-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 33.3’s curation pipeline runs deduplication before quality filtering. Explain what could go wrong, in terms of wasted compute, if the order were reversed: quality filtering first, deduplication last.</p></li>
+<li id="ex-33-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about the “DoReMi” domain-reweighting approach (Xie et al., 2023) referenced in this chapter’s Further Reading. Explain in your own words how it differs from picking a single fixed domain-mixing ratio (like the 80-90% figure in Exposition) by hand.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="33.9">
+<h2 data-number="33.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">33.9</span> Mental Model</h2>
+<p>CPT is immersion: not teaching the model rules about a domain, but putting it in the domain until the domain feels native. The model already knows how to learn from text. CPT just changes what text it learns from. This chapter’s Worked Example is the reminder that immersion is only worth the cost if the model isn’t already immersed. The only reliable way to know that is to measure the gap, not to assume it exists because a domain sounds specialised.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2025hundredpagellm" class="csl-entry" role="listitem">
+Burkov, Andriy. 2025. <em>The Hundred-Page Language Models Book</em>. True Positive Inc.
+</div>
+<div id="ref-murphy2023pmladvanced" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2023. <em>Probabilistic Machine Learning: Advanced Topics</em>. MIT Press.
+</div>
+<div id="ref-touvron2023llama2" class="csl-entry" role="listitem">
+<span class="nocase">Touvron, Hugo, Louis Martin, Kevin Stone, et al.</span> 2023. <span>“Llama 2: Open Foundation and Fine-Tuned Chat Models.”</span> <em>arXiv Preprint arXiv:2307.09288</em>.
+</div>
+</div>
+</section>

@@ -1,0 +1,289 @@
+<p>Chapter 48 measured Amdahl’s Law’s ceiling using <code>multiprocessing</code>, without asking <em>why</em> multiprocessing rather than threading. This chapter answers that directly: Python has a specific, well-known constraint, the Global Interpreter Lock (GIL), that determines which of <code>threading</code>, <code>multiprocessing</code>, or <code>asyncio</code>-style concurrency actually helps for a given workload, and getting this choice wrong is one of the most common ways to add real complexity for zero real speedup.</p>
+<section id="motivation" class="level2" data-number="53.1">
+<h2 data-number="53.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">53.1</span> Motivation</h2>
+<p>One mechanism explains almost the entire decision this chapter is built around: <strong>the GIL allows only one thread to execute Python bytecode at a time per process, but it is released during I/O waits and some C-extension calls.</strong> This single fact splits all workloads into two categories with opposite correct answers. <strong>CPU-bound work</strong> (arithmetic, data processing, anything that keeps the interpreter busy executing Python bytecode) gets essentially no speedup from threading, because the GIL serializes the actual work regardless of thread count. <code>multiprocessing</code> is the correct tool, since each process gets its own interpreter and its own GIL. <strong>I/O-bound work</strong> (network calls, disk reads, anything spending most of its time waiting rather than computing) works well with threading, because the GIL is released during the wait, letting other threads run. <code>multiprocessing</code> also works for I/O-bound work, but with unnecessary overhead (process-spawn cost, inter-process data serialization) that threading avoids.</p>
+</section>
+<section id="exposition" class="level2" data-number="53.2">
+<h2 data-number="53.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">53.2</span> Exposition</h2>
+<p>This chapter’s measured numbers<span class="ref-rig-mark">†</span> come from this book’s reference rig (see the preface): its AMD Ryzen 9 5950X, 16C/32T.</p>
+<section id="cpu-bound-the-gil-makes-threading-flat-multiprocessing-scale" class="level3" data-number="53.2.1">
+<h3 data-number="53.2.1" class="anchored" data-anchor-id="cpu-bound-the-gil-makes-threading-flat-multiprocessing-scale"><span class="header-section-number">53.2.1</span> CPU-Bound: The GIL Makes Threading Flat, Multiprocessing Scale</h3>
+<p>An identical CPU-bound function (summing squares over 10,000,000 iterations) run across 1, 2, 4, and 8 workers, once with <code>threading.Thread</code> and once with <code>multiprocessing.Pool</code>, each speedup measured against the ideal (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>×</mo></mrow><annotation encoding="application/x-tex">N \times</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord">×</span></span></span></span> the 1-worker baseline):</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Workers</th>
+<th>Threads (speedup vs.&nbsp;ideal)</th>
+<th>Processes (speedup vs.&nbsp;ideal)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>1.04x</td>
+<td>1.00x</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>1.00x</td>
+<td>1.97x</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>1.01x</td>
+<td>3.82x</td>
+</tr>
+<tr class="even">
+<td>8</td>
+<td>1.00x</td>
+<td>7.24x<span class="ref-rig-mark">†</span></td>
+</tr>
+</tbody>
+</table>
+<p>Threads plateau at roughly 1.0x no matter how many are added. That flat line, not a gradual decline, is the GIL’s signature. It isn’t that threading gets <em>less effective</em> with more threads. It’s that threading was never providing real CPU parallelism in the first place, at any count. Processes, in contrast, scale close to linearly with worker count, because each process runs its own independent Python interpreter with its own GIL, genuinely executing on separate CPU cores simultaneously.</p>
+</section>
+<section id="io-bound-the-opposite-result-equally-real" class="level3" data-number="53.2.2">
+<h3 data-number="53.2.2" class="anchored" data-anchor-id="io-bound-the-opposite-result-equally-real"><span class="header-section-number">53.2.2</span> I/O-Bound: The Opposite Result, Equally Real</h3>
+<p>Repeating the comparison with an I/O-bound function (<code>time.sleep(0.2)</code>, standing in for a network call or disk read) across <code>ThreadPoolExecutor</code> and <code>ProcessPoolExecutor</code>, against a serial (8 x 0.2s) baseline of 1.601s:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Workers</th>
+<th>ThreadPoolExecutor speedup</th>
+<th>ProcessPoolExecutor speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>2</td>
+<td>2.00x</td>
+<td>1.98x</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>3.99x</td>
+<td>3.90x</td>
+</tr>
+<tr class="odd">
+<td>8</td>
+<td>7.95x</td>
+<td>7.37x</td>
+</tr>
+</tbody>
+</table>
+<p>Both scale almost perfectly linearly, and threads and processes are close to indistinguishable. <code>time.sleep()</code> releases the GIL for the duration of the wait, exactly like a real network socket read or disk I/O call, which also release the GIL while blocked in the underlying system call. With the GIL released, multiple threads genuinely overlap their waiting periods. Since threads avoid the process-spawn and inter-process-communication overhead that processes carry, threading is the better default for I/O-bound work specifically because it gets the same scaling for less cost, not because it’s “faster” in some general sense.</p>
+</section>
+<section id="joblib-a-real-convenienceoverhead-trade-off" class="level3" data-number="53.2.3">
+<h3 data-number="53.2.3" class="anchored" data-anchor-id="joblib-a-real-convenienceoverhead-trade-off"><span class="header-section-number">53.2.3</span> <code>joblib</code>: A Real Convenience/Overhead Trade-Off</h3>
+<p>Running the same 8-way CPU-bound workload through raw <code>multiprocessing.Pool</code> versus <code>joblib.Parallel</code>, both using 8 workers:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Approach</th>
+<th>Time</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Raw <code>multiprocessing.Pool(8)</code></td>
+<td>0.387s</td>
+</tr>
+<tr class="even">
+<td><code>joblib.Parallel(n_jobs=8)</code></td>
+<td>0.515s (33% slower)</td>
+</tr>
+</tbody>
+</table>
+<p>This is a genuine cost, not a measurement artifact. <code>joblib</code>’s default <code>loky</code> backend adds process-management robustness (automatic worker recycling, better cross-platform behavior, more graceful handling of crashed workers) on top of what raw <code>multiprocessing</code> provides. For a performance-critical hot path where the environment is fully controlled, that overhead may not be worth paying; for a production data pipeline where reliability matters more than shaving milliseconds, it usually is.</p>
+</section>
+<section id="pool-creation-overhead-a-real-large-number" class="level3" data-number="53.2.4">
+<h3 data-number="53.2.4" class="anchored" data-anchor-id="pool-creation-overhead-a-real-large-number"><span class="header-section-number">53.2.4</span> Pool Creation Overhead: A Real, Large Number</h3>
+<p>Creating a fresh 4-worker pool, running four tiny tasks (1,000 iterations each), and tearing the pool down, repeated 20 times, took <strong>11.3 ms per iteration</strong>. Running the identical tiny tasks serially, with no pool at all, took <strong>0.12 ms per iteration</strong>. Creating a pool for trivial work was <strong>96x slower</strong> than not parallelizing at all.</p>
+<p>Process creation has a genuine fixed cost (forking or spawning a new OS process, starting a fresh Python interpreter inside it, tearing it down afterward) that is completely independent of how much work the pool actually does. For a small enough task, that fixed cost dwarfs any benefit from spreading the work across cores. Chapter 48’s troubleshooting guidance already flagged “creating a new <code>Pool</code> inside the timed region” as a common mistake in the abstract. This measurement puts a concrete, large number on exactly how costly that mistake is.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="53.3">
+<h2 data-number="53.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">53.3</span> Trade-offs and Limits</h2>
+<p>Use <code>multiprocessing</code> (or <code>ProcessPoolExecutor</code>) when the workload is CPU-bound (real computation, not waiting), since this is the only way to get genuine multi-core speedup for such work in standard CPython, and when the per-task work is large enough to amortize process-spawn overhead (create the pool once, reuse it for many tasks, never inside a hot loop). Use <code>threading</code> (or <code>ThreadPoolExecutor</code>) when the workload is I/O-bound (network, disk, waiting on external resources) to get the same scaling as multiprocessing with far less overhead, and when shared in-memory state between workers is needed without the serialization cost of passing data between processes. Use <code>joblib</code> when <code>multiprocessing</code>’s CPU-bound benefits are wanted alongside better reliability, crash-recovery, and a more convenient API, and the roughly 30-50% overhead versus the rawest possible approach can be afforded, or when already inside a data-science stack where <code>joblib</code> is a standard dependency, such as scikit-learn, which uses it internally.</p>
+</section>
+<section id="procedures" class="level2" data-number="53.4">
+<h2 data-number="53.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">53.4</span> Procedures</h2>
+<p id="proc-53-1"><strong>Procedure 53.1 (Decide Between Threading and Multiprocessing).</strong> <em>When to use:</em> before writing any concurrent code. Get this decision right first, since the wrong choice can mean zero benefit for real added complexity.</p>
+<div id="lst-thread-vs-process" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-thread-vs-process-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;53.1: The single question that decides threading vs.&nbsp;multiprocessing
+</figcaption>
+<div aria-describedby="lst-thread-vs-process-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="co"># Ask: does this workload spend its time computing, or waiting?</span></span>
+<span id="cb1-2"><span class="co">#</span></span>
+<span id="cb1-3"><span class="co"># Computing (CPU-bound): arithmetic, parsing, image processing, ML</span></span>
+<span id="cb1-4"><span class="co"># inference on CPU</span></span>
+<span id="cb1-5"><span class="co">#   -&gt; use multiprocessing / ProcessPoolExecutor</span></span>
+<span id="cb1-6"><span class="co">#</span></span>
+<span id="cb1-7"><span class="co"># Waiting (I/O-bound): network requests, database queries, disk</span></span>
+<span id="cb1-8"><span class="co"># reads, subprocess calls</span></span>
+<span id="cb1-9"><span class="co">#   -&gt; use threading / ThreadPoolExecutor (lower overhead, same</span></span>
+<span id="cb1-10"><span class="co"># scaling as multiprocessing here)</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> reaching for <code>threading</code> to speed up a CPU-bound Python function. This chapter’s own measurement shows this gives a flat ~1.0x “speedup” regardless of thread count (1 through 8). The GIL fully serializes CPU-bound bytecode execution, so more threads simply queue up rather than run concurrently.</p>
+<p id="proc-53-2"><strong>Procedure 53.2 (Parallelize CPU-Bound Work Correctly).</strong> <em>When to use:</em> a profiled (Chapter 50), genuinely CPU-bound function needs to process many independent items faster.</p>
+<div id="lst-parallelize-cpu" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-parallelize-cpu-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;53.2: Creating a process pool once, outside any loop, and reusing it for all work
+</figcaption>
+<div aria-describedby="lst-parallelize-cpu-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> multiprocessing <span class="im">as</span> mp</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="kw">def</span> process_item(item):</span>
+<span id="cb2-4">    <span class="co"># CPU-bound work here</span></span>
+<span id="cb2-5">    <span class="cf">return</span> result</span>
+<span id="cb2-6"></span>
+<span id="cb2-7">items <span class="op">=</span> [...]  <span class="co"># many independent work items</span></span>
+<span id="cb2-8"></span>
+<span id="cb2-9"><span class="co"># create ONCE, outside any loop</span></span>
+<span id="cb2-10"><span class="cf">with</span> mp.Pool(processes<span class="op">=</span><span class="dv">8</span>) <span class="im">as</span> pool:</span>
+<span id="cb2-11">    results <span class="op">=</span> pool.<span class="bu">map</span>(process_item, items)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> creating a new <code>Pool</code> for every batch of work inside a loop. This chapter’s own measurement found this costs ~96x more than not parallelizing at all for small tasks. Process creation has a real, fixed cost independent of task size. Create the pool once, submit all the work through it, and only tear it down once all of it is done.</p>
+<p id="proc-53-3"><strong>Procedure 53.3 (Parallelize I/O-Bound Work Correctly).</strong> <em>When to use:</em> fetching many URLs, querying a database repeatedly, or reading many files: anything spending most of its time waiting, not computing.</p>
+<div id="lst-parallelize-io" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-parallelize-io-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;53.3: ThreadPoolExecutor with a worker count exceeding the CPU core count, appropriate for I/O-bound work
+</figcaption>
+<div aria-describedby="lst-parallelize-io-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> concurrent.futures <span class="im">import</span> ThreadPoolExecutor</span>
+<span id="cb3-2"></span>
+<span id="cb3-3"><span class="kw">def</span> fetch(item):</span>
+<span id="cb3-4">    <span class="co"># network/disk I/O here: releases the GIL while waiting</span></span>
+<span id="cb3-5">    <span class="cf">return</span> result</span>
+<span id="cb3-6"></span>
+<span id="cb3-7">items <span class="op">=</span> [...]</span>
+<span id="cb3-8"></span>
+<span id="cb3-9"><span class="co"># can safely use MORE workers than CPU cores here</span></span>
+<span id="cb3-10"><span class="cf">with</span> ThreadPoolExecutor(max_workers<span class="op">=</span><span class="dv">16</span>) <span class="im">as</span> ex:</span>
+<span id="cb3-11">    results <span class="op">=</span> <span class="bu">list</span>(ex.<span class="bu">map</span>(fetch, items))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> limiting thread count to the CPU core count for I/O-bound work. Since threads are mostly <em>waiting</em>, not computing, far more threads than CPU cores can profitably be run. The bottleneck is the external resource (network latency, disk), not CPU availability. Chapter 55 covers the analogous mistake in the CPU/GPU context: assuming CPU core count is always the right concurrency limit.</p>
+<p id="proc-53-4"><strong>Procedure 53.4 (Choose Between <code>joblib</code> and Raw <code>multiprocessing</code>).</strong> <em>When to use:</em> deciding how much reliability/convenience overhead is worth paying for a given parallel workload.</p>
+<div id="lst-joblib" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-joblib-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;53.4: joblib.Parallel as a drop-in for multiprocessing.Pool, with added robustness at a real cost
+</figcaption>
+<div aria-describedby="lst-joblib-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> joblib <span class="im">import</span> Parallel, delayed</span>
+<span id="cb4-2"></span>
+<span id="cb4-3">results <span class="op">=</span> Parallel(n_jobs<span class="op">=</span><span class="dv">8</span>)(</span>
+<span id="cb4-4">    delayed(process_item)(item) <span class="cf">for</span> item <span class="kw">in</span> items</span>
+<span id="cb4-5">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming <code>joblib</code> and raw <code>multiprocessing.Pool</code> are interchangeable with identical performance. This chapter measured <code>joblib</code> at roughly 33% slower than raw <code>multiprocessing.Pool</code> for an identical CPU-bound workload, real overhead from <code>joblib</code>’s <code>loky</code> backend’s extra process-management machinery. Use <code>joblib</code> when its convenience and crash-recovery robustness matter, or when already using it via scikit-learn; use raw <code>multiprocessing</code> when squeezing out the last bit of performance in a fully-controlled environment matters more.</p>
+</section>
+<section id="worked-example" class="level2" data-number="53.5">
+<h2 data-number="53.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">53.5</span> Worked Example</h2>
+<p>The companion notebook reproduces all four measured effects above directly on this book’s reference rig, and the numbers reported through this chapter are exactly what it produces. The CPU-bound section runs identical work through both <code>threading.Thread</code> and <code>multiprocessing.Pool</code>:</p>
+<div id="lst-cpu-bound-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cpu-bound-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;53.5: Timing identical CPU-bound work across thread counts and process counts
+</figcaption>
+<div aria-describedby="lst-cpu-bound-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="kw">def</span> cpu_bound(n):</span>
+<span id="cb5-2">    total <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb5-3">    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb5-4">        total <span class="op">+=</span> i <span class="op">*</span> i</span>
+<span id="cb5-5">    <span class="cf">return</span> total</span>
+<span id="cb5-6"></span>
+<span id="cb5-7">N <span class="op">=</span> <span class="dv">10_000_000</span></span>
+<span id="cb5-8"></span>
+<span id="cb5-9"><span class="kw">def</span> run_threads(n_threads):</span>
+<span id="cb5-10">    threads <span class="op">=</span> [</span>
+<span id="cb5-11">        threading.Thread(target<span class="op">=</span>cpu_bound, args<span class="op">=</span>(N,))</span>
+<span id="cb5-12">        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n_threads)</span>
+<span id="cb5-13">    ]</span>
+<span id="cb5-14">    t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb5-15">    <span class="cf">for</span> t <span class="kw">in</span> threads: t.start()</span>
+<span id="cb5-16">    <span class="cf">for</span> t <span class="kw">in</span> threads: t.join()</span>
+<span id="cb5-17">    <span class="cf">return</span> time.perf_counter() <span class="op">-</span> t0</span>
+<span id="cb5-18"></span>
+<span id="cb5-19"><span class="kw">def</span> run_processes(n_procs):</span>
+<span id="cb5-20">    t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb5-21">    <span class="cf">with</span> mp.Pool(n_procs) <span class="im">as</span> pool:</span>
+<span id="cb5-22">        pool.<span class="bu">map</span>(cpu_bound, [N] <span class="op">*</span> n_procs)</span>
+<span id="cb5-23">    <span class="cf">return</span> time.perf_counter() <span class="op">-</span> t0</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>At 8 workers this produces <code>threads=8: time=2.631s speedup=1.00x</code> against <code>processes=8: time=0.362s speedup=7.24x</code>, the flat-versus-scaling contrast reported above, from otherwise identical work.</p>
+<p>The I/O-bound section repeats the comparison with <code>time.sleep()</code> standing in for a real network or disk wait, run through <code>ThreadPoolExecutor</code> and <code>ProcessPoolExecutor</code> against a measured 1.601s serial baseline for 8 x 0.2s sleeps; at 8 workers, threads reach 7.95x and processes reach 7.37x, both close to the ideal 8x, confirming threading loses nothing here while avoiding the process-spawn overhead the CPU-bound section made visible.</p>
+<p>The <code>joblib</code> section runs the identical 8-item CPU-bound workload through both a raw pool and <code>joblib.Parallel</code>:</p>
+<div id="lst-joblib-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-joblib-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;53.6: Comparing raw multiprocessing.Pool against joblib.Parallel on identical work
+</figcaption>
+<div aria-describedby="lst-joblib-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">tasks <span class="op">=</span> [N] <span class="op">*</span> <span class="dv">8</span></span>
+<span id="cb6-2"></span>
+<span id="cb6-3">t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb6-4"><span class="cf">with</span> mp.Pool(<span class="dv">8</span>) <span class="im">as</span> pool:</span>
+<span id="cb6-5">    pool.<span class="bu">map</span>(cpu_bound, tasks)</span>
+<span id="cb6-6">t_raw <span class="op">=</span> time.perf_counter() <span class="op">-</span> t0</span>
+<span id="cb6-7"></span>
+<span id="cb6-8">t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb6-9">Parallel(n_jobs<span class="op">=</span><span class="dv">8</span>)(delayed(cpu_bound)(n) <span class="cf">for</span> n <span class="kw">in</span> tasks)</span>
+<span id="cb6-10">t_joblib <span class="op">=</span> time.perf_counter() <span class="op">-</span> t0</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This produces <code>t_raw=0.387s</code> against <code>t_joblib=0.515s</code>, the 33% overhead reported above, from identical work run through a more convenience-oriented backend.</p>
+<p>The pool-creation section repeats a tiny 4-task workload 20 times, once creating and tearing down a fresh pool every iteration, once running the same tiny tasks serially with no pool at all: 11.3 ms/iteration against 0.12 ms/iteration, a 96x overhead purely from process-management fixed costs on work far too small to amortize them.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="53.6">
+<h2 data-number="53.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">53.6</span> History and Further Reading</h2>
+<p>Beazley’s 2010 talk “Understanding the Python GIL” remains the classic, still-relevant deep explanation of what the GIL actually does and doesn’t serialize, and is worth watching once this chapter’s flat-threading result has been measured directly rather than just read about. The Python <code>multiprocessing</code> and <code>concurrent.futures</code> standard library documentation is the authoritative API reference and the standard library’s own guidance on process versus thread pools. The <code>joblib</code> documentation’s “Embarrassingly parallel for loops” page gives the library’s own framing of when its overhead is and isn’t worth paying. PEP 703, “Making the Global Interpreter Lock Optional,” documents the in-progress CPython effort toward a no-GIL build. It’s worth knowing this constraint is actively being relaxed in future Python versions, even though it applies in full to the environment this chapter’s numbers were measured on. Rotem’s <em>Software Performance Engineering</em> <span class="citation" data-cites="rotem2025softwareperformance">(<a href="#ref-rotem2025softwareperformance" role="doc-biblioref">Rotem 2025</a>)</span>, Chapter 6, names the GIL specifically as a “performance antipattern,” alongside other language- and process-level antipatterns (premature optimization, tight coupling, busy waiting); confirmation this chapter’s flat-threading result is a recognised class of failure in the wider field, not a quirk specific to this chapter’s benchmark.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="53.7">
+<h2 data-number="53.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">53.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 48’s Amdahl’s Law measurement (that chapter’s <code>multiprocessing.Pool</code> choice is now explained, not just asserted) and on Chapter 48’s benchmarking discipline, used throughout for every number above. It enables Chapter 55’s “should this move to GPU” question, which partly asks whether CPU parallelism (this chapter) has already been exhausted first. GPU offload is a much bigger step than adding worker processes, and is only worth taking once the cheaper lever has been tried. It is often confused with <code>asyncio</code>, a third concurrency model, best for very high volumes of I/O-bound work with a single thread using cooperative scheduling instead of OS threads. <code>asyncio</code> solves the same class of problem as <code>threading</code> for I/O-bound work but with different trade-offs: no OS thread-switching overhead, but it requires <code>async</code>/<code>await</code>-aware libraries throughout, and is not covered in depth in this book.</p>
+</section>
+<section id="exercises" class="level2" data-number="53.8">
+<h2 data-number="53.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">53.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-53-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain, in your own words, why threading gives a flat ~1.0x “speedup” for CPU-bound work regardless of thread count, while multiprocessing scales close to linearly for the identical workload. Name the specific mechanism responsible.</p></li>
+<li id="ex-53-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A colleague says “threads are always lighter-weight than processes, so I should default to threading.” Using this chapter’s I/O-bound and CPU-bound results, write two or three sentences explaining why the right default depends on the workload, not on thread weight alone.</p></li>
+<li id="ex-53-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 53.1’s decision rule, classify each of the following as CPU-bound or I/O-bound and name the right tool: (a) resizing 10,000 images; (b) fetching data from 200 REST API endpoints; (c) computing a large matrix decomposition; (d) reading 500 files from a slow network filesystem.</p></li>
+<li id="ex-53-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 53.2, rewrite a function that currently creates a fresh <code>multiprocessing.Pool</code> inside a loop processing 100 batches of work, so that the pool is created once. Using this chapter’s measured 96x pool-creation overhead, estimate the rough time saved if each batch’s real work takes 5ms.</p></li>
+<li id="ex-53-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter measured <code>joblib</code> at 33% slower than raw <code>multiprocessing.Pool</code>, while the reference material for this workload elsewhere reports figures closer to 48% on a different run. Propose a methodological reason two honest measurements of the same comparison could differ by this much, referencing Chapter 48’s benchmarking discipline.</p></li>
+<li id="ex-53-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team is building a web scraper that both parses large HTML documents (CPU-bound) and issues many HTTP requests (I/O-bound) as part of the same pipeline. Propose an architecture using both <code>threading</code> and <code>multiprocessing</code> appropriately, and justify which stage uses which.</p></li>
+<li id="ex-53-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read enough of PEP 703 to summarize, in a few sentences, what a “no-GIL” CPython build changes about this chapter’s central threading-vs-multiprocessing result. Would the flat ~1.0x threading result for CPU-bound work still be expected under a no-GIL build?</p></li>
+<li id="ex-53-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Watch or read a summary of Beazley’s “Understanding the Python GIL” talk. Identify one GIL-related behavior it covers that this chapter does not (for example, GIL contention patterns between many threads doing a mix of CPU and I/O work), and explain how it would affect the “prefer threading for I/O-bound work” recommendation.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="53.9">
+<h2 data-number="53.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">53.9</span> Mental Model</h2>
+<p>Threads sharing one Python interpreter are like several cashiers sharing a single cash register key. Only one can actually ring up a sale at a time, no matter how many cashiers are standing at the counter, so adding more cashiers to <em>this specific task</em> doesn’t speed up the <em>ringing up</em> part at all. But if the register key is handed over willingly during a wait, a customer digging for exact change, the I/O wait, other cashiers can use it in the meantime, and having several on hand genuinely speeds up serving many customers with a lot of that kind of wait. Processes are separate stores entirely, each with its own register key, genuinely serving customers in parallel, at the real cost of opening and staffing an entire additional store.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-rotem2025softwareperformance" class="csl-entry" role="listitem">
+Rotem, Alon. 2025. <em>Software Performance Engineering: A Comprehensive Guide for High-Performance Development</em>. BPB Publications.
+</div>
+</div>
+</section>

@@ -1,0 +1,279 @@
+<p>Most of the data this book has covered so far is either tabular (rows and columns) or sequential (tokens in a sentence). Neither shape captures a fact like “vendor A shares a parent company with vendor B, who was flagged for a compliance issue two hops away.” That’s not a row you can filter or a sequence you can scan. It’s a <em>relationship</em> between entities, and relationships between entities are exactly what a graph represents natively. This chapter is the mathematical foundation the rest of this track builds on: every later chapter (graph databases, knowledge graph construction, graph neural networks, and beyond) is, underneath, doing traversal, path-finding, centrality, or community detection on some graph. Understanding those four operations here means every later chapter is “the same four ideas, applied to a new kind of graph,” not four separate new topics.</p>
+<section id="motivation" class="level2" data-number="76.1">
+<h2 data-number="76.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">76.1</span> Motivation</h2>
+<p>A graph is just nodes (entities) and edges (relationships between them): deliberately the simplest possible data structure for representing connections. Everything this chapter covers is a different question you can ask of that same structure: <em>what can I reach, and in what order do I discover it?</em> (traversal); <em>what’s the cheapest way to get from A to B?</em> (shortest path); <em>which nodes matter, and in what sense?</em> (centrality); <em>which nodes cluster together more tightly than they connect to everything else?</em> (community detection). None of these require anything beyond the raw structure: no labels, no machine learning, no training data. That’s what makes graph theory the right starting point: it’s a set of exact, deterministic algorithms operating directly on structure, before this track introduces anything probabilistic or learned, which starts in Chapter 79 (Graph Neural Networks).</p>
+</section>
+<section id="exposition" class="level2" data-number="76.2">
+<h2 data-number="76.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">76.2</span> Exposition</h2>
+<section id="bfs-vs.-dfs-two-different-discovery-orders-not-two-ways-to-the-same-answer" class="level3" data-number="76.2.1">
+<h3 data-number="76.2.1" class="anchored" data-anchor-id="bfs-vs.-dfs-two-different-discovery-orders-not-two-ways-to-the-same-answer"><span class="header-section-number">76.2.1</span> BFS vs.&nbsp;DFS: Two Different Discovery Orders, Not Two Ways to the Same Answer</h3>
+<p>Breadth-first search explores in “layers”: everything one hop away, then everything two hops away, and so on, using a queue (first-in-first-out). This is <em>why</em> BFS finds a shortest (fewest-hops) path: by the time it reaches a node for the first time, it has necessarily already exhausted every shorter route to it. Depth-first search instead commits to a path and follows it as far as it goes before backtracking, using a stack (last-in-first-out, whether explicit or via recursion). Neither is “better”: they answer different questions. BFS is what you want for “what’s the minimum hops to X”; DFS is what you want for “trace this one dependency chain exhaustively.” Both are <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(V+E)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.2222em;">V</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0576em;">E</span><span class="mclose">)</span></span></span></span>, the same asymptotic cost, so the choice between them is about the question being asked, never about performance.</p>
+</section>
+<section id="shortest-path-hops-are-not-cost" class="level3" data-number="76.2.2">
+<h3 data-number="76.2.2" class="anchored" data-anchor-id="shortest-path-hops-are-not-cost"><span class="header-section-number">76.2.2</span> Shortest Path: Hops Are Not Cost</h3>
+<p><code>nx.shortest_path</code> (unweighted BFS underneath) treats every edge as identically costly: one hop. <code>nx.dijkstra_path</code> instead minimises the <em>sum of edge weights</em> along a route, which is what you actually want when edges have real, unequal costs (latency, distance, risk). Dijkstra’s algorithm works by always expanding the <em>currently cheapest known</em> frontier node next, a greedy strategy that happens to be provably correct here, given non-negative edge weights, which is also why it fails silently on negative edge weights (a different algorithm, Bellman-Ford, is needed there). If the fewest-hops path and the lowest-cost path happen to agree on a particular graph, that’s a coincidence of that graph, not a general rule; on a graph with more varied weights they can easily diverge.</p>
+</section>
+<section id="centrality-three-measures-three-different-definitions-of-important" class="level3" data-number="76.2.3">
+<h3 data-number="76.2.3" class="anchored" data-anchor-id="centrality-three-measures-three-different-definitions-of-important"><span class="header-section-number">76.2.3</span> Centrality: Three Measures, Three Different Definitions of “Important”</h3>
+<ul>
+<li><strong>Degree centrality</strong> just counts direct connections: how many neighbours a node has, normalised by graph size. Cheap, local, but blind to a node’s position in the <em>rest</em> of the graph.</li>
+<li><strong>Betweenness centrality</strong> counts what fraction of all shortest paths between other node pairs pass <em>through</em> this node. High betweenness means a lot of the graph’s traffic has no way around you.</li>
+<li><strong>PageRank</strong> (originally designed for ranking web pages by incoming-link importance) treats being linked-to by other important nodes as a recursive definition of your own importance.</li>
+</ul>
+<p>These are genuinely different claims, not three views of the same fact. “Everything depends on me” (high PageRank, being a heavily-referenced sink) and “a lot of traffic has no way around me” (high betweenness, being a structural bottleneck on many shortest paths) can point at completely different nodes in the same graph. This chapter’s Worked Example measures exactly that split. A customer asking “what’s our single point of failure?” deserves to hear both answers, because losing either node breaks the system for a different structural reason.</p>
+</section>
+<section id="community-detection-structure-alone-checked-against-ground-truth" class="level3" data-number="76.2.4">
+<h3 data-number="76.2.4" class="anchored" data-anchor-id="community-detection-structure-alone-checked-against-ground-truth"><span class="header-section-number">76.2.4</span> Community Detection: Structure Alone, Checked Against Ground Truth</h3>
+<p>Louvain community detection maximises <strong>modularity</strong>, roughly, “how much more densely connected are nodes within these groups than you’d expect if edges were placed at random, given each node’s degree?”, using only the graph’s edges, with no external labels. Community detection finds <em>structural</em> clusters; those usually, not always, line up with whatever “real” grouping you suspect exists. The only way to know whether the structure found means anything real is to check it against ground truth when ground truth is available. This chapter’s Worked Example does exactly that, on a real, historically-documented social network.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="76.3">
+<h2 data-number="76.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">76.3</span> Trade-offs and Limits</h2>
+<p><strong>BFS/DFS choice is about the question, not performance.</strong> Both are <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>V</mi><mo>+</mo><mi>E</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(V+E)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.2222em;">V</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0576em;">E</span><span class="mclose">)</span></span></span></span>; pick based on what you need to know (shallow discovery order vs.&nbsp;exhaustive single-path tracing), not speed.</p>
+<p><strong>Unweighted vs.&nbsp;weighted shortest path.</strong> Using plain BFS-based shortest path when edges actually have unequal real-world costs (latency, risk, distance, price) gives an answer to a question you probably didn’t mean to ask. Reach for <code>dijkstra_path</code> whenever a weight attribute genuinely means something.</p>
+<p><strong>Centrality measure choice changes the answer, not just the framing.</strong> Picking degree centrality alone can completely miss a node’s role as a structural bottleneck if its degree happens to tie with another node’s while its betweenness is dramatically higher. There is no single “importance” score; there are three different, equally legitimate questions.</p>
+<p><strong>Community detection is unsupervised.</strong> It has no way to know the “right” number of communities or the “correct” grouping; it finds whatever structure the modularity objective rewards. Without ground truth, the modularity score itself (roughly, values above 0.3 suggest real structure; values near zero suggest the “communities” found aren’t meaningfully denser than random) is the only sanity check available.</p>
+</section>
+<section id="procedures" class="level2" data-number="76.4">
+<h2 data-number="76.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">76.4</span> Procedures</h2>
+<p id="proc-76-1"><strong>Procedure 76.1 (Build a Graph from Entities and Relationships).</strong> <em>When to use:</em> the first step for any new dataset of entities and their connections: services, people, documents, anything.</p>
+<div id="lst-build-graph" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-build-graph-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;76.1: Directed vs.&nbsp;undirected graph construction in networkx
+</figcaption>
+<div aria-describedby="lst-build-graph-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> networkx <span class="im">as</span> nx</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="co"># Directed graph (edges have a direction: A -&gt; B is not the same as</span></span>
+<span id="cb1-4"><span class="co"># B -&gt; A)</span></span>
+<span id="cb1-5">G <span class="op">=</span> nx.DiGraph()</span>
+<span id="cb1-6">G.add_edge(<span class="st">"api_gateway"</span>, <span class="st">"auth_service"</span>, latency_ms<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb1-7"></span>
+<span id="cb1-8"><span class="co"># Undirected graph (edges are symmetric: a friendship, a co-</span></span>
+<span id="cb1-9"><span class="co"># occurrence)</span></span>
+<span id="cb1-10">H <span class="op">=</span> nx.Graph()</span>
+<span id="cb1-11">H.add_edge(<span class="st">"alice"</span>, <span class="st">"bob"</span>, weight<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-12"></span>
+<span id="cb1-13"><span class="co"># From an edge list in bulk</span></span>
+<span id="cb1-14">edges <span class="op">=</span> [(<span class="st">"a"</span>, <span class="st">"b"</span>), (<span class="st">"b"</span>, <span class="st">"c"</span>), (<span class="st">"c"</span>, <span class="st">"a"</span>)]</span>
+<span id="cb1-15">G2 <span class="op">=</span> nx.DiGraph(edges)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Decision:</strong> use <code>DiGraph</code> when the relationship is one-directional and that direction matters (calls, follows, cites). Use <code>Graph</code> when it’s inherently symmetric (friendship, co-occurrence, shared attribute).</p>
+<p id="proc-76-2"><strong>Procedure 76.2 (Choose and Run a Traversal or Shortest-Path Algorithm).</strong> <em>When to use:</em> answering “what’s reachable,” “trace this path,” or “what’s the cheapest route.”</p>
+<div id="lst-bfs-dfs-shortest" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-bfs-dfs-shortest-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;76.2: Traversal and shortest-path recipes, matched to the question being asked
+</figcaption>
+<div aria-describedby="lst-bfs-dfs-shortest-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="co"># "What's reachable from X, and how far is each thing?" -&gt; BFS</span></span>
+<span id="cb2-2">bfs_tree <span class="op">=</span> nx.bfs_tree(G, source<span class="op">=</span><span class="st">"X"</span>)</span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="co"># "Trace one dependency chain end-to-end before</span></span>
+<span id="cb2-5"><span class="co"># backtracking" -&gt; DFS</span></span>
+<span id="cb2-6">dfs_tree <span class="op">=</span> nx.dfs_tree(G, source<span class="op">=</span><span class="st">"X"</span>)</span>
+<span id="cb2-7"></span>
+<span id="cb2-8"><span class="co"># "What's the minimum number of hops from X to Y?" -&gt; unweighted</span></span>
+<span id="cb2-9"><span class="co"># shortest path</span></span>
+<span id="cb2-10">path <span class="op">=</span> nx.shortest_path(G, source<span class="op">=</span><span class="st">"X"</span>, target<span class="op">=</span><span class="st">"Y"</span>)</span>
+<span id="cb2-11"></span>
+<span id="cb2-12"><span class="co"># "What's the actual cheapest route from X to Y, given real edge</span></span>
+<span id="cb2-13"><span class="co"># costs?" -&gt; Dijkstra</span></span>
+<span id="cb2-14">path <span class="op">=</span> nx.dijkstra_path(</span>
+<span id="cb2-15">    G,</span>
+<span id="cb2-16">    source<span class="op">=</span><span class="st">"X"</span>,</span>
+<span id="cb2-17">    target<span class="op">=</span><span class="st">"Y"</span>,</span>
+<span id="cb2-18">    weight<span class="op">=</span><span class="st">"latency_ms"</span>,</span>
+<span id="cb2-19">)</span>
+<span id="cb2-20">cost <span class="op">=</span> nx.dijkstra_path_length(</span>
+<span id="cb2-21">    G,</span>
+<span id="cb2-22">    source<span class="op">=</span><span class="st">"X"</span>,</span>
+<span id="cb2-23">    target<span class="op">=</span><span class="st">"Y"</span>,</span>
+<span id="cb2-24">    weight<span class="op">=</span><span class="st">"latency_ms"</span>,</span>
+<span id="cb2-25">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Warning:</strong> <code>nx.dijkstra_path</code> requires non-negative edge weights. If weights can be negative (a “cost” that’s sometimes a rebate), use <code>nx.bellman_ford_path</code> instead: slower, but correct in that case.</p>
+<p id="proc-76-3"><strong>Procedure 76.3 (Compute and Compare Centrality Measures).</strong> <em>When to use:</em> answering “which node matters,” after deciding which sense of “matters” is actually meant.</p>
+<div id="lst-centrality" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-centrality-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;76.3: Degree, betweenness, and PageRank centrality, compared side by side
+</figcaption>
+<div aria-describedby="lst-centrality-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">degree <span class="op">=</span> nx.degree_centrality(G)</span>
+<span id="cb3-2">betweenness <span class="op">=</span> nx.betweenness_centrality(G, weight<span class="op">=</span><span class="st">"latency_ms"</span>)</span>
+<span id="cb3-3">pagerank <span class="op">=</span> nx.pagerank(G, weight<span class="op">=</span><span class="st">"latency_ms"</span>)</span>
+<span id="cb3-4"></span>
+<span id="cb3-5"><span class="co"># Top 3 by each measure</span></span>
+<span id="cb3-6"><span class="cf">for</span> name, scores <span class="kw">in</span> [</span>
+<span id="cb3-7">    (<span class="st">"degree"</span>, degree),</span>
+<span id="cb3-8">    (<span class="st">"betweenness"</span>, betweenness),</span>
+<span id="cb3-9">    (<span class="st">"pagerank"</span>, pagerank),</span>
+<span id="cb3-10">]:</span>
+<span id="cb3-11">    top3 <span class="op">=</span> <span class="bu">sorted</span>(scores.items(), key<span class="op">=</span><span class="kw">lambda</span> kv: <span class="op">-</span>kv[<span class="dv">1</span>])[:<span class="dv">3</span>]</span>
+<span id="cb3-12">    <span class="bu">print</span>(name, top3)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Decision guide:</strong> “how many direct neighbours does this node have?” → <code>degree_centrality</code>. “If this node failed, how much traffic has no alternate route?” → <code>betweenness_centrality</code>. “How much does this node’s importance derive from <em>other</em> important nodes depending on it?” → <code>pagerank</code>.</p>
+<p id="proc-76-4"><strong>Procedure 76.4 (Detect Communities and Validate Against Ground Truth).</strong> <em>When to use:</em> the graph is suspected to have natural clusters (teams, factions, topic groups) and the goal is to find them from structure alone.</p>
+<div id="lst-community" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-community-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;76.4: Louvain community detection, and checking the result against known labels
+</figcaption>
+<div aria-describedby="lst-community-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># Louvain: fast, widely used, maximises modularity</span></span>
+<span id="cb4-2"><span class="co"># seed for reproducibility: Louvain has a stochastic step</span></span>
+<span id="cb4-3">communities <span class="op">=</span> nx.community.louvain_communities(G, seed<span class="op">=</span><span class="dv">42</span>)</span>
+<span id="cb4-4"></span>
+<span id="cb4-5"><span class="kw">def</span> agreement_with_ground_truth(communities, ground_truth: <span class="bu">dict</span>):</span>
+<span id="cb4-6">    correct <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb4-7">    total <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb4-8">    <span class="cf">for</span> comm <span class="kw">in</span> communities:</span>
+<span id="cb4-9">        labels <span class="op">=</span> [ground_truth[n] <span class="cf">for</span> n <span class="kw">in</span> comm]</span>
+<span id="cb4-10">        majority <span class="op">=</span> <span class="bu">max</span>(<span class="bu">set</span>(labels), key<span class="op">=</span>labels.count)</span>
+<span id="cb4-11">        correct <span class="op">+=</span> <span class="bu">sum</span>(<span class="dv">1</span> <span class="cf">for</span> l <span class="kw">in</span> labels <span class="cf">if</span> l <span class="op">==</span> majority)</span>
+<span id="cb4-12">        total <span class="op">+=</span> <span class="bu">len</span>(comm)</span>
+<span id="cb4-13">    <span class="cf">return</span> correct <span class="op">/</span> total</span>
+<span id="cb4-14"></span>
+<span id="cb4-15"><span class="co"># accuracy = agreement_with_ground_truth(communities,</span></span>
+<span id="cb4-16"><span class="co"># ground_truth_dict)</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Without ground truth</strong>, use <code>nx.community.modularity(G, communities)</code> as a sanity check. Values well above 0 (roughly above 0.3 is a common rule of thumb) suggest real structure.</p>
+</section>
+<section id="worked-example" class="level2" data-number="76.5">
+<h2 data-number="76.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">76.5</span> Worked Example</h2>
+<p>The tutorial notebook behind this chapter builds two graphs and measures each of the four operations above on real, printed numbers rather than toy illustrations.</p>
+<p>The first is a directed 9-service, 13-edge microservice dependency graph, with a <code>latency_ms</code> weight on every call edge. Running BFS and DFS from <code>api_gateway</code> (Procedure 76.2, <code>bfs_tree</code>/<code>dfs_tree</code>) produces genuinely different visitation orders on the same graph: BFS visits <code>auth_service</code>, <code>user_service</code>, <code>order_service</code> (everything one hop away) before going any deeper, while DFS follows <code>auth_service</code>’s chain all the way to <code>database</code> before backtracking to try <code>user_service</code>.</p>
+<p>The shortest-path comparison is the chapter’s clearest concrete point. The fewest-hops path from <code>api_gateway</code> to <code>database</code> is <code>api_gateway -&gt; user_service -&gt; database</code> (2 hops), but its actual latency is 20ms. The lowest-latency path, found by <code>nx.dijkstra_path</code>, is <code>api_gateway -&gt; auth_service -&gt; database</code>, also 2 hops, but only <strong>15ms</strong> total. Same hop count, different real cost, because <code>user_service</code> and <code>auth_service</code> have different call latencies to <code>database</code> (12ms vs.&nbsp;10ms) and different latencies from <code>api_gateway</code> (8ms vs.&nbsp;5ms). Unweighted shortest path answered a question about hop count; Dijkstra answered the question that actually mattered here.</p>
+<p>Centrality (Procedure 76.3) on the same graph, sorted by betweenness:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Service</th>
+<th>Degree</th>
+<th>Betweenness</th>
+<th>PageRank</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>order_service</code></td>
+<td>0.625</td>
+<td><strong>0.071</strong></td>
+<td>0.077</td>
+</tr>
+<tr class="even">
+<td><code>notification_service</code></td>
+<td>0.375</td>
+<td>0.054</td>
+<td>0.076</td>
+</tr>
+<tr class="odd">
+<td><code>auth_service</code></td>
+<td>0.250</td>
+<td>0.018</td>
+<td>0.074</td>
+</tr>
+<tr class="even">
+<td><code>api_gateway</code></td>
+<td>0.375</td>
+<td>0.000</td>
+<td>0.061</td>
+</tr>
+<tr class="odd">
+<td><code>user_service</code></td>
+<td>0.250</td>
+<td>0.000</td>
+<td>0.082</td>
+</tr>
+<tr class="even">
+<td><code>database</code></td>
+<td>0.625</td>
+<td>0.000</td>
+<td><strong>0.340</strong></td>
+</tr>
+<tr class="odd">
+<td><code>inventory_service</code></td>
+<td>0.250</td>
+<td>0.000</td>
+<td>0.079</td>
+</tr>
+<tr class="even">
+<td><code>payment_service</code></td>
+<td>0.375</td>
+<td>0.000</td>
+<td>0.085</td>
+</tr>
+<tr class="odd">
+<td><code>shipping_service</code></td>
+<td>0.125</td>
+<td>0.000</td>
+<td>0.125</td>
+</tr>
+</tbody>
+</table>
+<p><code>database</code> has by far the highest PageRank (0.340) because nearly every service eventually depends on it directly, but its betweenness centrality is <strong>0.0</strong>: no shortest path between two <em>other</em> services needs to route through it, because it’s a sink; nothing calls back out of it. <code>order_service</code>, by contrast, has the highest betweenness (0.071) despite tying <code>database</code> on plain degree (0.625): a meaningful share of the graph’s internal shortest paths (to <code>inventory_service</code>, <code>payment_service</code>, <code>notification_service</code>) have no route that avoids it. Picking degree centrality alone would have completely missed this distinction, since <code>order_service</code> and <code>database</code> tie on it. “Everything depends on me” and “a lot of traffic has no way around me” are different claims about different nodes, and a customer asking “what’s our single point of failure?” deserves both answers.</p>
+<p>The second graph is Zachary’s Karate Club: a real 1977 friendship network of 34 members and 78 edges that famously split into two real-world factions (“Mr.&nbsp;Hi” and “Officer”) after an actual dispute. Running Louvain community detection (Procedure 76.4) with no faction information at all finds <strong>4 structural communities</strong>. Checking those 4 communities’ majority labels against the real split gives <strong>33 of 34 members (97.1%)</strong> agreement, a structural, label-free algorithm recovering almost the entire real-world outcome. The one mismatch is not swept under the rug: it reflects a member who really was near-equally connected to both emerging factions, and structural clustering alone can’t always resolve which side a boundary case would end up choosing.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS Neptune Equivalent</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">import</span> boto3</span>
+<span id="cb5-2"></span>
+<span id="cb5-3"><span class="co"># for Neptune's data-plane HTTP/openCypher API</span></span>
+<span id="cb5-4">neptune_client <span class="op">=</span> boto3.client(<span class="st">"neptunedata"</span>)</span>
+<span id="cb5-5"></span>
+<span id="cb5-6">response <span class="op">=</span> neptune_client.execute_open_cypher_query(</span>
+<span id="cb5-7">    openCypherQuery<span class="op">=</span>(</span>
+<span id="cb5-8">        <span class="st">"MATCH (a)-[:CALLS]-&gt;(b) "</span></span>
+<span id="cb5-9">        <span class="st">"RETURN a.name, b.name LIMIT 10"</span></span>
+<span id="cb5-10">    )</span>
+<span id="cb5-11">)</span></code></pre></div>
+<p><strong>When to prefer Neptune over in-memory networkx:</strong> the graph is too large to fit in memory, needs to be queried concurrently by multiple services, or needs to persist and be updated incrementally rather than rebuilt from scratch each run. For learning, prototyping, and graphs that fit in memory (up to roughly millions of edges on a single machine), networkx is simpler and sufficient, which is exactly why this chapter used it. Neptune Analytics offers managed equivalents of PageRank, betweenness, and Louvain community detection for graphs that have outgrown a single process.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="76.6">
+<h2 data-number="76.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">76.6</span> History and Further Reading</h2>
+<p>Zachary’s paper “An Information Flow Model for Conflict and Fission in Small Groups” <span class="citation" data-cites="zachary1977karateclub">(<a href="#ref-zachary1977karateclub" role="doc-biblioref">Zachary 1977</a>)</span> is the source of the karate club network this chapter’s community-detection result is checked against: the original real-world split, not a simulated one. Page and Brin’s paper “The PageRank Citation Ranking” <span class="citation" data-cites="page1998pagerank">(<a href="#ref-page1998pagerank" role="doc-biblioref">Page et al. 1998</a>)</span> introduced the recursive-importance algorithm this chapter uses to rank services by how much they’re depended upon. Blondel et al.’s paper “Fast Unfolding of Communities in Large Networks” <span class="citation" data-cites="blondel2008louvain">(<a href="#ref-blondel2008louvain" role="doc-biblioref">Blondel et al. 2008</a>)</span> introduced the Louvain method this chapter’s community detection runs. Book 2, Chapter 31 (RAG &amp; Vector Databases) is the natural point of contrast for this whole track: vector similarity search answers “what reads alike,” and graph traversal answers “what’s connected”: a genuinely different retrieval question, and the reason this track exists.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="76.7">
+<h2 data-number="76.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">76.7</span> How This Connects</h2>
+<p>This chapter enables every later chapter in this track. Chapter 77 (Graph Data Modeling &amp; Databases) covers where these graphs actually live at scale (property graph databases and triple stores) once a graph needs to persist and be queried by more than one process. Chapter 79 (Graph Neural Networks) replaces these exact, deterministic algorithms with learned node representations, trading determinism for flexibility. Chapter 80’s multi-hop retrieval is traversal and shortest-path reasoning, just over a knowledge graph instead of a service graph, and Chapter 81 gives an LLM agent traversal as a callable tool. It is often confused with assuming “central” has one meaning. The <code>database</code>-vs-<code>order_service</code> split in this chapter’s Worked Example is the direct counterexample to keep in mind through the rest of this track.</p>
+</section>
+<section id="exercises" class="level2" data-number="76.8">
+<h2 data-number="76.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">76.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-76-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain, in your own words, why BFS is guaranteed to find a fewest-hops path the first time it reaches a node, using the queue-based mechanism described in the Exposition.</p></li>
+<li id="ex-76-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the practical difference between degree centrality, betweenness centrality, and PageRank in one sentence each, without using the word “important.”</p></li>
+<li id="ex-76-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-bfs-dfs-shortest" class="quarto-xref">Listing&nbsp;<span>76.2</span></a>, compute the fewest-hops path and the Dijkstra path from <code>api_gateway</code> to <code>payment_service</code> on this chapter’s microservice graph, and state whether they agree on both hop count and route.</p></li>
+<li id="ex-76-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-centrality" class="quarto-xref">Listing&nbsp;<span>76.3</span></a>’s output table, identify which single-node failure would be most damaging by betweenness centrality alone, and explain in one sentence why that answer differs from the highest-PageRank node.</p></li>
+<li id="ex-76-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-community" class="quarto-xref">Listing&nbsp;<span>76.4</span></a>, re-run Louvain community detection on the karate club graph with a different <code>seed</code> value, and describe whether the <em>number</em> of communities or their <em>membership</em> is more likely to change, based on this chapter’s discussion of Louvain’s stochastic step.</p></li>
+<li id="ex-76-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer asks, “what’s our single point of failure?” about a service architecture. Using this chapter’s <code>database</code>-vs-<code>order_service</code> distinction, write the two or three sentences you’d say back, including why the answer isn’t a single node.</p></li>
+<li id="ex-76-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer’s graph has 50 million edges and needs to be queried by three different internal applications simultaneously. Using this chapter’s Trade-offs section and AWS Neptune note, write the recommendation you’d give, including what would change your answer if the graph were 5,000 edges and queried by one internal script.</p></li>
+<li id="ex-76-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Zachary 1977 paper’s description of the karate club dispute. Identify the one member this chapter’s Worked Example flags as a mismatch between the detected communities and the real split, and propose one plausible real-world reason (not visible from the graph structure alone) that member might have been genuinely ambiguous.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="76.9">
+<h2 data-number="76.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">76.9</span> Mental Model</h2>
+<p>A graph algorithm is just a precise question about structure. “What can I reach, and in what order,” “what’s the cheapest route,” “who matters, and in what sense,” “what clusters together” are the same four questions every later chapter in this track keeps re-asking, just against richer graphs (property graphs, knowledge graphs, learned embeddings) and eventually with an LLM doing some of the asking.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-blondel2008louvain" class="csl-entry" role="listitem">
+Blondel, Vincent D., Jean-Loup Guillaume, Renaud Lambiotte, and Etienne Lefebvre. 2008. <span>“Fast Unfolding of Communities in Large Networks.”</span> <em>Journal of Statistical Mechanics: Theory and Experiment</em> 2008 (10): P10008.
+</div>
+<div id="ref-page1998pagerank" class="csl-entry" role="listitem">
+Page, Lawrence, Sergey Brin, Rajeev Motwani, and Terry Winograd. 1998. <em>The PageRank Citation Ranking: Bringing Order to the Web</em>. Stanford InfoLab.
+</div>
+<div id="ref-zachary1977karateclub" class="csl-entry" role="listitem">
+Zachary, Wayne W. 1977. <span>“An Information Flow Model for Conflict and Fission in Small Groups.”</span> <em>Journal of Anthropological Research</em> 33 (4): 452–73.
+</div>
+</div>
+</section>

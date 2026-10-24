@@ -1,0 +1,280 @@
+<p>Every kernel so far in this book, vector add, SAXPY, sigmoid, has been a <strong>map</strong>: each thread does its own independent work, with zero communication with any other thread. That pattern covers a surprising amount of real code, but not everything. Summing an array, computing a running total, and blurring an image all require threads to combine or share information with each other. This chapter covers the three canonical patterns for that: <strong>reduction</strong> (combine many values into one), <strong>scan</strong> (compute a running combination), and <strong>stencil</strong> (each output depends on a small neighbourhood of inputs). It produces this book’s most dramatic speedup so far, alongside a genuinely surprising null result that corrects a piece of classic CUDA folklore.</p>
+<section id="motivation" class="level2" data-number="42.1">
+<h2 data-number="42.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">42.1</span> Motivation</h2>
+<p>Whenever threads need to communicate, the naive approach routes everything through a single shared point in global memory. And the naive approach is usually dramatically slower than a version that structures communication to happen locally, in shared memory within a block, first, paying the cost of global coordination only once. Every pattern in this chapter is a variation on that one idea. The size of the win from applying it turns out to depend heavily on what the hardware was already doing for you before you intervened, which is why this chapter measures rather than assumes, in both directions.</p>
+</section>
+<section id="exposition" class="level2" data-number="42.2">
+<h2 data-number="42.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">42.2</span> Exposition</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface.</p>
+<section id="reduction-dont-make-every-thread-fight-over-one-address" class="level3" data-number="42.2.1">
+<h3 data-number="42.2.1" class="anchored" data-anchor-id="reduction-dont-make-every-thread-fight-over-one-address"><span class="header-section-number">42.2.1</span> Reduction: Don’t Make Every Thread Fight Over One Address</h3>
+<p>The obvious way to sum an array in parallel is to have every thread execute <code>atomicAdd(&amp;total, my_value)</code>. This is correct. Atomics guarantee correctness even with millions of threads writing to the same address. But every one of those millions of writes serialises against every other one, because they are all contending for the same memory location.</p>
+<p>The standard fix is <strong>tree reduction</strong>. Each block first reduces its own chunk of data locally, in shared memory, using a halving pattern: half the active threads add a neighbour’s value, then half of <em>those</em> continue, and so on, <code>log₂(block size)</code> steps instead of <code>block size</code> sequential adds. Only the final, single per-block result is committed to global memory with an atomic add: one atomic operation per <em>block</em>, not per <em>thread</em>.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb1-1">__global__ <span class="dt">void</span> sumTreeReduction<span class="op">(</span></span>
+<span id="cb1-2">    <span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span></span>
+<span id="cb1-3">    <span class="dt">float</span><span class="op">*</span> result<span class="op">,</span></span>
+<span id="cb1-4">    <span class="dt">int</span> n</span>
+<span id="cb1-5"><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-6">    __shared__ <span class="dt">float</span> sdata<span class="op">[</span><span class="dv">256</span><span class="op">];</span></span>
+<span id="cb1-7">    <span class="dt">int</span> tid <span class="op">=</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb1-8">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb1-9">    sdata<span class="op">[</span>tid<span class="op">]</span> <span class="op">=</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">?</span> in<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb1-10">    __syncthreads<span class="op">();</span></span>
+<span id="cb1-11"></span>
+<span id="cb1-12">    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> s <span class="op">=</span> blockDim<span class="op">.</span>x <span class="op">/</span> <span class="dv">2</span><span class="op">;</span> s <span class="op">&gt;</span> <span class="dv">0</span><span class="op">;</span> s <span class="op">&gt;&gt;=</span> <span class="dv">1</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb1-13">        <span class="cf">if</span> <span class="op">(</span>tid <span class="op">&lt;</span> s<span class="op">)</span> sdata<span class="op">[</span>tid<span class="op">]</span> <span class="op">+=</span> sdata<span class="op">[</span>tid <span class="op">+</span> s<span class="op">];</span></span>
+<span id="cb1-14">        __syncthreads<span class="op">();</span></span>
+<span id="cb1-15">    <span class="op">}</span></span>
+<span id="cb1-16">    <span class="cf">if</span> <span class="op">(</span>tid <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> atomicAdd<span class="op">(</span>result<span class="op">,</span> sdata<span class="op">[</span><span class="dv">0</span><span class="op">]);</span></span>
+<span id="cb1-17"><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="warp-shuffle-reduction-one-step-further-than-shared-memory" class="level3" data-number="42.2.2">
+<h3 data-number="42.2.2" class="anchored" data-anchor-id="warp-shuffle-reduction-one-step-further-than-shared-memory"><span class="header-section-number">42.2.2</span> Warp-Shuffle Reduction: One Step Further Than Shared Memory</h3>
+<p>Tree reduction already removed the bottleneck of one global address shared by every thread. A further step removes shared memory from the reduction’s first stage entirely. <strong>Warp-shuffle intrinsics</strong> let threads within the same warp exchange register values directly, without going through shared memory and without a <code>__syncthreads()</code> call. <code>__shfl_down_sync(mask, val, offset)</code> reads <code>val</code> from the lane <code>offset</code> positions higher in the warp. Applying the same halving pattern as tree reduction, but with shuffles instead of shared-memory reads and writes, reduces all 32 lanes of a warp to a single value in <code>log₂(32) = 5</code> steps, entirely in registers.</p>
+<p>A 256-thread block still needs to combine its 8 warps’ partial sums, so a small second stage remains: each warp’s lane 0 writes its partial into an 8-element shared-memory array, one <code>__syncthreads()</code>, then the first warp shuffle-reduces those 8 values the same way. The result is a reduction with far fewer shared-memory reads and writes and fewer <code>__syncthreads()</code> barriers than the pure tree-reduction version, while producing the identical numerical result.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb2-1">__global__ <span class="dt">void</span> sumWarpShuffle<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> result<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-2">    <span class="dt">int</span> tid <span class="op">=</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb2-3">    <span class="dt">int</span> i <span class="op">=</span> blockIdx<span class="op">.</span>x <span class="op">*</span> blockDim<span class="op">.</span>x <span class="op">+</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb2-4">    <span class="dt">float</span> val <span class="op">=</span> <span class="op">(</span>i <span class="op">&lt;</span> n<span class="op">)</span> <span class="op">?</span> in<span class="op">[</span>i<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb2-5"></span>
+<span id="cb2-6">    <span class="co">// Intra-warp reduction via register shuffle: no shared</span></span>
+<span id="cb2-7">    <span class="co">// memory, no __syncthreads()</span></span>
+<span id="cb2-8">    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> offset <span class="op">=</span> <span class="dv">16</span><span class="op">;</span> offset <span class="op">&gt;</span> <span class="dv">0</span><span class="op">;</span> offset <span class="op">&gt;&gt;=</span> <span class="dv">1</span><span class="op">)</span></span>
+<span id="cb2-9">        val <span class="op">+=</span> __shfl_down_sync<span class="op">(</span><span class="bn">0xffffffff</span><span class="op">,</span> val<span class="op">,</span> offset<span class="op">);</span></span>
+<span id="cb2-10"></span>
+<span id="cb2-11">    __shared__ <span class="dt">float</span> warpSums<span class="op">[</span><span class="dv">8</span><span class="op">];</span>   <span class="co">// 256 threads / 32 = 8 warps</span></span>
+<span id="cb2-12">    <span class="dt">int</span> warpId <span class="op">=</span> tid <span class="op">/</span> <span class="dv">32</span><span class="op">,</span> lane <span class="op">=</span> tid <span class="op">%</span> <span class="dv">32</span><span class="op">;</span></span>
+<span id="cb2-13">    <span class="cf">if</span> <span class="op">(</span>lane <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> warpSums<span class="op">[</span>warpId<span class="op">]</span> <span class="op">=</span> val<span class="op">;</span></span>
+<span id="cb2-14">    __syncthreads<span class="op">();</span></span>
+<span id="cb2-15"></span>
+<span id="cb2-16">    <span class="cf">if</span> <span class="op">(</span>warpId <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb2-17">        <span class="dt">float</span> v <span class="op">=</span> <span class="op">(</span>lane <span class="op">&lt;</span> <span class="dv">8</span><span class="op">)</span> <span class="op">?</span> warpSums<span class="op">[</span>lane<span class="op">]</span> <span class="op">:</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb2-18">        <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> offset <span class="op">=</span> <span class="dv">4</span><span class="op">;</span> offset <span class="op">&gt;</span> <span class="dv">0</span><span class="op">;</span> offset <span class="op">&gt;&gt;=</span> <span class="dv">1</span><span class="op">)</span></span>
+<span id="cb2-19">            v <span class="op">+=</span> __shfl_down_sync<span class="op">(</span><span class="bn">0xffffffff</span><span class="op">,</span> v<span class="op">,</span> offset<span class="op">);</span></span>
+<span id="cb2-20">        <span class="cf">if</span> <span class="op">(</span>lane <span class="op">==</span> <span class="dv">0</span><span class="op">)</span> atomicAdd<span class="op">(</span>result<span class="op">,</span> v<span class="op">);</span></span>
+<span id="cb2-21">    <span class="op">}</span></span>
+<span id="cb2-22"><span class="op">}</span></span></code></pre></div>
+</section>
+<section id="stencil-a-genuinely-surprising-honest-result" class="level3" data-number="42.2.3">
+<h3 data-number="42.2.3" class="anchored" data-anchor-id="stencil-a-genuinely-surprising-honest-result"><span class="header-section-number">42.2.3</span> Stencil: a Genuinely Surprising, Honest Result</h3>
+<p>The classic CUDA optimisation literature teaches that stencil operations, where each output depends on a small neighbourhood, as in a blur, a finite-difference PDE solver, or a convolution, benefit substantially from loading a “tile plus halo” into shared memory once, so overlapping neighbour reads between adjacent threads are served from fast shared memory instead of redundant trips to global memory. This chapter’s Worked Example tests that claim directly, across four variations, and finds <strong>no measurable benefit from tiling in any of them</strong> on this book’s reference rig. Several results land within a percent or two of the naive version, one even a hair slower. This is a real, reproducible result, not a mistake. Modern NVIDIA architectures (Volta onward) automatically cache global memory reads in an L1 data cache, and this GPU’s 96 MB L2 cache is large enough to hold the entire test array in every variation tested. The “redundant” neighbour reads the classic technique optimises away were already being served from cache. Manual shared-memory tiling was solving a problem the hardware had already solved.</p>
+<p>This does not mean shared-memory tiling is generally useless. Chapter 40’s transpose experiment showed a real, if modest, benefit from a related shared-memory technique (bank-conflict padding), and this chapter’s own reduction result shows shared memory delivering the single largest speedup measured anywhere in this book so far. What the stencil result specifically shows is that <em>manual caching of read-only, naturally-overlapping neighbour data</em> is a technique whose value has shrunk as GPU caches have grown. The only way to know whether it helps on a given workload and piece of hardware is to measure, exactly as this chapter did, reporting a null result honestly rather than a fabricated win.</p>
+</section>
+<section id="scan-a-running-combination" class="level3" data-number="42.2.4">
+<h3 data-number="42.2.4" class="anchored" data-anchor-id="scan-a-running-combination"><span class="header-section-number">42.2.4</span> Scan: a Running Combination</h3>
+<p>A <strong>scan</strong> (or prefix sum) computes, for each position <code>i</code>, the combination, typically sum, of all elements up to and including <code>i</code>: <code>[1,1,1,1]</code> becomes <code>[1,2,3,4]</code> for an inclusive sum-scan. This underlies cumulative sums directly, but also less obvious operations: stream compaction (removing filtered-out elements while preserving order), and the parallel algorithms behind sorting and building histograms.</p>
+<p>This chapter implements the classic <strong>Hillis-Steele</strong> scan: <code>log₂(n)</code> steps, where at each step every thread adds a value from <code>offset</code> positions back, with <code>offset</code> doubling each step (1, 2, 4, 8, …). It is simple and instructive, though not the most <em>work-efficient</em> algorithm. The Blelloch work-efficient scan does the same job with less total work, at the cost of more implementation complexity, and is worth knowing by name even though it is out of scope for this introduction.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb3-1"><span class="pp">#define N </span><span class="dv">1024</span><span class="pp">  </span><span class="co">// single block, one thread per element</span></span>
+<span id="cb3-2"></span>
+<span id="cb3-3">__global__ <span class="dt">void</span> inclusiveScan<span class="op">(</span><span class="at">const</span> <span class="dt">float</span><span class="op">*</span> in<span class="op">,</span> <span class="dt">float</span><span class="op">*</span> out<span class="op">,</span> <span class="dt">int</span> n<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-4">    __shared__ <span class="dt">float</span> temp<span class="op">[</span>N<span class="op">];</span></span>
+<span id="cb3-5">    <span class="dt">int</span> tid <span class="op">=</span> threadIdx<span class="op">.</span>x<span class="op">;</span></span>
+<span id="cb3-6">    temp<span class="op">[</span>tid<span class="op">]</span> <span class="op">=</span> in<span class="op">[</span>tid<span class="op">];</span></span>
+<span id="cb3-7">    __syncthreads<span class="op">();</span></span>
+<span id="cb3-8"></span>
+<span id="cb3-9">    <span class="cf">for</span> <span class="op">(</span><span class="dt">int</span> offset <span class="op">=</span> <span class="dv">1</span><span class="op">;</span> offset <span class="op">&lt;</span> n<span class="op">;</span> offset <span class="op">*=</span> <span class="dv">2</span><span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-10">        <span class="dt">float</span> val <span class="op">=</span> <span class="fl">0.0</span><span class="bu">f</span><span class="op">;</span></span>
+<span id="cb3-11">        <span class="cf">if</span> <span class="op">(</span>tid <span class="op">&gt;=</span> offset<span class="op">)</span> val <span class="op">=</span> temp<span class="op">[</span>tid <span class="op">-</span> offset<span class="op">];</span></span>
+<span id="cb3-12">        __syncthreads<span class="op">();</span></span>
+<span id="cb3-13">        temp<span class="op">[</span>tid<span class="op">]</span> <span class="op">+=</span> val<span class="op">;</span></span>
+<span id="cb3-14">        __syncthreads<span class="op">();</span></span>
+<span id="cb3-15">    <span class="op">}</span></span>
+<span id="cb3-16">    out<span class="op">[</span>tid<span class="op">]</span> <span class="op">=</span> temp<span class="op">[</span>tid<span class="op">];</span></span>
+<span id="cb3-17"><span class="op">}</span></span></code></pre></div>
+<p>Note the double <code>__syncthreads()</code>: one after reading a neighbour’s value (ensuring every thread has read before anyone writes), one after writing (ensuring every thread’s write is visible before the next iteration reads). Dropping either introduces a race condition.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="42.3">
+<h2 data-number="42.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">42.3</span> Trade-offs and Limits</h2>
+<p>Tree reduction wins decisively, close to a strict no-downside upgrade over naive per-thread atomics, at any large-scale aggregation (sum, max, min, mean) whenever the block size divides evenly and shared memory can be spared. Warp-shuffle reduction is worth reaching for on top of tree reduction whenever the aggregation itself, not memory bandwidth, is the bottleneck. It gave a real, repeatable 1.02x further win here, small compared to tree reduction’s own 246.2x, which is the expected shape. The first fix removes the dominant cost. The second trims what is left. Manual stencil tiling is worth <em>trying</em>, not assuming. On hardware with small caches, or with a per-thread neighbourhood large enough to exceed cache reach, tiling can still help substantially. But on modern GPUs with large L1/L2 caches and modest radii, this chapter found no benefit at all, in four separate configurations. Scan wins at any cumulative or order-preserving parallel operation, but the simple Hillis-Steele version used here does <code>O(n log n)</code> total work versus <code>O(n)</code> for a sequential scan, fine at the block sizes shown here, worth revisiting the work-efficient Blelloch variant for very large scans. A common confusion this chapter directly corrects: “shared memory always helps.” It helps when it avoids work the cache would not otherwise do, and no more than that, as the stencil result shows in stark, measured contrast to the reduction result.</p>
+</section>
+<section id="procedures" class="level2" data-number="42.4">
+<h2 data-number="42.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">42.4</span> Procedures</h2>
+<p id="proc-42-1"><strong>Procedure 42.1 (Sum a Large Array Efficiently With Tree Reduction).</strong> <em>When to use:</em> any aggregation (sum, max, min) over a large array. Close to a strict upgrade over naive per-thread atomics.</p>
+<div id="lst-parallelpat-reduction" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-parallelpat-reduction-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;42.1: Tree reduction: one atomic per block, not per thread
+</figcaption>
+<div aria-describedby="lst-parallelpat-reduction-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>__global__ void sumTreeReduction(
+    const float* in,
+    float* result,
+    int n
+) {
+    __shared__ float sdata[256];   // must match blockDim.x
+    int tid = threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    sdata[tid] = (i &lt; n) ? in[i] : 0.0f;
+    __syncthreads();
+
+    for (int s = blockDim.x / 2; s &gt; 0; s &gt;&gt;= 1) {
+        if (tid &lt; s) sdata[tid] += sdata[tid + s];
+        __syncthreads();
+    }
+    if (tid == 0) atomicAdd(result, sdata[0]);
+}</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting <code>__syncthreads()</code> inside the reduction loop. Without it, faster threads race ahead to the next iteration and read a neighbour’s value before that neighbour has finished writing. This is a silent, non-deterministic correctness bug, often maddening to debug because it frequently “mostly” produces the right answer.</p>
+<div id="lst-parallelpat-shuffle" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-parallelpat-shuffle-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;42.2: Warp-shuffle reduction: intra-warp via registers, only a small cross-warp step touches shared memory
+</figcaption>
+<div aria-describedby="lst-parallelpat-shuffle-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>__global__ void sumWarpShuffle(const float* in, float* result, int n) {
+    int tid = threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    float val = (i &lt; n) ? in[i] : 0.0f;
+
+    for (int offset = 16; offset &gt; 0; offset &gt;&gt;= 1)
+        val += __shfl_down_sync(0xffffffff, val, offset);
+
+    __shared__ float warpSums[8];
+    int warpId = tid / 32, lane = tid % 32;
+    if (lane == 0) warpSums[warpId] = val;
+    __syncthreads();
+
+    if (warpId == 0) {
+        float v = (lane &lt; 8) ? warpSums[lane] : 0.0f;
+        for (int offset = 4; offset &gt; 0; offset &gt;&gt;= 1)
+            v += __shfl_down_sync(0xffffffff, v, offset);
+        if (lane == 0) atomicAdd(result, v);
+    }
+}</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> using a partial warp mask (anything other than <code>0xffffffff</code>) when every lane in the warp is actually active. <code>__shfl_down_sync</code> needs a mask naming every participating lane. Getting it wrong either hangs the warp or silently reads garbage from an inactive lane.</p>
+<p id="proc-42-2"><strong>Procedure 42.2 (Decide Whether Shared-Memory Tiling Will Help a Stencil).</strong> <em>When to use:</em> before investing time implementing the more complex tiled-with-halo version of a stencil kernel.</p>
+<div id="lst-parallelpat-stencil-triage" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-parallelpat-stencil-triage-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;42.3: Rough triage based on this chapter’s measured null result: always benchmark to confirm
+</figcaption>
+<div aria-describedby="lst-parallelpat-stencil-triage-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="kw">def</span> stencil_tiling_likely_helps(</span>
+<span id="cb6-2">    data_size_bytes,</span>
+<span id="cb6-3">    l2_cache_bytes,</span>
+<span id="cb6-4">    radius,</span>
+<span id="cb6-5">    is_coalesced_base_access,</span>
+<span id="cb6-6">):</span>
+<span id="cb6-7">    <span class="cf">if</span> data_size_bytes <span class="op">&lt;=</span> l2_cache_bytes:</span>
+<span id="cb6-8">        <span class="co"># whole dataset likely stays cache-resident already</span></span>
+<span id="cb6-9">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb6-10">    <span class="cf">if</span> is_coalesced_base_access <span class="kw">and</span> radius <span class="op">&lt;</span> <span class="dv">64</span>:</span>
+<span id="cb6-11">        <span class="co"># overlapping reads likely already captured by cache</span></span>
+<span id="cb6-12">        <span class="co"># lines/L1</span></span>
+<span id="cb6-13">        <span class="cf">return</span> <span class="va">False</span></span>
+<span id="cb6-14">    <span class="co"># ambiguous: benchmark both versions on your actual hardware</span></span>
+<span id="cb6-15">    <span class="cf">return</span> <span class="va">None</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> implementing the tiled version reflexively “because that’s what the textbook says to do for stencils,” without first benchmarking the simpler naive version. This chapter’s own measurements found the naive version equal to or faster than the tiled version in every configuration tested. Always benchmark both before committing to the more complex code.</p>
+<p id="proc-42-3"><strong>Procedure 42.3 (Write a Block-Level Parallel Scan).</strong> <em>When to use:</em> cumulative sums, stream compaction, or any “running combination” computed in parallel, for data that fits in one block. Multi-block scans need an additional combination pass, out of scope here.</p>
+<div id="lst-parallelpat-scan" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-parallelpat-scan-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;42.4: Hillis-Steele inclusive scan, single block
+</figcaption>
+<div aria-describedby="lst-parallelpat-scan-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>#define N 1024
+
+__global__ void inclusiveScan(const float* in, float* out, int n) {
+    __shared__ float temp[N];
+    int tid = threadIdx.x;
+    temp[tid] = in[tid];
+    __syncthreads();
+
+    for (int offset = 1; offset &lt; n; offset *= 2) {
+        float val = 0.0f;
+        if (tid &gt;= offset) val = temp[tid - offset];
+        __syncthreads();
+        temp[tid] += val;
+        __syncthreads();
+    }
+    out[tid] = temp[tid];
+}
+
+// Exclusive scan (each position gets the sum of
+// everything BEFORE it): shift the output by one
+// position and set out[0] = 0 (the identity for sum).</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> using this Hillis-Steele version for very large arrays without realising it does <code>O(n log n)</code> total work, not <code>O(n)</code>. Fine at <code>n = 1024</code>; for large-scale production scans over millions of elements, the work-efficient Blelloch algorithm does meaningfully less total work.</p>
+</section>
+<section id="worked-example" class="level2" data-number="42.5">
+<h2 data-number="42.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">42.5</span> Worked Example</h2>
+<p>The companion notebook runs all three experiments on this book’s reference rig, using the same <code>nvcc</code>-compile-and-run harness as Chapters 40-41.</p>
+<p><strong>Reduction, summing ~16.7 million elements (all equal to 1.0, so the correct sum equals <code>n</code>):</strong></p>
+<pre class="text"><code>n = 16777216 elements, expected sum = 16777216
+Naive atomic-per-thread:  21.3228 ms, result = 16777216.0 (correct)
+Tree reduction (shared):  0.0866 ms, result = 16777216.0 (correct)
+Speedup from tree reduction: 246.2x</code></pre>
+<p>A 246.2x<span class="ref-rig-mark">†</span> speedup for the mathematically identical result, the largest measured speedup anywhere in this book so far. Both kernels compute the exact same sum. The only difference is whether every one of 16.7 million threads contends for one global memory address, or each block quietly resolves its own contention first, so that only one thread per block ever touches global memory.</p>
+<p><strong>Warp-shuffle reduction (<a href="#lst-parallelpat-shuffle" class="quarto-xref">Listing&nbsp;<span>42.2</span></a>), same array, mean of 20 runs:</strong></p>
+<pre class="text"><code>Tree reduction (shared):   0.0862 ms, result = 16777216.0 (correct)
+Warp-shuffle reduction:    0.0844 ms, result = 16777216.0 (correct)
+Speedup from warp shuffle over tree reduction: 1.02x</code></pre>
+<p>A real, reproducible<span class="ref-rig-mark">†</span> but modest further win: 1.02x, consistent across repeated runs, not noise. This is a much smaller jump than tree reduction’s 246.2x over the naive version, and that is expected. Tree reduction already removed the dominant cost (millions of threads serialising on one address). Warp-shuffle removes a second, smaller cost on top of that: shared-memory traffic and <code>__syncthreads()</code> barrier overhead during the intra-warp stage. Both kernels compute the identical sum. The remaining difference is instruction count and synchronisation overhead, not memory-access pattern.</p>
+<p><strong>Stencil, 7-point 1D blur (radius 3) on the same ~16.7 million elements, naive vs.&nbsp;tiled-with-halo:</strong></p>
+<pre class="text"><code>n = 16777216 elements, RADIUS = 3 (7-point stencil)
+Naive (global memory only):     0.0761 ms
+Tiled (shared memory + halo):   0.0774 ms
+Speedup from tiling: 0.98x
+Naive and tiled results match: true</code></pre>
+<p>Tiling is very slightly <em>slower</em> here (0.98x<span class="ref-rig-mark">†</span>): a real, honest null result, not noise below measurement resolution. If this result reproduces on your own hardware, that is expected, not a bug. This book’s reference rig automatically caches global memory reads (L1 caching since Volta, plus a 96 MB L2 cache), which already captures the “redundant” neighbour reads the manual tiling technique targets. The lesson is not “tiling is useless.” It is that the classic CUDA optimisation literature was written for hardware with much smaller or no automatic caching of global loads, and claims like this one must be re-measured on the actual target hardware rather than trusted by default.</p>
+<p><strong>Scan, inclusive sum of 1,024 ones, verified against a CPU cumulative sum:</strong></p>
+<pre class="text"><code>Inclusive scan of 1024 ones correct: true
+First 5 outputs: 1 2 3 4 5 (expect 1 2 3 4 5)
+Last output: 1024 (expect 1024)</code></pre>
+<p>The scan matches the CPU reference exactly at every position checked, confirming the Hillis-Steele double-<code>__syncthreads()</code> pattern (Procedure 42.3) produces a correct running sum, not just a plausible-looking one.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="42.6">
+<h2 data-number="42.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">42.6</span> History and Further Reading</h2>
+<p>Harris’s “Optimizing Parallel Reduction in CUDA” <span class="citation" data-cites="harris2007reduction">(<a href="#ref-harris2007reduction" role="doc-biblioref">Harris 2007</a>)</span> is the canonical, deeper treatment of reduction, including further optimisations beyond the tree pattern shown here. Blelloch’s “Prefix Sums and Their Applications” <span class="citation" data-cites="blelloch1990prefixsums">(<a href="#ref-blelloch1990prefixsums" role="doc-biblioref">Blelloch 1990</a>)</span> is the original source for the work-efficient scan algorithm named but not implemented in this chapter. Harris, Sengupta, and Owens’s “Parallel Prefix Sum (Scan) with CUDA,” Chapter 39 of <em>GPU Gems 3</em> <span class="citation" data-cites="harris2007gpugems">(<a href="#ref-harris2007gpugems" role="doc-biblioref">Harris et al. 2007</a>)</span>, is a classic reference covering both the Hillis-Steele and Blelloch scans in depth. The “Global Memory” section of the NVIDIA CUDA C++ Programming Guide explains the automatic L1/L2 caching behaviour behind this chapter’s stencil result. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 9, extends this chapter’s tree-reduction pattern into a single fused kernel, computing a per-row L2 norm as a block-level reduction and writing the normalised result in one pass rather than three, worth reading as a preview of the fusion technique this book’s capstone builds on. Farber’s <em>CUDA Application Design and Development</em> <span class="citation" data-cites="farber2011cudaapplication">(<a href="#ref-farber2011cudaapplication" role="doc-biblioref">Farber 2011</a>)</span>, Chapter 6, covers this same family of parallel patterns (reduction, tiling, stencils) plus the structure-of-arrays-versus-array-of-structures layout choice this book’s Chapter 51 measures on CPU; the specific hardware it targets predates Volta, but the patterns themselves haven’t changed.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="42.7">
+<h2 data-number="42.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">42.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 40’s shared memory and <code>__syncthreads()</code> material and Chapter 39’s kernel launch and atomics coverage. It enables Chapter 43 (why the reduction won so dramatically and the stencil did not is precisely the occupancy and roofline reasoning that chapter formalises) and Chapter 47 (the capstone’s fused kernel uses a reduction pattern directly, inside a normalisation operation’s mean and variance computation). It is often confused with the blanket claim “shared memory always helps.” This chapter’s own stencil result is the direct, measured counter-example: shared memory helps when it avoids work the cache would not otherwise do, and no more.</p>
+</section>
+<section id="exercises" class="level2" data-number="42.8">
+<h2 data-number="42.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">42.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-42-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In your own words, explain why the naive <code>atomicAdd</code>-per-thread reduction is slow, and what tree reduction (<a href="#lst-parallelpat-reduction" class="quarto-xref">Listing&nbsp;<span>42.1</span></a>) does differently.</p></li>
+<li id="ex-42-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define “stencil” and “halo” as this chapter uses them, and state this chapter’s measured result for whether tiling helped in the four variations tested.</p></li>
+<li id="ex-42-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-parallelpat-reduction" class="quarto-xref">Listing&nbsp;<span>42.1</span></a>, explain what would go wrong (in terms of the final result, not just performance) if the <code>__syncthreads()</code> call inside the <code>for</code> loop were removed.</p></li>
+<li id="ex-42-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter measured tree reduction at 0.0866 ms and naive atomics at 21.3228 ms for the same 16.7 million element sum. Compute the number of individual <code>atomicAdd</code> calls each approach makes to the single shared result address, assuming a block size of 256.</p></li>
+<li id="ex-42-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-parallelpat-scan" class="quarto-xref">Listing&nbsp;<span>42.4</span></a>, trace by hand the first three steps (<code>offset = 1, 2, 4</code>) of the scan for the 8-element input <code>[1, 1, 1, 1, 1, 1, 1, 1]</code>, writing out <code>temp[]</code> after each step.</p></li>
+<li id="ex-42-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague claims “shared-memory tiling is a strict upgrade for any stencil kernel, so it should always be used.” Using this chapter’s reduction result (246.2x win) versus its stencil result (0.98x, no win), write the two or three sentences you’d say back.</p></li>
+<li id="ex-42-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Propose a scenario (in a sentence or two, no code required) where the stencil tiling technique this chapter found unhelpful would likely help substantially instead, using <a href="#lst-parallelpat-stencil-triage" class="quarto-xref">Listing&nbsp;<span>42.3</span></a>’s triage logic.</p></li>
+<li id="ex-42-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Harris NVIDIA whitepaper on parallel reduction. Summarise, in a few sentences, one further optimisation beyond the simple tree-reduction pattern in this chapter, and estimate (without necessarily implementing it) whether it would meaningfully change this chapter’s measured 246.2x result.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="42.9">
+<h2 data-number="42.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">42.9</span> Mental Model</h2>
+<p>Reduction, scan, and stencil are all instances of one question: when threads need each other’s answers, do they ask a crowded central desk (global memory, atomics) or hold a local team huddle first (shared memory, block-local computation)? The huddle almost always wins when the central desk would otherwise be hit by every single thread: reduction’s atomics, and this chapter’s most dramatic number. It does not automatically win when the hardware was already quietly running an equivalent huddle on your behalf: the stencil’s null result. The only way to know which situation applies is to measure, in both directions, exactly as this chapter did.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-blelloch1990prefixsums" class="csl-entry" role="listitem">
+Blelloch, Guy E. 1990. <em>Prefix Sums and Their Applications</em>. CMU-CS-90-190. School of Computer Science, Carnegie Mellon University.
+</div>
+<div id="ref-farber2011cudaapplication" class="csl-entry" role="listitem">
+Farber, Rob. 2011. <em>CUDA Application Design and Development</em>. Morgan Kaufmann.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+<div id="ref-harris2007reduction" class="csl-entry" role="listitem">
+Harris, Mark. 2007. <em>Optimizing Parallel Reduction in CUDA</em>. NVIDIA Developer Technology.
+</div>
+<div id="ref-harris2007gpugems" class="csl-entry" role="listitem">
+Harris, Mark, Shubhabrata Sengupta, and John D. Owens. 2007. <span>“Parallel Prefix Sum (Scan) with CUDA.”</span> Chap. 39 in <em>GPU Gems 3</em>, edited by Hubert Nguyen. Addison-Wesley.
+</div>
+</div>
+</section>

@@ -1,0 +1,3066 @@
+<p>Scan, don’t read. This appendix collects each chapter’s lookup material — key terms, API summaries, formulas, decision guides, and metrics — organized by chapter. Keep it open while working; it is not meant to be read start to finish.</p>
+<section id="chapter-21-responsible-ai-data-governance" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-21-responsible-ai-data-governance">Chapter 21 — Responsible AI &amp; Data Governance</h2>
+<section id="fairness-metrics" class="level3">
+<h3 class="anchored" data-anchor-id="fairness-metrics">Fairness Metrics</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Formula</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Demographic Parity</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mover accent="true"><mi>y</mi><mo>^</mo></mover><mo>=</mo><mn>1</mn><mo>∣</mo><mi>A</mi><mo>=</mo><mn>0</mn><mo stretchy="false">)</mo><mo>=</mo><mi>P</mi><mo stretchy="false">(</mo><mover accent="true"><mi>y</mi><mo>^</mo></mover><mo>=</mo><mn>1</mn><mo>∣</mo><mi>A</mi><mo>=</mo><mn>1</mn><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(\hat y=1\mid A=0)=P(\hat y=1\mid A=1)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">0</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mclose">)</span></span></span></span></td>
+<td>Equal representation in outputs matters</td>
+</tr>
+<tr class="even">
+<td>Equalised Odds</td>
+<td>TPR and FPR equal across groups</td>
+<td>Both error types have real costs</td>
+</tr>
+<tr class="odd">
+<td>Equal Opportunity</td>
+<td>Equal TPR across groups</td>
+<td>Missing qualified individuals is the main harm</td>
+</tr>
+<tr class="even">
+<td>Calibration</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mo>=</mo><mn>1</mn><mo>∣</mo><mover accent="true"><mi>y</mi><mo>^</mo></mover><mo>=</mo><mi>p</mi><mo separator="true">,</mo><mi>A</mi><mo stretchy="false">)</mo><mo>=</mo><mi>p</mi></mrow><annotation encoding="application/x-tex">P(y=1\mid \hat y=p,A)=p</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">p</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">A</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span></span></span></span> for all groups</td>
+<td>Score used for ranking, not a hard threshold</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Disparate Impact Ratio:</strong> <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>min</mi><mo>⁡</mo><mi mathvariant="normal">_</mi><mi>g</mi><mi>r</mi><mi>o</mi><mi>u</mi><mi>p</mi><mi mathvariant="normal">_</mi><mi>r</mi><mi>a</mi><mi>t</mi><mi>e</mi><mi mathvariant="normal">/</mi><mi>max</mi><mo>⁡</mo><mi mathvariant="normal">_</mi><mi>g</mi><mi>r</mi><mi>o</mi><mi>u</mi><mi>p</mi><mi mathvariant="normal">_</mi><mi>r</mi><mi>a</mi><mi>t</mi><mi>e</mi></mrow><annotation encoding="application/x-tex">\min\_group\_rate / \max\_group\_rate</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.06em;vertical-align:-0.31em;"></span><span class="mop">min</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord" style="margin-right:0.0278em;">_</span><span class="mord mathnormal" style="margin-right:0.0359em;">g</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">o</span><span class="mord mathnormal">u</span><span class="mord mathnormal">p</span><span class="mord" style="margin-right:0.0278em;">_</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">a</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span><span class="mord">/</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">max</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord" style="margin-right:0.0278em;">_</span><span class="mord mathnormal" style="margin-right:0.0359em;">g</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">o</span><span class="mord mathnormal">u</span><span class="mord mathnormal">p</span><span class="mord" style="margin-right:0.0278em;">_</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mord mathnormal">a</span><span class="mord mathnormal">t</span><span class="mord mathnormal">e</span></span></span></span>, must be <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≥</mo><mn>0.8</mn></mrow><annotation encoding="application/x-tex">\geq 0.8</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7719em;vertical-align:-0.136em;"></span><span class="mrel">≥</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.8</span></span></span></span> (the 4/5ths rule) in US employment law. Demographic parity and equalised odds are mutually exclusive unless base rates are equal.</p>
+</section>
+<section id="shap-explainer-types" class="level3">
+<h3 class="anchored" data-anchor-id="shap-explainer-types">SHAP Explainer Types</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Explainer</th>
+<th>Model type</th>
+<th>Speed</th>
+<th>Exact?</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>TreeExplainer</code></td>
+<td>XGBoost, LightGBM, sklearn trees/forests</td>
+<td>Fast</td>
+<td>Yes</td>
+</tr>
+<tr class="even">
+<td><code>LinearExplainer</code></td>
+<td>Linear models</td>
+<td>Fast</td>
+<td>Yes</td>
+</tr>
+<tr class="odd">
+<td><code>KernelExplainer</code></td>
+<td>Any black box</td>
+<td>Slow</td>
+<td>Approximate</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="gdpr-obligations-for-ml-systems" class="level3">
+<h3 class="anchored" data-anchor-id="gdpr-obligations-for-ml-systems">GDPR Obligations for ML Systems</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Obligation</th>
+<th>What it means</th>
+<th>How to comply</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Purpose limitation</td>
+<td>Can’t reuse data collected for X to train model for Y</td>
+<td>Document intended purpose; get consent for new uses</td>
+</tr>
+<tr class="even">
+<td>Data minimisation</td>
+<td>Don’t train on more data than needed</td>
+<td>Feature selection before training</td>
+</tr>
+<tr class="odd">
+<td>Right to explanation (Art. 22)</td>
+<td>Individuals can request explanation of automated decisions</td>
+<td>Use SHAP/LIME; log explanations per prediction</td>
+</tr>
+<tr class="even">
+<td>Right to erasure</td>
+<td>Must delete personal data on request</td>
+<td>Machine unlearning or retraining without that record</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="pii-categories" class="level3">
+<h3 class="anchored" data-anchor-id="pii-categories">PII Categories</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Category</th>
+<th>Examples</th>
+<th>Risk level</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Direct identifiers</td>
+<td>Name, SSN, email, phone</td>
+<td>High: remove or hash</td>
+</tr>
+<tr class="even">
+<td>Quasi-identifiers</td>
+<td>Zip code, DOB, gender</td>
+<td>Medium: consider aggregating</td>
+</tr>
+<tr class="odd">
+<td>Sensitive attributes</td>
+<td>Race, religion, health</td>
+<td>High: often protected class</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="model-card-template" class="level3">
+<h3 class="anchored" data-anchor-id="model-card-template">Model Card Template</h3>
+<pre class="text"><code>Model name / Version / Date
+Intended use: [task and intended user population]
+Out-of-scope uses: [what the model should NOT be used for]
+Training data: [source, size, date range, demographic coverage]
+Performance: [overall + per-group metrics]
+Fairness metrics: [DI, TPR gap, FPR gap by sensitive attribute]
+Limitations / Ethical considerations / Responsible contact</code></pre>
+</section>
+<section id="aws-sagemaker-clarify" class="level3">
+<h3 class="anchored" data-anchor-id="aws-sagemaker-clarify">AWS SageMaker Clarify</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Pre-training bias</td>
+<td>Detects bias in the dataset before training</td>
+</tr>
+<tr class="even">
+<td>Post-training bias</td>
+<td>Detects bias in model predictions</td>
+</tr>
+<tr class="odd">
+<td>SHAP explanations</td>
+<td>Computes feature attributions at scale</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-22-ml-experiment-tracking" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-22-ml-experiment-tracking">Chapter 22 — ML Experiment Tracking</h2>
+<section id="mlflow-core-api" class="level3">
+<h3 class="anchored" data-anchor-id="mlflow-core-api">MLflow Core API</h3>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">mlflow.set_tracking_uri(uri)</span>
+<span id="cb2-2">mlflow.set_experiment(name)</span>
+<span id="cb2-3">mlflow.start_run(run_name, tags)</span>
+<span id="cb2-4">mlflow.log_param(key, value)<span class="op">;</span> mlflow.log_params(<span class="bu">dict</span>)</span>
+<span id="cb2-5">mlflow.log_metric(key, value, step)<span class="op">;</span> mlflow.log_metrics(<span class="bu">dict</span>, step)</span>
+<span id="cb2-6">mlflow.log_artifact(local_path)<span class="op">;</span> mlflow.log_artifacts(local_dir)</span>
+<span id="cb2-7">mlflow.log_figure(fig, filename)<span class="op">;</span> mlflow.log_dict(<span class="bu">dict</span>, filename)</span></code></pre></div>
+</section>
+<section id="model-logging-loading" class="level3">
+<h3 class="anchored" data-anchor-id="model-logging-loading">Model Logging / Loading</h3>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># framework-specific</span></span>
+<span id="cb3-2">mlflow.sklearn.log_model(model, path)</span>
+<span id="cb3-3"><span class="co"># generic loader, any framework</span></span>
+<span id="cb3-4">mlflow.pyfunc.load_model(uri)</span>
+<span id="cb3-5"></span>
+<span id="cb3-6"><span class="co"># URI formats:</span></span>
+<span id="cb3-7"><span class="co"># runs:/&lt;run_id&gt;/model</span></span>
+<span id="cb3-8"><span class="co"># models:/&lt;model_name&gt;/Production</span></span>
+<span id="cb3-9"><span class="co"># models:/&lt;model_name&gt;/&lt;version_number&gt;</span></span></code></pre></div>
+</section>
+<section id="mlflowclient-api-registry" class="level3">
+<h3 class="anchored" data-anchor-id="mlflowclient-api-registry">MlflowClient API (Registry)</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> mlflow.tracking <span class="im">import</span> MlflowClient</span>
+<span id="cb4-2">client <span class="op">=</span> MlflowClient()</span>
+<span id="cb4-3">client.register_model(model_uri, name)</span>
+<span id="cb4-4"><span class="co"># Staging, Production, Archived</span></span>
+<span id="cb4-5">client.transition_model_version_stage(name, version, stage)</span>
+<span id="cb4-6">client.get_latest_versions(name, stages)</span></code></pre></div>
+</section>
+<section id="model-registry-lifecycle" class="level3">
+<h3 class="anchored" data-anchor-id="model-registry-lifecycle">Model Registry Lifecycle</h3>
+<pre class="text"><code>None (registered) → Staging (review/testing) →
+Production (serving) → Archived</code></pre>
+</section>
+<section id="autolog-support-matrix" class="level3">
+<h3 class="anchored" data-anchor-id="autolog-support-matrix">Autolog Support Matrix</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Framework</th>
+<th>Enable</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>sklearn</td>
+<td><code>mlflow.sklearn.autolog()</code></td>
+</tr>
+<tr class="even">
+<td>XGBoost</td>
+<td><code>mlflow.xgboost.autolog()</code></td>
+</tr>
+<tr class="odd">
+<td>LightGBM</td>
+<td><code>mlflow.lightgbm.autolog()</code></td>
+</tr>
+<tr class="even">
+<td>PyTorch Lightning</td>
+<td><code>mlflow.pytorch.autolog()</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="mlflow-vs.-weights-biases" class="level3">
+<h3 class="anchored" data-anchor-id="mlflow-vs.-weights-biases">MLflow vs.&nbsp;Weights &amp; Biases</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Feature</th>
+<th>MLflow</th>
+<th>W&amp;B</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Open source / self-hostable</td>
+<td>Yes</td>
+<td>No (hosted)</td>
+</tr>
+<tr class="even">
+<td>SageMaker integration</td>
+<td>Native</td>
+<td>Via callback</td>
+</tr>
+<tr class="odd">
+<td>Deep learning focus</td>
+<td>Good</td>
+<td>Excellent</td>
+</tr>
+<tr class="even">
+<td>Price</td>
+<td>Free</td>
+<td>Free tier, then paid</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="experiment-tracking-checklist" class="level3">
+<h3 class="anchored" data-anchor-id="experiment-tracking-checklist">Experiment Tracking Checklist</h3>
+<ul class="task-list">
+<li><label><input type="checkbox">All hyperparameters (not just the ones changed)</label></li>
+<li><label><input type="checkbox">Dataset version / S3 path / hash</label></li>
+<li><label><input type="checkbox">Git commit hash</label></li>
+<li><label><input type="checkbox">Evaluation metrics on held-out test set</label></li>
+<li><label><input type="checkbox">The trained model artefact</label></li>
+<li><label><input type="checkbox">Environment (Python + library versions)</label></li>
+</ul>
+</section>
+</section>
+<section id="chapter-23-model-deployment-serving" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-23-model-deployment-serving">Chapter 23 — Model Deployment &amp; Serving</h2>
+<section id="key-terms" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Serialisation</strong></td>
+<td>Saving a trained model to disk in a reloadable format</td>
+</tr>
+<tr class="even">
+<td><strong>Endpoint</strong></td>
+<td>A network-accessible interface accepting inference requests</td>
+</tr>
+<tr class="odd">
+<td><strong>Cold start</strong></td>
+<td>Latency penalty when a scaled-to-zero service must spin up before serving</td>
+</tr>
+<tr class="even">
+<td><strong>Train/serve skew</strong></td>
+<td>Predictions differ between training and serving because preprocessing wasn’t identical</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="serialisation-format-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="serialisation-format-comparison">Serialisation Format Comparison</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Format</th>
+<th>Best for</th>
+<th>Portability</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>joblib</td>
+<td>sklearn Pipelines, numpy-heavy models</td>
+<td>Python-only</td>
+</tr>
+<tr class="even">
+<td>ONNX</td>
+<td>Cross-language serving (Java, C++, Rust, edge)</td>
+<td>Excellent</td>
+</tr>
+<tr class="odd">
+<td>safetensors</td>
+<td>Neural network weights (PyTorch/TF)</td>
+<td>Good, safe to load untrusted files</td>
+</tr>
+<tr class="even">
+<td>MLflow Models (pyfunc)</td>
+<td>Any framework, packaged with its env</td>
+<td>High</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rule of thumb:</strong> joblib for tabular sklearn/XGBoost staying in Python; safetensors for neural network weights; ONNX when the serving runtime isn’t Python.</p>
+</section>
+<section id="real-time-vs.-batch-vs.-async" class="level3">
+<h3 class="anchored" data-anchor-id="real-time-vs.-batch-vs.-async">Real-Time vs.&nbsp;Batch vs.&nbsp;Async</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Pattern</th>
+<th>Latency</th>
+<th>Cost profile</th>
+<th>SageMaker equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Real-time</td>
+<td>Milliseconds</td>
+<td>High (always-on)</td>
+<td>Real-Time Endpoint</td>
+</tr>
+<tr class="even">
+<td>Batch</td>
+<td>Minutes-hours</td>
+<td>Low (pay-per-run)</td>
+<td>Batch Transform</td>
+</tr>
+<tr class="odd">
+<td>Async</td>
+<td>Seconds-minutes</td>
+<td>Low (scale-to-zero)</td>
+<td>Asynchronous Inference</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="llmtransformer-inference-capacity-formulas" class="level3">
+<h3 class="anchored" data-anchor-id="llmtransformer-inference-capacity-formulas">LLM/Transformer Inference Capacity Formulas</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Quantity</th>
+<th>Formula</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Parameter count</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>≈</mo><mn>12</mn><mo>⋅</mo><msub><mi>n</mi><mrow><mi>l</mi><mi>a</mi><mi>y</mi><mi>e</mi><mi>r</mi><mi>s</mi></mrow></msub><mo>⋅</mo><msubsup><mi>d</mi><mrow><mi>m</mi><mi>o</mi><mi>d</mi><mi>e</mi><mi>l</mi></mrow><mn>2</mn></msubsup></mrow><annotation encoding="application/x-tex">N \approx 12 \cdot n_{layers} \cdot d_{model}^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">12</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7306em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">y</span><span class="mord mathnormal mtight" style="margin-right:0.0278em;">er</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0972em;vertical-align:-0.2831em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.4169em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight">o</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span></td>
+</tr>
+<tr class="even">
+<td>Weight memory</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>bytes_per_param</mtext><mo>×</mo><mi>N</mi></mrow><annotation encoding="application/x-tex">\text{bytes\_per\_param} \times N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">bytes_per_param</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span></td>
+</tr>
+<tr class="odd">
+<td>Decode time/token (batch 1)</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>2</mn><mi>N</mi><mo>×</mo><mtext>bytes_per_param</mtext><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mtext>bandwidth</mtext></mrow><annotation encoding="application/x-tex">(2 N \times \text{bytes\_per\_param}) / \text{bandwidth}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.06em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">bytes_per_param</span></span><span class="mclose">)</span><span class="mord">/</span><span class="mord text"><span class="mord">bandwidth</span></span></span></span></span></td>
+</tr>
+<tr class="even">
+<td>KV cache size</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>×</mo><msub><mi>n</mi><mrow><mi>l</mi><mi>a</mi><mi>y</mi><mi>e</mi><mi>r</mi><mi>s</mi></mrow></msub><mo>×</mo><msub><mi>d</mi><mrow><mi>m</mi><mi>o</mi><mi>d</mi><mi>e</mi><mi>l</mi></mrow></msub><mo>×</mo><mtext>seq_len</mtext><mo>×</mo><mtext>batch</mtext><mo>×</mo><mtext>bytes_per_param</mtext></mrow><annotation encoding="application/x-tex">2 \times n_{layers} \times d_{model} \times \text{seq\_len} \times \text{batch} \times \text{bytes\_per\_param}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">y</span><span class="mord mathnormal mtight" style="margin-right:0.0278em;">er</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight">o</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">seq_len</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord text"><span class="mord">batch</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">bytes_per_param</span></span></span></span></span></td>
+</tr>
+<tr class="odd">
+<td>Total serving memory</td>
+<td>weight memory + KV cache</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="minimal-fastapi-skeleton" class="level3">
+<h3 class="anchored" data-anchor-id="minimal-fastapi-skeleton">Minimal FastAPI Skeleton</h3>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> fastapi <span class="im">import</span> FastAPI</span>
+<span id="cb6-2"><span class="im">from</span> pydantic <span class="im">import</span> BaseModel</span>
+<span id="cb6-3"><span class="im">import</span> joblib, numpy <span class="im">as</span> np</span>
+<span id="cb6-4"></span>
+<span id="cb6-5">pipeline <span class="op">=</span> joblib.load(<span class="st">"model_artefacts/pipeline.joblib"</span>)</span>
+<span id="cb6-6">app <span class="op">=</span> FastAPI()</span>
+<span id="cb6-7"></span>
+<span id="cb6-8"><span class="kw">class</span> PredictRequest(BaseModel):</span>
+<span id="cb6-9">    features: <span class="bu">list</span>[<span class="bu">float</span>]</span>
+<span id="cb6-10"></span>
+<span id="cb6-11"><span class="at">@app.post</span>(<span class="st">"/predict"</span>)</span>
+<span id="cb6-12"><span class="kw">def</span> predict(req: PredictRequest):</span>
+<span id="cb6-13">    X <span class="op">=</span> np.array(req.features).reshape(<span class="dv">1</span>, <span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb6-14">    <span class="cf">return</span> {<span class="st">"prediction"</span>: <span class="bu">int</span>(pipeline.predict(X)[<span class="dv">0</span>])}</span></code></pre></div>
+</section>
+<section id="aws-sagemaker-quick-reference" class="level3">
+<h3 class="anchored" data-anchor-id="aws-sagemaker-quick-reference">AWS SageMaker Quick Reference</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>SageMaker approach</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Deploy a real-time endpoint</td>
+<td><code>model.deploy(initial_instance_count=1, instance_type=...)</code></td>
+</tr>
+<tr class="even">
+<td>Run batch predictions</td>
+<td><code>model.transformer(...).transform(data=s3_uri, ...)</code></td>
+</tr>
+<tr class="odd">
+<td>Delete an endpoint (stop billing)</td>
+<td><code>predictor.delete_endpoint()</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-24-mlops-cicd-for-ml" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-24-mlops-cicd-for-ml">Chapter 24 — MLOps &amp; CI/CD for ML</h2>
+<section id="key-terms-1" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-1">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Model registry</strong></td>
+<td>Central store tracking every model version, metrics, lineage, and stage</td>
+</tr>
+<tr class="even">
+<td><strong>Performance gate</strong></td>
+<td>A test blocking promotion unless a candidate meets an absolute bar and doesn’t regress vs.&nbsp;production</td>
+</tr>
+<tr class="odd">
+<td><strong>Training-serving skew</strong></td>
+<td>Feature engineering differs between training and serving code, causing silent live degradation</td>
+</tr>
+<tr class="even">
+<td><strong>Canary deployment</strong></td>
+<td>New model receives a small % of live traffic, scaled up gradually if metrics hold</td>
+</tr>
+<tr class="odd">
+<td><strong>Shadow deployment</strong></td>
+<td>New model scores a copy of live traffic without serving results to users</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cicd-for-ml-pipeline-stages" class="level3">
+<h3 class="anchored" data-anchor-id="cicd-for-ml-pipeline-stages">CI/CD-for-ML Pipeline Stages</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Gate criteria</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Data validation</td>
+<td>Schema matches, labels valid, null rate under threshold</td>
+</tr>
+<tr class="even">
+<td>Train</td>
+<td>N/A: always runs if data validation passes</td>
+</tr>
+<tr class="odd">
+<td>Evaluate</td>
+<td>N/A: produces the numbers the gate checks</td>
+</tr>
+<tr class="even">
+<td>Performance gate</td>
+<td>Candidate ≥ absolute minimum AND candidate ≥ production − tolerance</td>
+</tr>
+<tr class="odd">
+<td>Register</td>
+<td>Stage = Production if gate passed, else Staging</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="deployment-strategy-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="deployment-strategy-comparison">Deployment Strategy Comparison</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>Traffic exposure</th>
+<th>Risk</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Blue-green</td>
+<td>0% → 100% at once</td>
+<td>Medium: no gradual signal</td>
+<td>Low-traffic, simple setups</td>
+</tr>
+<tr class="even">
+<td>Canary</td>
+<td>Gradual % ramp-up</td>
+<td>Low</td>
+<td>Most production ML services</td>
+</tr>
+<tr class="odd">
+<td>Shadow</td>
+<td>0% (logged only)</td>
+<td>Near-zero</td>
+<td>High-stakes models needing real-traffic validation first</td>
+</tr>
+<tr class="even">
+<td>Rolling</td>
+<td>Instance-by-instance</td>
+<td>Medium</td>
+<td>Kubernetes/container-orchestrated fleets</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="mlflow-registry-api" class="level3">
+<h3 class="anchored" data-anchor-id="mlflow-registry-api">MLflow Registry API</h3>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="im">from</span> mlflow.tracking <span class="im">import</span> MlflowClient</span>
+<span id="cb7-2">client <span class="op">=</span> MlflowClient()</span>
+<span id="cb7-3"></span>
+<span id="cb7-4">client.transition_model_version_stage(</span>
+<span id="cb7-5">    name<span class="op">=</span><span class="st">"my-model"</span>,</span>
+<span id="cb7-6">    version<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb7-7">    stage<span class="op">=</span><span class="st">"Production"</span>,</span>
+<span id="cb7-8">    archive_existing_versions<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb7-9">)</span>
+<span id="cb7-10">client.get_latest_versions(<span class="st">"my-model"</span>, stages<span class="op">=</span>[<span class="st">"Production"</span>])</span></code></pre></div>
+</section>
+<section id="aws-sagemaker-quick-reference-1" class="level3">
+<h3 class="anchored" data-anchor-id="aws-sagemaker-quick-reference-1">AWS SageMaker Quick Reference</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>SageMaker approach</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Model registry</td>
+<td>SageMaker Model Registry (Approved/PendingManualApproval/Rejected)</td>
+</tr>
+<tr class="even">
+<td>Orchestrate the pipeline</td>
+<td>SageMaker Pipelines</td>
+</tr>
+<tr class="odd">
+<td>Performance gate</td>
+<td><code>ConditionStep</code> with <code>ConditionGreaterThanOrEqualTo</code></td>
+</tr>
+<tr class="even">
+<td>CD traffic shifting</td>
+<td>Endpoint production variants with weighted traffic</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-25-monitoring" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-25-monitoring">Chapter 25 — Monitoring</h2>
+<section id="key-terms-2" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-2">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Data drift (covariate shift)</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> changes; <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mi mathvariant="normal">∥</mi><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(y\|X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mord">∥</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> stays the same</td>
+</tr>
+<tr class="even">
+<td><strong>Concept drift</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mi mathvariant="normal">∥</mi><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(y\|X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mord">∥</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> changes; the learned relationship is no longer true</td>
+</tr>
+<tr class="odd">
+<td><strong>Label/prediction drift</strong></td>
+<td>Distribution of model <em>outputs</em> shifts: a symptom of either drift type, or a pipeline bug</td>
+</tr>
+<tr class="even">
+<td><strong>Reference/baseline distribution</strong></td>
+<td>The “expected” distribution drift is measured against, usually the training set</td>
+</tr>
+<tr class="odd">
+<td><strong>Label lag</strong></td>
+<td>Delay between a prediction being made and its true outcome being known</td>
+</tr>
+<tr class="even">
+<td><strong>Population Stability Index (PSI)</strong></td>
+<td>Bucketed, symmetrised divergence measure between two distributions</td>
+</tr>
+<tr class="odd">
+<td><strong>KS statistic</strong></td>
+<td>Maximum distance between two empirical CDFs</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="drift-metric-formulas" class="level3">
+<h3 class="anchored" data-anchor-id="drift-metric-formulas">Drift Metric Formulas</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Formula</th>
+<th>Range</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>PSI</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>∑</mo><mi>i</mi></msub><mo stretchy="false">(</mo><msub><mtext>actual</mtext><mi>i</mi></msub><mi mathvariant="normal">%</mi><mo>−</mo><msub><mtext>expected</mtext><mi>i</mi></msub><mi mathvariant="normal">%</mi><mo stretchy="false">)</mo><mo>×</mo><mi>ln</mi><mo>⁡</mo><mo stretchy="false">(</mo><msub><mtext>actual</mtext><mi>i</mi></msub><mi mathvariant="normal">%</mi><mi mathvariant="normal">/</mi><msub><mtext>expected</mtext><mi>i</mi></msub><mi mathvariant="normal">%</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\sum_i (\text{actual}_i\% - \text{expected}_i\%) \times \ln(\text{actual}_i\% / \text{expected}_i\%)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0497em;vertical-align:-0.2997em;"></span><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.162em;"><span style="top:-2.4003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2997em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord"><span class="mord text"><span class="mord">actual</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord">%</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord text"><span class="mord">expected</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2175em;"><span style="top:-2.4559em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2441em;"><span></span></span></span></span></span></span><span class="mord">%</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">ln</span><span class="mopen">(</span><span class="mord"><span class="mord text"><span class="mord">actual</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord">%/</span><span class="mord"><span class="mord text"><span class="mord">expected</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.2175em;"><span style="top:-2.4559em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2441em;"><span></span></span></span></span></span></span><span class="mord">%</span><span class="mclose">)</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn><mo>→</mo><mi mathvariant="normal">∞</mi></mrow><annotation encoding="application/x-tex">0 \to \infty</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span></td>
+<td>See thresholds below</td>
+</tr>
+<tr class="even">
+<td><strong>KS statistic</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mrow><mi>max</mi><mo>⁡</mo></mrow><mi>x</mi></msub><mo stretchy="false">∣</mo><msub><mi>F</mi><mtext>expected</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>−</mo><msub><mi>F</mi><mtext>actual</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo stretchy="false">∣</mo></mrow><annotation encoding="application/x-tex">\max_x \lvert F_{\text{expected}}(x) - F_{\text{actual}}(x) \rvert</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mop"><span class="mop">max</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">x</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">expected</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">actual</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)∣</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn></mrow><annotation encoding="application/x-tex">0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span> to <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn></mrow><annotation encoding="application/x-tex">1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span></td>
+<td>0 = identical distributions, 1 = maximally different</td>
+</tr>
+<tr class="odd">
+<td><strong>KL divergence</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mo>∑</mo><mi>x</mi></msub><mi>P</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mi>log</mi><mo>⁡</mo><mo stretchy="false">[</mo><mi>P</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mi>Q</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">\sum_x P(x) \log[P(x)/Q(x)]</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0497em;vertical-align:-0.2997em;"></span><span class="mop"><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.0017em;"><span style="top:-2.4003em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">x</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2997em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mopen">[</span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mord">/</span><span class="mord mathnormal">Q</span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)]</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn><mo>→</mo><mi mathvariant="normal">∞</mi></mrow><annotation encoding="application/x-tex">0 \to \infty</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span></td>
+<td>Directed; not symmetric</td>
+</tr>
+<tr class="even">
+<td><strong>Chi-squared statistic</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>∑</mo><mo stretchy="false">(</mo><mtext>observed</mtext><mo>−</mo><mtext>expected</mtext><msup><mo stretchy="false">)</mo><mn>2</mn></msup><mi mathvariant="normal">/</mi><mtext>expected</mtext></mrow><annotation encoding="application/x-tex">\sum (\text{observed} - \text{expected})^2 / \text{expected}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop op-symbol small-op" style="position:relative;top:0em;">∑</span><span class="mopen">(</span><span class="mord text"><span class="mord">observed</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">expected</span></span><span class="mclose"><span class="mclose">)</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mord">/</span><span class="mord text"><span class="mord">expected</span></span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn><mo>→</mo><mi mathvariant="normal">∞</mi></mrow><annotation encoding="application/x-tex">0 \to \infty</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">→</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord">∞</span></span></span></span></td>
+<td>Use with categorical/count data</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="psi-interpretation-thresholds-industry-standard" class="level3">
+<h3 class="anchored" data-anchor-id="psi-interpretation-thresholds-industry-standard">PSI Interpretation Thresholds (Industry Standard)</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>PSI value</th>
+<th>Interpretation</th>
+<th>Typical action</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>&lt; 0.10</td>
+<td>No significant shift</td>
+<td>No action</td>
+</tr>
+<tr class="even">
+<td>0.10 – 0.25</td>
+<td>Moderate shift</td>
+<td>Log it, watch trend</td>
+</tr>
+<tr class="odd">
+<td>&gt; 0.25</td>
+<td>Significant shift</td>
+<td>Investigate; do not auto-retrain on this alone</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="data-drift-vs.-concept-drift-vs.-label-drift" class="level3">
+<h3 class="anchored" data-anchor-id="data-drift-vs.-concept-drift-vs.-label-drift">Data Drift vs.&nbsp;Concept Drift vs.&nbsp;Label Drift</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>What changes</th>
+<th>Detectable from inputs alone?</th>
+<th>Needs labels?</th>
+<th>Typical cause</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Data drift</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span></td>
+<td>Yes</td>
+<td>No</td>
+<td>New user segment, seasonal shift, upstream schema change</td>
+</tr>
+<tr class="even">
+<td><strong>Concept drift</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mi mathvariant="normal">∥</mi><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(y\|X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mord">∥</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span></td>
+<td>No</td>
+<td>Yes (or strong proxy)</td>
+<td>New fraud pattern, policy change, market shift</td>
+</tr>
+<tr class="odd">
+<td><strong>Label/prediction drift</strong></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mover accent="true"><mi>y</mi><mo>^</mo></mover><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(\hat{y})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1944em;"><span class="mord">^</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="mclose">)</span></span></span></span></td>
+<td>Partially (monitor outputs directly)</td>
+<td>No</td>
+<td>Symptom of either above, or a broken feature pipeline</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="retraining-trigger-strategies" class="level3">
+<h3 class="anchored" data-anchor-id="retraining-trigger-strategies">Retraining Trigger Strategies</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>Reacts to</th>
+<th>Speed</th>
+<th>Risk</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Scheduled</strong></td>
+<td>Calendar (weekly/monthly)</td>
+<td>Fixed, predictable</td>
+<td>Wastes compute when stable; too slow when not</td>
+</tr>
+<tr class="even">
+<td><strong>Drift-triggered</strong></td>
+<td>Input drift metric crossing threshold</td>
+<td>Fast</td>
+<td>Can’t catch concept drift; risk of false-alarm retrains</td>
+</tr>
+<tr class="odd">
+<td><strong>Performance-triggered</strong></td>
+<td>Confirmed metric drop</td>
+<td>Slow (label-lag bound)</td>
+<td>Directly tied to real harm</td>
+</tr>
+<tr class="even">
+<td><strong>Hybrid (recommended)</strong></td>
+<td>Drift → investigate; confirmed performance drop → retrain</td>
+<td>Fast alert, careful action</td>
+<td>Best balance for most production systems</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="scipy.stats-functions-for-drift-detection" class="level3">
+<h3 class="anchored" data-anchor-id="scipy.stats-functions-for-drift-detection"><code>scipy.stats</code> Functions for Drift Detection</h3>
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1">scipy.stats.ks_2samp(</span>
+<span id="cb8-2">    <span class="co"># array: reference sample</span></span>
+<span id="cb8-3">    data1,</span>
+<span id="cb8-4">    <span class="co"># array: current sample</span></span>
+<span id="cb8-5">    data2,</span>
+<span id="cb8-6">    <span class="co"># 'two-sided', 'less', 'greater'</span></span>
+<span id="cb8-7">    alternative<span class="op">=</span><span class="st">'two-sided'</span>,</span>
+<span id="cb8-8">)</span>
+<span id="cb8-9"><span class="co"># Returns: KstestResult(statistic, pvalue)</span></span>
+<span id="cb8-10"></span>
+<span id="cb8-11">scipy.stats.chisquare(</span>
+<span id="cb8-12">    <span class="co"># array: observed frequencies (current window)</span></span>
+<span id="cb8-13">    f_obs,</span>
+<span id="cb8-14">    <span class="co"># array: expected frequencies (reference);</span></span>
+<span id="cb8-15">    <span class="co"># defaults to uniform</span></span>
+<span id="cb8-16">    f_exp<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb8-17">)</span>
+<span id="cb8-18"><span class="co"># Returns: Power_divergenceResult(statistic, pvalue)</span></span>
+<span id="cb8-19"></span>
+<span id="cb8-20">scipy.stats.entropy(</span>
+<span id="cb8-21">    <span class="co"># array: first distribution (probabilities or</span></span>
+<span id="cb8-22">    <span class="co"># counts)</span></span>
+<span id="cb8-23">    pk,</span>
+<span id="cb8-24">    <span class="co"># array: second distribution; if given, computes</span></span>
+<span id="cb8-25">    <span class="co"># KL divergence</span></span>
+<span id="cb8-26">    qk<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb8-27">    <span class="co"># log base; default is natural log</span></span>
+<span id="cb8-28">    base<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb8-29">)</span>
+<span id="cb8-30"><span class="co"># Returns: float: Shannon entropy of pk if qk=None,</span></span>
+<span id="cb8-31"><span class="co"># else KL(pk || qk)</span></span></code></pre></div>
+</section>
+<section id="model-evaluation-metrics-for-performance-monitoring" class="level3">
+<h3 class="anchored" data-anchor-id="model-evaluation-metrics-for-performance-monitoring">Model Evaluation Metrics for Performance Monitoring</h3>
+<p>(Reused from Chapter 16: track these over a rolling window against a launch-time baseline.)</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Range</th>
+<th>Higher is better?</th>
+<th>Notes for monitoring</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Accuracy</td>
+<td>0–1</td>
+<td>Yes</td>
+<td>Misleading under class imbalance: pair with AUC/F1</td>
+</tr>
+<tr class="even">
+<td>ROC-AUC</td>
+<td>0.5–1</td>
+<td>Yes</td>
+<td>Robust to threshold choice; good default headline metric</td>
+</tr>
+<tr class="odd">
+<td>Precision / Recall</td>
+<td>0–1</td>
+<td>Yes</td>
+<td>Track separately: a model can trade one for the other silently</td>
+</tr>
+<tr class="even">
+<td>Calibration (Brier score)</td>
+<td>0–1</td>
+<td>No</td>
+<td>Detects when confidence scores stop being trustworthy, even if accuracy holds</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="common-imports" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports">Common Imports</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb9-2"><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb9-3"><span class="im">from</span> scipy <span class="im">import</span> stats</span>
+<span id="cb9-4"><span class="im">from</span> sklearn.metrics <span class="im">import</span> (</span>
+<span id="cb9-5">    accuracy_score,</span>
+<span id="cb9-6">    roc_auc_score,</span>
+<span id="cb9-7">    brier_score_loss,</span>
+<span id="cb9-8">)</span></code></pre></div>
+</section>
+<section id="aws-sagemaker-model-monitor-quick-reference" class="level3">
+<h3 class="anchored" data-anchor-id="aws-sagemaker-model-monitor-quick-reference">AWS SageMaker Model Monitor Quick Reference</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>SageMaker approach</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Capture live endpoint traffic</td>
+<td><code>DataCaptureConfig(enable_capture=True, sampling_percentage=..., destination_s3_uri=...)</code> at deploy time</td>
+</tr>
+<tr class="even">
+<td>Establish a baseline</td>
+<td><code>DefaultModelMonitor.suggest_baseline(baseline_dataset=..., ...)</code></td>
+</tr>
+<tr class="odd">
+<td>Schedule recurring drift checks</td>
+<td><code>monitor.create_monitoring_schedule(schedule_cron_expression=CronExpressionGenerator.daily(), ...)</code></td>
+</tr>
+<tr class="even">
+<td>Monitor for bias/subgroup drift</td>
+<td>SageMaker Clarify, alongside Model Monitor</td>
+</tr>
+<tr class="odd">
+<td>Alert on violations</td>
+<td>CloudWatch alarm on the monitoring job’s emitted metrics</td>
+</tr>
+<tr class="even">
+<td>Kick off retraining</td>
+<td>EventBridge rule on the CloudWatch alarm → SageMaker Pipelines (Chapter 24)</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-26-cloud-ml-platforms" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-26-cloud-ml-platforms">Chapter 26 — Cloud ML Platforms</h2>
+<section id="aws-ml-service-map" class="level3">
+<h3 class="anchored" data-anchor-id="aws-ml-service-map">AWS ML Service Map</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Service</th>
+<th>Replaces</th>
+<th>When to use</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>S3</td>
+<td>Local disk / shared drive</td>
+<td>Always: the foundation every other service reads/writes to</td>
+</tr>
+<tr class="even">
+<td>SageMaker Studio</td>
+<td>Local Jupyter</td>
+<td>Shared, governed dev environment for a team</td>
+</tr>
+<tr class="odd">
+<td>SageMaker Training Jobs</td>
+<td><code>python train.py</code> locally</td>
+<td>Managed, right-sized, ephemeral compute</td>
+</tr>
+<tr class="even">
+<td>SageMaker Model Registry</td>
+<td>MLflow Model Registry</td>
+<td>Native integration with Pipelines/Endpoints</td>
+</tr>
+<tr class="odd">
+<td>SageMaker Pipelines</td>
+<td>Airflow/Prefect/GitHub Actions</td>
+<td>ML-only DAGs</td>
+</tr>
+<tr class="even">
+<td>SageMaker Endpoints</td>
+<td>FastAPI + Docker</td>
+<td>Real-time inference without operating serving infra</td>
+</tr>
+<tr class="odd">
+<td>SageMaker Batch Transform</td>
+<td>A scheduled batch script</td>
+<td>Large offline scoring jobs</td>
+</tr>
+<tr class="even">
+<td>SageMaker Model Monitor</td>
+<td>Custom drift checks</td>
+<td>Managed drift/quality monitoring</td>
+</tr>
+<tr class="odd">
+<td>Bedrock</td>
+<td>Self-hosted open-weight LLM</td>
+<td>Foundation model access with zero hosting</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="s3-layout-convention" class="level3">
+<h3 class="anchored" data-anchor-id="s3-layout-convention">S3 Layout Convention</h3>
+<pre class="text"><code>s3://&lt;project-bucket&gt;/
+├── raw/              ← untouched source data
+├── processed/        ← output of Processing Jobs
+├── training-data/    ← final train/val/test splits
+├── model-artifacts/  ← Training Job outputs
+└── batch-predictions/ ← Batch Transform output</code></pre>
+</section>
+<section id="minimal-iam-permission-cheat-sheet" class="level3">
+<h3 class="anchored" data-anchor-id="minimal-iam-permission-cheat-sheet">Minimal IAM Permission Cheat Sheet</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>Minimum actions needed</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Run a Training Job</td>
+<td><code>sagemaker:CreateTrainingJob</code>, S3 read/write on data prefix, <code>logs:*</code></td>
+</tr>
+<tr class="even">
+<td>Deploy an Endpoint</td>
+<td><code>CreateModel</code>, <code>CreateEndpointConfig</code>, <code>CreateEndpoint</code>, <code>InvokeEndpoint</code></td>
+</tr>
+<tr class="odd">
+<td>Call Bedrock</td>
+<td><code>bedrock:InvokeModel</code> (plus the model enabled in console)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="instance-type-quick-guide" class="level3">
+<h3 class="anchored" data-anchor-id="instance-type-quick-guide">Instance Type Quick Guide</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Workload</th>
+<th>Family</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Classical ML training/inference (CPU)</td>
+<td><code>ml.m5.*</code></td>
+</tr>
+<tr class="even">
+<td>Compute-heavy preprocessing</td>
+<td><code>ml.c5.*</code></td>
+</tr>
+<tr class="odd">
+<td>Deep learning training (GPU)</td>
+<td><code>ml.g5.*</code> / <code>ml.p4d.*</code></td>
+</tr>
+<tr class="even">
+<td>Low-cost real-time inference (dev/test)</td>
+<td><code>ml.t3.*</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="common-imports-1" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports-1">Common Imports</h3>
+<div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><span class="im">import</span> boto3</span>
+<span id="cb11-2"><span class="im">import</span> sagemaker</span>
+<span id="cb11-3"><span class="im">from</span> sagemaker.sklearn.estimator <span class="im">import</span> SKLearn</span>
+<span id="cb11-4"><span class="im">from</span> sagemaker.workflow.pipeline <span class="im">import</span> Pipeline</span>
+<span id="cb11-5"><span class="im">from</span> sagemaker.model_monitor <span class="im">import</span> (</span>
+<span id="cb11-6">    DefaultModelMonitor,</span>
+<span id="cb11-7">    DataCaptureConfig,</span>
+<span id="cb11-8">)</span></code></pre></div>
+</section>
+</section>
+<section id="chapter-27-nlp-fundamentals" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-27-nlp-fundamentals">Chapter 27 — NLP Fundamentals</h2>
+<section id="text-preprocessing-steps" class="level3">
+<h3 class="anchored" data-anchor-id="text-preprocessing-steps">Text Preprocessing Steps</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Step</th>
+<th>What it does</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Lowercase</td>
+<td>Normalise case</td>
+<td><code>"The" → "the"</code></td>
+</tr>
+<tr class="even">
+<td>Tokenise</td>
+<td>Split into words</td>
+<td><code>"I ran" → ["I", "ran"]</code></td>
+</tr>
+<tr class="odd">
+<td>Remove stopwords</td>
+<td>Drop high-frequency, low-signal words</td>
+<td><code>"the", "a", "is"</code></td>
+</tr>
+<tr class="even">
+<td>Lemmatise</td>
+<td>Map to dictionary base form</td>
+<td><code>"running" → "run"</code>, <code>"better" → "good"</code></td>
+</tr>
+<tr class="odd">
+<td>Stem</td>
+<td>Chop word endings (crude, faster)</td>
+<td><code>"running" → "run"</code>, <code>"better" → "bett"</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="tf-idf-vs.-bag-of-words" class="level3">
+<h3 class="anchored" data-anchor-id="tf-idf-vs.-bag-of-words">TF-IDF vs.&nbsp;Bag of Words</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Property</th>
+<th>Bag of Words</th>
+<th>TF-IDF</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Weighting</td>
+<td>Raw counts</td>
+<td>Count × log(N/df)</td>
+</tr>
+<tr class="even">
+<td>Common-word handling</td>
+<td>Overweights</td>
+<td>Downweights</td>
+</tr>
+<tr class="odd">
+<td>Interpretability</td>
+<td>High</td>
+<td>High</td>
+</tr>
+<tr class="even">
+<td>Default choice</td>
+<td>Rarely</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="word-embedding-model-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="word-embedding-model-comparison">Word Embedding Model Comparison</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Year</th>
+<th>Dimensions</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Word2Vec</td>
+<td>2013</td>
+<td>100–300</td>
+<td>Fast training, large corpora</td>
+</tr>
+<tr class="even">
+<td>GloVe</td>
+<td>2014</td>
+<td>50–300</td>
+<td>Co-occurrence aware, widely used</td>
+</tr>
+<tr class="odd">
+<td>FastText</td>
+<td>2016</td>
+<td>100–300</td>
+<td>Handles out-of-vocabulary words via subwords</td>
+</tr>
+<tr class="even">
+<td>sentence-transformers</td>
+<td>2019+</td>
+<td>384–768</td>
+<td>Document/sentence similarity, RAG</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="tfidfvectorizer-key-parameters" class="level3">
+<h3 class="anchored" data-anchor-id="tfidfvectorizer-key-parameters"><code>TfidfVectorizer</code> Key Parameters</h3>
+<div class="sourceCode" id="cb12"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb12-1">TfidfVectorizer(</span>
+<span id="cb12-2">    max_features<span class="op">=</span><span class="va">None</span>,   <span class="co"># keep top N terms by frequency</span></span>
+<span id="cb12-3">    ngram_range<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">1</span>),  <span class="co"># (min_n, max_n) for n-grams</span></span>
+<span id="cb12-4">    min_df<span class="op">=</span><span class="dv">1</span>,            <span class="co"># minimum document frequency</span></span>
+<span id="cb12-5">    sublinear_tf<span class="op">=</span><span class="va">False</span>,  <span class="co"># apply log(1+tf) scaling</span></span>
+<span id="cb12-6">    stop_words<span class="op">=</span><span class="va">None</span>,     <span class="co"># 'english' | list | None</span></span>
+<span id="cb12-7">)</span></code></pre></div>
+</section>
+<section id="decision-guide" class="level3">
+<h3 class="anchored" data-anchor-id="decision-guide">Decision Guide</h3>
+<pre class="text"><code>Short document, interpretability required?
+  → TF-IDF + Logistic Regression
+Similarity / retrieval task?
+  → sentence-transformers (Chapter 31)
+Classification, long documents?
+  → TF-IDF or fine-tuned Transformer (Chapter 29)</code></pre>
+</section>
+</section>
+<section id="chapter-28-intro-to-neural-networks" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-28-intro-to-neural-networks">Chapter 28 — Intro to Neural Networks</h2>
+<section id="activation-functions" class="level3">
+<h3 class="anchored" data-anchor-id="activation-functions">Activation Functions</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Activation</th>
+<th>Formula</th>
+<th>Range</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>ReLU</td>
+<td><code>max(0, x)</code></td>
+<td>[0, ∞)</td>
+<td>Default for hidden layers</td>
+</tr>
+<tr class="even">
+<td>LeakyReLU</td>
+<td><code>x if x&gt;0 else 0.01x</code></td>
+<td>(−∞, ∞)</td>
+<td>ReLU “dying neuron” problem</td>
+</tr>
+<tr class="odd">
+<td>Sigmoid</td>
+<td><code>1/(1+e^-x)</code></td>
+<td>(0, 1)</td>
+<td>Binary output layer only</td>
+</tr>
+<tr class="even">
+<td>Softmax</td>
+<td><code>e^xᵢ / Σe^x</code></td>
+<td>(0, 1), sums to 1</td>
+<td>Multi-class output layer</td>
+</tr>
+<tr class="odd">
+<td>Tanh</td>
+<td><code>(e^x-e^-x)/(e^x+e^-x)</code></td>
+<td>(−1, 1)</td>
+<td>RNNs</td>
+</tr>
+<tr class="even">
+<td>GELU</td>
+<td>approx. <code>x·Φ(x)</code></td>
+<td>(−∞, ∞)</td>
+<td>Transformers (BERT/GPT default)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="loss-function-guide" class="level3">
+<h3 class="anchored" data-anchor-id="loss-function-guide">Loss Function Guide</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>Loss</th>
+<th>PyTorch class</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Binary classification</td>
+<td>Binary cross-entropy</td>
+<td><code>nn.BCEWithLogitsLoss()</code></td>
+</tr>
+<tr class="even">
+<td>Multi-class classification</td>
+<td>Cross-entropy</td>
+<td><code>nn.CrossEntropyLoss()</code></td>
+</tr>
+<tr class="odd">
+<td>Regression</td>
+<td>Mean squared error</td>
+<td><code>nn.MSELoss()</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="optimiser-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="optimiser-comparison">Optimiser Comparison</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Optimiser</th>
+<th>Use when</th>
+<th>Key hyperparameters</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>SGD</code></td>
+<td>Convex problems, research baselines</td>
+<td><code>lr</code>, <code>momentum=0.9</code></td>
+</tr>
+<tr class="even">
+<td><code>Adam</code></td>
+<td>Default choice</td>
+<td><code>lr=1e-3</code>, <code>weight_decay</code></td>
+</tr>
+<tr class="odd">
+<td><code>AdamW</code></td>
+<td>Transformers and large models</td>
+<td><code>lr=1e-4</code>, <code>weight_decay=0.01</code></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="pytorch-training-loop-template" class="level3">
+<h3 class="anchored" data-anchor-id="pytorch-training-loop-template">PyTorch Training Loop Template</h3>
+<div class="sourceCode" id="cb14"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb14-1">device <span class="op">=</span> torch.device(</span>
+<span id="cb14-2">    <span class="st">'cuda'</span> <span class="cf">if</span> torch.cuda.is_available() <span class="cf">else</span> <span class="st">'cpu'</span></span>
+<span id="cb14-3">)</span>
+<span id="cb14-4">model <span class="op">=</span> MyModel().to(device)</span>
+<span id="cb14-5">optimizer <span class="op">=</span> optim.Adam(</span>
+<span id="cb14-6">    model.parameters(),</span>
+<span id="cb14-7">    lr<span class="op">=</span><span class="fl">1e-3</span>,</span>
+<span id="cb14-8">    weight_decay<span class="op">=</span><span class="fl">1e-4</span>,</span>
+<span id="cb14-9">)</span>
+<span id="cb14-10"></span>
+<span id="cb14-11"><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(epochs):</span>
+<span id="cb14-12">    model.train()</span>
+<span id="cb14-13">    optimizer.zero_grad()</span>
+<span id="cb14-14">    loss <span class="op">=</span> criterion(model(X_train), y_train)</span>
+<span id="cb14-15">    loss.backward()</span>
+<span id="cb14-16">    optimizer.step()</span>
+<span id="cb14-17">    model.<span class="bu">eval</span>()</span>
+<span id="cb14-18">    <span class="cf">with</span> torch.no_grad():</span>
+<span id="cb14-19">        val_loss <span class="op">=</span> criterion(model(X_val), y_val).item()</span></code></pre></div>
+</section>
+<section id="common-layer-types" class="level3">
+<h3 class="anchored" data-anchor-id="common-layer-types">Common Layer Types</h3>
+<div class="sourceCode" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1">nn.Linear(in_features, out_features)</span>
+<span id="cb15-2">nn.Dropout(p<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb15-3">nn.BatchNorm1d(num_features)</span>
+<span id="cb15-4">nn.Embedding(num_embeddings, embedding_dim)</span>
+<span id="cb15-5">nn.MultiheadAttention(embed_dim, num_heads)</span></code></pre></div>
+</section>
+<section id="troubleshooting" class="level3">
+<h3 class="anchored" data-anchor-id="troubleshooting">Troubleshooting</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Loss is <code>NaN</code></td>
+<td>LR too high, or unscaled inputs</td>
+<td><code>StandardScaler</code>; reduce <code>lr</code></td>
+</tr>
+<tr class="even">
+<td>Val loss much higher than train loss</td>
+<td>Overfitting</td>
+<td>Add dropout; reduce model size</td>
+</tr>
+<tr class="odd">
+<td>Model not learning</td>
+<td>LR too low, or vanishing gradients</td>
+<td>Increase <code>lr</code>; use ReLU not sigmoid in hidden layers</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-29-training-a-transformer-model" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-29-training-a-transformer-model">Chapter 29 — Training a Transformer Model</h2>
+<section id="architecture-variant-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="architecture-variant-comparison">Architecture Variant Comparison</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Variant</th>
+<th>Training objective</th>
+<th>Example models</th>
+<th>Can generate text?</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Encoder-only</td>
+<td>Masked language modelling</td>
+<td>BERT, RoBERTa, DistilBERT</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Decoder-only</td>
+<td>Next-token prediction (causal LM)</td>
+<td>GPT-2/4, Llama, Claude</td>
+<td>Yes</td>
+</tr>
+<tr class="odd">
+<td>Encoder-decoder</td>
+<td>Sequence-to-sequence</td>
+<td>T5, BART, original transformer</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="core-formulas" class="level3">
+<h3 class="anchored" data-anchor-id="core-formulas">Core Formulas</h3>
+<pre class="text"><code>score(i, j) = softmax( Qᵢ · Kⱼ / √d_k )
+output_i    = Σⱼ score(i, j) · Vⱼ
+MultiHead(Q, K, V) = Concat(head₁, ..., headₕ) · W_o
+N ≈ 12 · n_layers · d_model²
+  (+ vocab_size · d_model for embeddings)</code></pre>
+</section>
+<section id="huggingface-quick-reference" class="level3">
+<h3 class="anchored" data-anchor-id="huggingface-quick-reference">HuggingFace Quick Reference</h3>
+<div class="sourceCode" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><span class="im">from</span> transformers <span class="im">import</span> (</span>
+<span id="cb17-2">    AutoModel,</span>
+<span id="cb17-3">    AutoTokenizer,</span>
+<span id="cb17-4">    AutoModelForCausalLM,</span>
+<span id="cb17-5">    pipeline,</span>
+<span id="cb17-6">)</span>
+<span id="cb17-7"></span>
+<span id="cb17-8">tokenizer <span class="op">=</span> AutoTokenizer.from_pretrained(model_name)</span>
+<span id="cb17-9">model <span class="op">=</span> AutoModel.from_pretrained(</span>
+<span id="cb17-10">    model_name,</span>
+<span id="cb17-11">    output_attentions<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb17-12">)</span>
+<span id="cb17-13">gen_model <span class="op">=</span> AutoModelForCausalLM.from_pretrained(model_name)</span>
+<span id="cb17-14"></span>
+<span id="cb17-15"><span class="co"># one-line inference for common tasks</span></span>
+<span id="cb17-16">classifier <span class="op">=</span> pipeline(<span class="st">"sentiment-analysis"</span>)</span></code></pre></div>
+</section>
+<section id="common-layer-dimensions" class="level3">
+<h3 class="anchored" data-anchor-id="common-layer-dimensions">Common Layer Dimensions</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Layers</th>
+<th><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>d</mi><mtext>model</mtext></msub></mrow><annotation encoding="application/x-tex">d_{\text{model}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">model</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span></th>
+<th>Heads</th>
+<th>Params</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>DistilBERT</td>
+<td>6</td>
+<td>768</td>
+<td>12</td>
+<td>66M</td>
+</tr>
+<tr class="even">
+<td>BERT-base</td>
+<td>12</td>
+<td>768</td>
+<td>12</td>
+<td>110M</td>
+</tr>
+<tr class="odd">
+<td>GPT-2 small</td>
+<td>12</td>
+<td>768</td>
+<td>12</td>
+<td>124M</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="troubleshooting-1" class="level3">
+<h3 class="anchored" data-anchor-id="troubleshooting-1">Troubleshooting</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Attention weights all near-uniform</td>
+<td>Forgot √d_k scaling, or model untrained</td>
+<td>Check scaling; use a pretrained checkpoint</td>
+</tr>
+<tr class="even">
+<td>Out of memory loading a large model</td>
+<td>Full-precision weights too big for available RAM/VRAM</td>
+<td>Use <code>torch_dtype=torch.float16</code> or 8-bit loading</td>
+</tr>
+<tr class="odd">
+<td>Sequence longer than model’s max position</td>
+<td>Positional embedding table exhausted</td>
+<td>Truncate input or use a long-context model variant</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-30-prompt-engineering" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-30-prompt-engineering">Chapter 30 — Prompt Engineering</h2>
+<section id="key-terms-3" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-3">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Zero-shot prompting</strong></td>
+<td>Task given via instruction only, no worked examples</td>
+</tr>
+<tr class="even">
+<td><strong>Few-shot prompting</strong></td>
+<td>Instruction plus a handful of input→output demonstrations in-context</td>
+</tr>
+<tr class="odd">
+<td><strong>Chain-of-thought (CoT)</strong></td>
+<td>Prompting the model to generate intermediate reasoning steps before a final answer</td>
+</tr>
+<tr class="even">
+<td><strong>Self-consistency</strong></td>
+<td>Sampling multiple CoT reasoning paths and taking a majority vote on the final answer</td>
+</tr>
+<tr class="odd">
+<td><strong>Schema-in-prompt</strong></td>
+<td>Describing a desired output format in natural language and validating/retrying on non-compliance</td>
+</tr>
+<tr class="even">
+<td><strong>Tool use / function calling</strong></td>
+<td>The model returns a structured, schema-validated call to a defined “tool” instead of free text</td>
+</tr>
+<tr class="odd">
+<td><strong>Constrained decoding</strong></td>
+<td>Serving-side restriction of eligible next tokens so output is provably schema-valid</td>
+</tr>
+<tr class="even">
+<td><strong>Prompt injection</strong></td>
+<td>Untrusted input containing text designed to override or hijack the model’s instructions</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="prompting-technique-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="prompting-technique-comparison">Prompting Technique Comparison</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Technique</th>
+<th>Best for</th>
+<th>Cost / latency</th>
+<th>Reliability</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Zero-shot</td>
+<td>Simple, well-understood tasks</td>
+<td>Lowest</td>
+<td>Moderate</td>
+</tr>
+<tr class="even">
+<td>Few-shot</td>
+<td>Ambiguous categories, specific conventions</td>
+<td>Higher</td>
+<td>Higher, sensitive to example choice</td>
+</tr>
+<tr class="odd">
+<td>Chain-of-thought</td>
+<td>Multi-step arithmetic, logic, planning</td>
+<td>Higher (output tokens)</td>
+<td>High on multi-step tasks only</td>
+</tr>
+<tr class="even">
+<td>Self-consistency</td>
+<td>High-stakes reasoning</td>
+<td>Highest (N× generations)</td>
+<td>Highest, at N× cost</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="structured-output-techniques" class="level3">
+<h3 class="anchored" data-anchor-id="structured-output-techniques">Structured Output Techniques</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Technique</th>
+<th>Guarantee</th>
+<th>Works with</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Schema-in-prompt</td>
+<td>None: must validate</td>
+<td>Any model</td>
+</tr>
+<tr class="even">
+<td>JSON mode</td>
+<td>Valid JSON syntax only</td>
+<td>Providers exposing the flag</td>
+</tr>
+<tr class="odd">
+<td>Native tool/function calling</td>
+<td>Schema-validated object</td>
+<td>Anthropic, OpenAI, Bedrock</td>
+</tr>
+<tr class="even">
+<td>Constrained decoding</td>
+<td>Provably valid against a grammar</td>
+<td>Self-hosted (<code>outlines</code>, <code>guidance</code>)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="decision-guide-1" class="level3">
+<h3 class="anchored" data-anchor-id="decision-guide-1">Decision Guide</h3>
+<pre class="text"><code>Need output your code will parse programmatically?
+├── Yes → native tool calling available?
+│   ├── Yes → use tool calling
+│   └── No  → schema-in-prompt + validation + retry
+└── No (free text OK)
+    ├── Multi-step task (needs intermediate value)?
+    │   ├── Yes → chain-of-thought
+    │   └── No  → zero-shot
+    └── Zero-shot inconsistent or format-sensitive?
+        → add few-shot examples</code></pre>
+</section>
+<section id="common-anthropic-sdk-call" class="level3">
+<h3 class="anchored" data-anchor-id="common-anthropic-sdk-call">Common Anthropic SDK Call</h3>
+<div class="sourceCode" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><span class="im">from</span> anthropic <span class="im">import</span> Anthropic</span>
+<span id="cb19-2">client <span class="op">=</span> Anthropic()</span>
+<span id="cb19-3"></span>
+<span id="cb19-4">response <span class="op">=</span> client.messages.create(</span>
+<span id="cb19-5">    model<span class="op">=</span><span class="st">"claude-haiku-4-5-20251001"</span>,</span>
+<span id="cb19-6">    max_tokens<span class="op">=</span><span class="dv">500</span>,</span>
+<span id="cb19-7">    system<span class="op">=</span><span class="st">"You are a..."</span>,</span>
+<span id="cb19-8">    messages<span class="op">=</span>[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"..."</span>}],</span>
+<span id="cb19-9">    temperature<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb19-10">)</span>
+<span id="cb19-11">text <span class="op">=</span> response.content[<span class="dv">0</span>].text</span></code></pre></div>
+</section>
+<section id="aws-bedrock-quick-reference" class="level3">
+<h3 class="anchored" data-anchor-id="aws-bedrock-quick-reference">AWS Bedrock Quick Reference</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>Bedrock approach</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Send a prompt, get a completion</td>
+<td><code>bedrock-runtime</code> client <code>.converse()</code></td>
+</tr>
+<tr class="even">
+<td>Structured output</td>
+<td><code>.converse()</code> with <code>toolConfig</code></td>
+</tr>
+<tr class="odd">
+<td>Prompt versioning</td>
+<td>Bedrock Prompt Management</td>
+</tr>
+<tr class="even">
+<td>Content filtering / injection mitigation</td>
+<td>Bedrock Guardrails</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-31-retrieval-augmented-generation-rag" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-31-retrieval-augmented-generation-rag">Chapter 31 — Retrieval-Augmented Generation (RAG)</h2>
+<section id="rag-pipeline-stages" class="level3">
+<h3 class="anchored" data-anchor-id="rag-pipeline-stages">RAG Pipeline Stages</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>When</th>
+<th>Step</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Indexing</td>
+<td>Offline, once, updated as data changes</td>
+<td>Chunk → embed → store in vector DB</td>
+</tr>
+<tr class="even">
+<td>Retrieval</td>
+<td>Online, per query</td>
+<td>Embed query → similarity search</td>
+</tr>
+<tr class="odd">
+<td>Augmentation</td>
+<td>Online, per query</td>
+<td>Build prompt from retrieved chunks + query</td>
+</tr>
+<tr class="even">
+<td>Generation</td>
+<td>Online, per query</td>
+<td>LLM answers grounded in context</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="chunk-size-starting-points" class="level3">
+<h3 class="anchored" data-anchor-id="chunk-size-starting-points">Chunk Size Starting Points</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Document type</th>
+<th>Chunk size</th>
+<th>Overlap</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Short FAQ / wiki entries</td>
+<td>Whole document</td>
+<td>—</td>
+</tr>
+<tr class="even">
+<td>Long-form documentation, runbooks</td>
+<td>150–300 words</td>
+<td>10–20%</td>
+</tr>
+<tr class="odd">
+<td>Legal / contract text</td>
+<td>300–500 words, sentence-aware</td>
+<td>1–2 sentences</td>
+</tr>
+<tr class="even">
+<td>Chat transcripts / support tickets</td>
+<td>Per message/exchange</td>
+<td>—</td>
+</tr>
+<tr class="odd">
+<td>Code</td>
+<td>Per function/class</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="embedding-model-decision-guide" class="level3">
+<h3 class="anchored" data-anchor-id="embedding-model-decision-guide">Embedding Model Decision Guide</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Need</th>
+<th>Model</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Prototyping, CPU-only</td>
+<td><code>all-MiniLM-L6-v2</code> (384 dims, ~80MB)</td>
+</tr>
+<tr class="even">
+<td>Production, quality over latency</td>
+<td><code>all-mpnet-base-v2</code> (768 dims, ~420MB)</td>
+</tr>
+<tr class="odd">
+<td>Domain-specific (code, legal, medical)</td>
+<td>Domain-tuned or fine-tuned embedding model</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="vector-store-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="vector-store-comparison">Vector Store Comparison</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Store</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Chroma</td>
+<td>Prototyping through small production; built-in metadata + persistence</td>
+</tr>
+<tr class="even">
+<td>FAISS</td>
+<td>Maximum raw search speed; no built-in persistence/metadata</td>
+</tr>
+<tr class="odd">
+<td>Amazon OpenSearch Service (vector engine) / Bedrock Knowledge Bases</td>
+<td>Managed, multi-tenant, high availability</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="core-api" class="level3">
+<h3 class="anchored" data-anchor-id="core-api">Core API</h3>
+<div class="sourceCode" id="cb20"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb20-1"><span class="im">from</span> sentence_transformers <span class="im">import</span> SentenceTransformer</span>
+<span id="cb20-2"><span class="im">import</span> chromadb</span>
+<span id="cb20-3"></span>
+<span id="cb20-4">model <span class="op">=</span> SentenceTransformer(<span class="st">"all-MiniLM-L6-v2"</span>)</span>
+<span id="cb20-5">embeddings <span class="op">=</span> model.encode(chunks, normalize_embeddings<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb20-6"></span>
+<span id="cb20-7">client <span class="op">=</span> chromadb.PersistentClient(path<span class="op">=</span><span class="st">"./chroma_store"</span>)</span>
+<span id="cb20-8">collection <span class="op">=</span> client.get_or_create_collection(<span class="st">"docs"</span>)</span>
+<span id="cb20-9">collection.add(</span>
+<span id="cb20-10">    ids<span class="op">=</span>ids,</span>
+<span id="cb20-11">    documents<span class="op">=</span>chunks,</span>
+<span id="cb20-12">    embeddings<span class="op">=</span>embeddings.tolist(),</span>
+<span id="cb20-13">)</span>
+<span id="cb20-14">results <span class="op">=</span> collection.query(</span>
+<span id="cb20-15">    query_embeddings<span class="op">=</span>[q_emb.tolist()],</span>
+<span id="cb20-16">    n_results<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb20-17">)</span></code></pre></div>
+</section>
+<section id="troubleshooting-2" class="level3">
+<h3 class="anchored" data-anchor-id="troubleshooting-2">Troubleshooting</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Retrieval returns irrelevant chunks with high confidence</td>
+<td>No similarity threshold applied</td>
+<td>Add <code>min_similarity</code> check; return “no context found” below it</td>
+</tr>
+<tr class="even">
+<td>Retrieval quality collapsed after a deploy</td>
+<td>Query/doc embeddings from different model versions</td>
+<td>Pin and re-embed with one consistent model version</td>
+</tr>
+<tr class="odd">
+<td>Model ignores relevant retrieved context</td>
+<td>“Lost in the middle”: relevant chunk buried mid-prompt</td>
+<td>Reorder: most relevant chunks first or last</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-32-llm-evaluation" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-32-llm-evaluation">Chapter 32 — LLM Evaluation</h2>
+<section id="evaluation-method-comparison" class="level3">
+<h3 class="anchored" data-anchor-id="evaluation-method-comparison">Evaluation Method Comparison</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Cost</th>
+<th>Reliability</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Reference-based (BLEU/ROUGE)</td>
+<td>Free, instant</td>
+<td>Low</td>
+<td>Sanity checks, translation-style tasks</td>
+</tr>
+<tr class="even">
+<td>LLM-as-judge</td>
+<td>Low–moderate</td>
+<td>Moderate–high, if calibrated</td>
+<td>Continuous evaluation, regression testing</td>
+</tr>
+<tr class="odd">
+<td>RAGAS-style metrics</td>
+<td>Low–moderate</td>
+<td>Moderate–high</td>
+<td>Isolating retrieval vs.&nbsp;generation failures</td>
+</tr>
+<tr class="even">
+<td>Human evaluation</td>
+<td>High, slow</td>
+<td>Highest, if agreement is good</td>
+<td>Calibration, high-stakes launches</td>
+</tr>
+<tr class="odd">
+<td>Benchmark suites</td>
+<td>Free–low</td>
+<td>N/A to a specific task</td>
+<td>Choosing a base model</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="ragas-metrics" class="level3">
+<h3 class="anchored" data-anchor-id="ragas-metrics">RAGAS Metrics</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Question it answers</th>
+<th>Needs</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Faithfulness</td>
+<td>Is every claim supported by retrieved context?</td>
+<td>answer, context</td>
+</tr>
+<tr class="even">
+<td>Answer relevance</td>
+<td>Does the answer address the question?</td>
+<td>question, answer</td>
+</tr>
+<tr class="odd">
+<td>Context precision</td>
+<td>How many retrieved chunks were relevant?</td>
+<td>question, context</td>
+</tr>
+<tr class="even">
+<td>Context recall</td>
+<td>Did retrieval fetch everything needed?</td>
+<td>context, ground-truth answer</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="llm-judge-bias-cheat-sheet" class="level3">
+<h3 class="anchored" data-anchor-id="llm-judge-bias-cheat-sheet">LLM-Judge Bias Cheat Sheet</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Bias</th>
+<th>Symptom</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Position bias</td>
+<td>Judge favours whichever response is shown first</td>
+<td>Score both orderings; only trust an agreeing verdict</td>
+</tr>
+<tr class="even">
+<td>Verbosity bias</td>
+<td>Judge rates longer responses higher regardless of value</td>
+<td>Explicit “do not reward length” instruction; correlation check</td>
+</tr>
+<tr class="odd">
+<td>Self-preference bias</td>
+<td>Judge favours outputs from its own model family</td>
+<td>Use a judge from a different model family; validate vs.&nbsp;humans</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cohens-kappa-interpretation" class="level3">
+<h3 class="anchored" data-anchor-id="cohens-kappa-interpretation">Cohen’s Kappa Interpretation</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Kappa</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>&gt; 0.6</td>
+<td>Generally acceptable agreement</td>
+</tr>
+<tr class="even">
+<td>0.4 – 0.6</td>
+<td>Moderate: inspect disagreements</td>
+</tr>
+<tr class="odd">
+<td>&lt; 0.4</td>
+<td>Task/guidelines likely too ambiguous</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="hand-rolled-rouge-no-library-needed" class="level3">
+<h3 class="anchored" data-anchor-id="hand-rolled-rouge-no-library-needed">Hand-Rolled ROUGE (No Library Needed)</h3>
+<div class="sourceCode" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><span class="im">from</span> collections <span class="im">import</span> Counter</span>
+<span id="cb21-2"></span>
+<span id="cb21-3"><span class="kw">def</span> rouge1(reference, candidate):</span>
+<span id="cb21-4">    ref_c <span class="op">=</span> Counter(reference.lower().split())</span>
+<span id="cb21-5">    cand_c <span class="op">=</span> Counter(candidate.lower().split())</span>
+<span id="cb21-6">    overlap <span class="op">=</span> <span class="bu">sum</span>((ref_c <span class="op">&amp;</span> cand_c).values())</span>
+<span id="cb21-7">    precision <span class="op">=</span> overlap <span class="op">/</span> <span class="bu">len</span>(cand_c) <span class="cf">if</span> cand_c <span class="cf">else</span> <span class="dv">0</span></span>
+<span id="cb21-8">    recall <span class="op">=</span> overlap <span class="op">/</span> <span class="bu">len</span>(ref_c) <span class="cf">if</span> ref_c <span class="cf">else</span> <span class="dv">0</span></span>
+<span id="cb21-9">    <span class="cf">return</span> precision, recall</span></code></pre></div>
+</section>
+<section id="production-ragas" class="level3">
+<h3 class="anchored" data-anchor-id="production-ragas">Production RAGAS</h3>
+<div class="sourceCode" id="cb22"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb22-1"><span class="im">from</span> ragas <span class="im">import</span> evaluate</span>
+<span id="cb22-2"><span class="im">from</span> ragas.metrics <span class="im">import</span> (</span>
+<span id="cb22-3">    faithfulness,</span>
+<span id="cb22-4">    answer_relevancy,</span>
+<span id="cb22-5">    context_precision,</span>
+<span id="cb22-6">    context_recall,</span>
+<span id="cb22-7">)</span></code></pre></div>
+</section>
+</section>
+<section id="chapter-33-continuous-pretraining" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-33-continuous-pretraining">Chapter 33 — Continuous Pretraining</h2>
+<section id="cpt-vs.-ift-vs.-rag" class="level3">
+<h3 class="anchored" data-anchor-id="cpt-vs.-ift-vs.-rag">CPT vs.&nbsp;IFT vs.&nbsp;RAG</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Technique</th>
+<th>Changes</th>
+<th>Objective</th>
+<th>Data</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>CPT</td>
+<td>What the model knows</td>
+<td>Next-token prediction (self-supervised)</td>
+<td>Raw domain text</td>
+</tr>
+<tr class="even">
+<td>IFT</td>
+<td>How the model behaves</td>
+<td>Supervised</td>
+<td>(instruction, response) pairs</td>
+</tr>
+<tr class="odd">
+<td>RAG</td>
+<td>What the model can look up</td>
+<td>N/A (inference-time)</td>
+<td>Retrieved passages</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="domain-gap-test-thresholds" class="level3">
+<h3 class="anchored" data-anchor-id="domain-gap-test-thresholds">Domain Gap Test Thresholds</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Perplexity ratio (domain/general)</th>
+<th>Recommendation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>&lt; 1.2</td>
+<td>Base model handles domain well: try prompting/IFT first</td>
+</tr>
+<tr class="even">
+<td>1.2 – 2.0</td>
+<td>Moderate gap: IFT or RAG may suffice</td>
+</tr>
+<tr class="odd">
+<td>&gt; 2.0</td>
+<td>Large gap: CPT likely valuable</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cost-formulas" class="level3">
+<h3 class="anchored" data-anchor-id="cost-formulas">Cost Formulas</h3>
+<pre class="text"><code>N ≈ 12 · n_layers · d_model²
+  (parameter count, from Chapter 29)
+C ≈ 6 · N · D
+  (training FLOPs; D = token count)
+Full-training memory ≈ 16 bytes/param
+  (bf16 weights+grads + fp32 master+Adam m,v)
+LoRA memory ≈ 2 bytes/param (frozen)
+  + 16 bytes/param × adapter_fraction</code></pre>
+</section>
+<section id="data-curation-pipeline" class="level3">
+<h3 class="anchored" data-anchor-id="data-curation-pipeline">Data Curation Pipeline</h3>
+<pre class="text"><code>Raw corpus → Deduplication (exact + near-dedup)
+  → Quality filtering (language ID, length, perplexity,
+  domain classifier) → Format normalisation
+  → Tokenise + pack</code></pre>
+</section>
+<section id="catastrophic-forgetting-mitigations" class="level3">
+<h3 class="anchored" data-anchor-id="catastrophic-forgetting-mitigations">Catastrophic Forgetting Mitigations</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Mitigation</th>
+<th>Mechanism</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Data mixing</td>
+<td>Blend 80–90% domain text with 10–20% general text</td>
+</tr>
+<tr class="even">
+<td>Lower learning rate</td>
+<td>10–100x lower than original pretraining</td>
+</tr>
+<tr class="odd">
+<td>Replay buffers</td>
+<td>Periodically re-include original-distribution examples</td>
+</tr>
+<tr class="even">
+<td>LoRA</td>
+<td>Limits the trainable parameter budget, freezing the base model</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="aws-training-options" class="level3">
+<h3 class="anchored" data-anchor-id="aws-training-options">AWS Training Options</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Scale</th>
+<th>Service</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1–8 GPUs</td>
+<td>SageMaker Training Jobs</td>
+</tr>
+<tr class="even">
+<td>Dozens–hundreds of GPUs</td>
+<td>SageMaker HyperPod</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-34-instruction-fine-tuning" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-34-instruction-fine-tuning">Chapter 34 — Instruction Fine-Tuning</h2>
+<section id="dataset-formats" class="level3">
+<h3 class="anchored" data-anchor-id="dataset-formats">Dataset Formats</h3>
+<div class="sourceCode" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><span class="co"># Alpaca-style</span></span>
+<span id="cb25-2">{<span class="st">"instruction"</span>: <span class="st">"..."</span>, <span class="st">"input"</span>: <span class="st">"..."</span>, <span class="st">"output"</span>: <span class="st">"..."</span>}</span>
+<span id="cb25-3"></span>
+<span id="cb25-4"><span class="co"># Chat / ShareGPT-style (required for chat-template models)</span></span>
+<span id="cb25-5">{<span class="st">"messages"</span>: [</span>
+<span id="cb25-6">    {<span class="st">"role"</span>: <span class="st">"system"</span>, <span class="st">"content"</span>: <span class="st">"..."</span>},</span>
+<span id="cb25-7">    {<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"..."</span>},</span>
+<span id="cb25-8">    {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"..."</span>},</span>
+<span id="cb25-9">]}</span></code></pre></div>
+</section>
+<section id="lora-config-reference" class="level3">
+<h3 class="anchored" data-anchor-id="lora-config-reference">LoRA Config Reference</h3>
+<div class="sourceCode" id="cb26"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb26-1"><span class="im">from</span> peft <span class="im">import</span> LoraConfig, get_peft_model, TaskType</span>
+<span id="cb26-2"></span>
+<span id="cb26-3">LoraConfig(</span>
+<span id="cb26-4">    task_type<span class="op">=</span>TaskType.CAUSAL_LM,</span>
+<span id="cb26-5">    r<span class="op">=</span><span class="dv">16</span>,                 <span class="co"># rank: 8 to 64 typical</span></span>
+<span id="cb26-6">    lora_alpha<span class="op">=</span><span class="dv">32</span>,         <span class="co"># scaling factor, typically 2*r</span></span>
+<span id="cb26-7">    target_modules<span class="op">=</span>[<span class="st">"q_proj"</span>, <span class="st">"k_proj"</span>, <span class="st">"v_proj"</span>, <span class="st">"o_proj"</span>],</span>
+<span id="cb26-8">    lora_dropout<span class="op">=</span><span class="fl">0.05</span>,</span>
+<span id="cb26-9">    bias<span class="op">=</span><span class="st">"none"</span>,</span>
+<span id="cb26-10">)</span></code></pre></div>
+</section>
+<section id="lora-vs.-qlora-vs.-full-fine-tuning" class="level3">
+<h3 class="anchored" data-anchor-id="lora-vs.-qlora-vs.-full-fine-tuning">LoRA vs.&nbsp;QLoRA vs.&nbsp;Full Fine-Tuning</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Base weights</th>
+<th>Trainable params</th>
+<th>Memory (7B model)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Full fine-tuning</td>
+<td>Trained</td>
+<td>100%</td>
+<td>~112GB (16 bytes/param)</td>
+</tr>
+<tr class="even">
+<td>LoRA</td>
+<td>Frozen (fp16)</td>
+<td>0.1–1%</td>
+<td>~14GB base + small adapter</td>
+</tr>
+<tr class="odd">
+<td>QLoRA</td>
+<td>Frozen (4-bit)</td>
+<td>0.1–1%</td>
+<td>~4GB base + small adapter</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="ift-evaluation-checklist" class="level3">
+<h3 class="anchored" data-anchor-id="ift-evaluation-checklist">IFT Evaluation Checklist</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>What it checks</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Task-specific metrics</td>
+<td>Correctness on the specific fine-tuned task</td>
+</tr>
+<tr class="even">
+<td>Human evaluation</td>
+<td>Subjective quality, tone, edge cases</td>
+</tr>
+<tr class="odd">
+<td>LLM-as-judge</td>
+<td>Scalable quality proxy (Chapter 32)</td>
+</tr>
+<tr class="even">
+<td>Automated benchmarks</td>
+<td>General capability retention (MT-Bench, MMLU)</td>
+</tr>
+</tbody>
+</table>
+<p>Always compare against the base model on the same evaluation set.</p>
+</section>
+<section id="aws-options" class="level3">
+<h3 class="anchored" data-anchor-id="aws-options">AWS Options</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Path</th>
+<th>Use when</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>SageMaker JumpStart</td>
+<td>Supported foundation model, fastest path, less control</td>
+</tr>
+<tr class="even">
+<td>SageMaker Training Jobs + HuggingFace container</td>
+<td>Custom training loop, unsupported model, internal integration</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-35-reinforcement-learning-rlhf" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-35-reinforcement-learning-rlhf">Chapter 35 — Reinforcement Learning &amp; RLHF</h2>
+<section id="key-terms-4" class="level3">
+<h3 class="anchored" data-anchor-id="key-terms-4">Key Terms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Term</th>
+<th>Definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Agent</strong></td>
+<td>The language model being trained (the policy)</td>
+</tr>
+<tr class="even">
+<td><strong>Environment</strong></td>
+<td>The conversation / prompt context</td>
+</tr>
+<tr class="odd">
+<td><strong>State</strong></td>
+<td>Tokens generated so far</td>
+</tr>
+<tr class="even">
+<td><strong>Action</strong></td>
+<td>The next token emitted, or, coarsely, the full response</td>
+</tr>
+<tr class="odd">
+<td><strong>Reward</strong></td>
+<td>Scalar score from a reward model for a full response</td>
+</tr>
+<tr class="even">
+<td><strong>Policy (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>π</mi><mi>θ</mi></msub></mrow><annotation encoding="application/x-tex">\pi_\theta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5806em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>)</strong></td>
+<td>The LLM being trained</td>
+</tr>
+<tr class="odd">
+<td><strong>Reference policy (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>π</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub></mrow><annotation encoding="application/x-tex">\pi_{ref}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7167em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.1076em;">f</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span></span></span></span>)</strong></td>
+<td>A frozen copy of the starting (usually SFT) model: the KL anchor</td>
+</tr>
+<tr class="even">
+<td><strong>Reward hacking</strong></td>
+<td>The policy exploits a proxy reward signal in a way that scores well but is actually bad</td>
+</tr>
+<tr class="odd">
+<td><strong>Bradley-Terry model</strong></td>
+<td>Pairwise-comparison loss used to train a reward model from preference pairs</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="ppo-based-rlhf-vs.-dpo" class="level3">
+<h3 class="anchored" data-anchor-id="ppo-based-rlhf-vs.-dpo">PPO-Based RLHF vs.&nbsp;DPO</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th></th>
+<th>PPO-based RLHF</th>
+<th>DPO</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Needs a separate reward model</td>
+<td>Yes: trained first, then frozen during policy optimisation</td>
+<td>No: preference pairs used directly</td>
+</tr>
+<tr class="even">
+<td>Needs online sampling during training</td>
+<td>Yes: policy generates rollouts every step</td>
+<td>No: ordinary supervised training on static pairs</td>
+</tr>
+<tr class="odd">
+<td>Hyperparameter sensitivity</td>
+<td>High (clip ratio, value-function coefficient, KL coefficient, GAE lambda, …)</td>
+<td>Low (mainly <code>beta</code> and learning rate)</td>
+</tr>
+<tr class="even">
+<td>Compute cost</td>
+<td>High</td>
+<td>Comparable to SFT</td>
+</tr>
+<tr class="odd">
+<td>Produces a reusable reward model</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Typical <code>trl</code> class</td>
+<td><code>PPOTrainer</code></td>
+<td><code>DPOTrainer</code></td>
+</tr>
+<tr class="odd">
+<td>Best for</td>
+<td>Teams with RL infra and a reward-model use case beyond this run (best-of-N, data filtering)</td>
+<td>Default choice for most preference-tuning</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="key-formulas" class="level3">
+<h3 class="anchored" data-anchor-id="key-formulas">Key Formulas</h3>
+<p><strong>Bradley-Terry preference loss (reward model training):</strong> <span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="script">L</mi><mo>=</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><mi>σ</mi><mo stretchy="false">(</mo><mi>r</mi><mo stretchy="false">(</mo><mtext>chosen</mtext><mo stretchy="false">)</mo><mo>−</mo><mi>r</mi><mo stretchy="false">(</mo><mtext>rejected</mtext><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\mathcal{L} = -\log \sigma(r(\text{chosen}) - r(\text{rejected}))</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathcal">L</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord text"><span class="mord">chosen</span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord text"><span class="mord">rejected</span></span><span class="mclose">))</span></span></span></span></span> <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi><mo stretchy="false">(</mo><mo>⋅</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">r(\cdot)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord">⋅</span><span class="mclose">)</span></span></span></span> is the reward model’s scalar output for a <code>(prompt, response)</code> pair. Minimised by maximising the score gap between chosen and rejected. Never demands an absolute reward value.</p>
+<p><strong>KL-constrained RL objective (what PPO-based RLHF maximises):</strong> <span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Objective</mtext><mo>=</mo><mi mathvariant="double-struck">E</mi><mo stretchy="false">[</mo><mi>r</mi><mo stretchy="false">(</mo><mtext>response</mtext><mo stretchy="false">)</mo><mo stretchy="false">]</mo><mo>−</mo><mi>β</mi><mo>⋅</mo><mtext>KL</mtext><mo stretchy="false">(</mo><msub><mi>π</mi><mi>θ</mi></msub><mo stretchy="false">(</mo><mo>⋅</mo><mi mathvariant="normal">∣</mi><mtext>prompt</mtext><mo stretchy="false">)</mo><mtext> </mtext><mi mathvariant="normal">∥</mi><mtext> </mtext><msub><mi>π</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="false">(</mo><mo>⋅</mo><mi mathvariant="normal">∣</mi><mtext>prompt</mtext><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{Objective} = \mathbb{E}[r(\text{response})] - \beta \cdot \text{KL}(\pi_\theta(\cdot|\text{prompt}) \,\|\, \pi_{ref}(\cdot|\text{prompt}))</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Objective</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathbb">E</span><span class="mopen">[</span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mopen">(</span><span class="mord text"><span class="mord">response</span></span><span class="mclose">)]</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord text"><span class="mord">KL</span></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord">⋅</span><span class="mord">∣</span><span class="mord text"><span class="mord">prompt</span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">∥</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.1076em;">f</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord">⋅</span><span class="mord">∣</span><span class="mord text"><span class="mord">prompt</span></span><span class="mclose">))</span></span></span></span></span></p>
+<p><strong>DPO loss (closed-form, no reward model or RL loop):</strong> <span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi mathvariant="script">L</mi><mrow><mi>D</mi><mi>P</mi><mi>O</mi></mrow></msub><mo>=</mo><mo>−</mo><mi>log</mi><mo>⁡</mo><mi>σ</mi><mtext> ⁣</mtext><mrow><mo fence="true">(</mo><mi>β</mi><mrow><mo fence="true">[</mo><mi>log</mi><mo>⁡</mo><mfrac><mrow><msub><mi>π</mi><mi>θ</mi></msub><mo stretchy="false">(</mo><mtext>chosen</mtext><mi mathvariant="normal">∣</mi><mi>p</mi><mo stretchy="false">)</mo></mrow><mrow><msub><mi>π</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="false">(</mo><mtext>chosen</mtext><mi mathvariant="normal">∣</mi><mi>p</mi><mo stretchy="false">)</mo></mrow></mfrac><mo>−</mo><mi>log</mi><mo>⁡</mo><mfrac><mrow><msub><mi>π</mi><mi>θ</mi></msub><mo stretchy="false">(</mo><mtext>rejected</mtext><mi mathvariant="normal">∣</mi><mi>p</mi><mo stretchy="false">)</mo></mrow><mrow><msub><mi>π</mi><mrow><mi>r</mi><mi>e</mi><mi>f</mi></mrow></msub><mo stretchy="false">(</mo><mtext>rejected</mtext><mi mathvariant="normal">∣</mi><mi>p</mi><mo stretchy="false">)</mo></mrow></mfrac><mo fence="true">]</mo></mrow><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">\mathcal{L}_{DPO} = -\log \sigma\!\left(\beta \left[\log\frac{\pi_\theta(\text{chosen}|p)}{\pi_{ref}(\text{chosen}|p)} - \log\frac{\pi_\theta(\text{rejected}|p)}{\pi_{ref}(\text{rejected}|p)}\right]\right)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathcal">L</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">D</span><span class="mord mathnormal mtight" style="margin-right:0.1389em;">P</span><span class="mord mathnormal mtight" style="margin-right:0.0278em;">O</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.4221em;vertical-align:-0.9721em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mspace" style="margin-right:-0.1667em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">[</span></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.1076em;">f</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord text"><span class="mord">chosen</span></span><span class="mord">∣</span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord text"><span class="mord">chosen</span></span><span class="mord">∣</span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.427em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">r</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.1076em;">f</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord text"><span class="mord">rejected</span></span><span class="mord">∣</span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">π</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0278em;">θ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord text"><span class="mord">rejected</span></span><span class="mord">∣</span><span class="mord mathnormal">p</span><span class="mclose">)</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.9721em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">]</span></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span></span></span></span></span></p>
+<p>Both formulas use the same <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>β</mi></mrow><annotation encoding="application/x-tex">\beta</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0528em;">β</span></span></span></span>: it controls how tightly the policy is leashed to the reference model.</p>
+</section>
+<section id="beta-starting-points-and-symptoms" class="level3">
+<h3 class="anchored" data-anchor-id="beta-starting-points-and-symptoms"><code>beta</code> Starting Points and Symptoms</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Policy output barely changes after training</td>
+<td><code>beta</code> too high</td>
+<td>Lower it (try 0.05, 0.02)</td>
+</tr>
+<tr class="even">
+<td>Output degenerates: repetition, off-topic, exploits reward model</td>
+<td><code>beta</code> too low</td>
+<td>Raise it (try 0.2, 0.5)</td>
+</tr>
+<tr class="odd">
+<td>DPO loss goes to ~0 almost immediately</td>
+<td>Learning rate too high, or too few unique preference pairs</td>
+<td>Lower LR to <code>1e-6</code>–<code>5e-6</code>; add more diverse pairs</td>
+</tr>
+<tr class="even">
+<td>Training loss looks fine but LLM-judge win rate doesn’t improve</td>
+<td>Reward hacking or preference-data quality issue</td>
+<td>Inspect generations directly; check preference-label consistency</td>
+</tr>
+</tbody>
+</table>
+<p>Default starting point: <code>beta = 0.1</code>, <code>learning_rate = 5e-6</code> (DPO); same order of magnitude for PPO’s KL coefficient.</p>
+</section>
+<section id="trl-key-classes" class="level3">
+<h3 class="anchored" data-anchor-id="trl-key-classes"><code>trl</code> Key Classes</h3>
+<div class="sourceCode" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><span class="im">from</span> trl <span class="im">import</span> RewardTrainer, RewardConfig</span>
+<span id="cb27-2"></span>
+<span id="cb27-3">trainer <span class="op">=</span> RewardTrainer(</span>
+<span id="cb27-4">    <span class="co"># AutoModelForSequenceClassification, num_labels=1</span></span>
+<span id="cb27-5">    model,</span>
+<span id="cb27-6">    args<span class="op">=</span>RewardConfig(</span>
+<span id="cb27-7">        output_dir<span class="op">=</span><span class="st">"..."</span>,</span>
+<span id="cb27-8">        <span class="co"># int: pairs per step</span></span>
+<span id="cb27-9">        per_device_train_batch_size<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb27-10">        <span class="co"># float</span></span>
+<span id="cb27-11">        learning_rate<span class="op">=</span><span class="fl">1e-5</span>,</span>
+<span id="cb27-12">        <span class="co"># int: max tokens per (prompt+response)</span></span>
+<span id="cb27-13">        max_length<span class="op">=</span><span class="dv">512</span>,</span>
+<span id="cb27-14">    ),</span>
+<span id="cb27-15">    <span class="co"># columns: prompt, chosen, rejected</span></span>
+<span id="cb27-16">    train_dataset<span class="op">=</span>dataset,</span>
+<span id="cb27-17">    processing_class<span class="op">=</span>tokenizer,</span>
+<span id="cb27-18">)</span></code></pre></div>
+<div class="sourceCode" id="cb28"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb28-1"><span class="im">from</span> trl <span class="im">import</span> DPOTrainer, DPOConfig</span>
+<span id="cb28-2"></span>
+<span id="cb28-3">trainer <span class="op">=</span> DPOTrainer(</span>
+<span id="cb28-4">    <span class="co"># policy model (causal LM)</span></span>
+<span id="cb28-5">    model,</span>
+<span id="cb28-6">    <span class="co"># None -&gt; trl auto-clones `model` as frozen reference</span></span>
+<span id="cb28-7">    ref_model<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb28-8">    args<span class="op">=</span>DPOConfig(</span>
+<span id="cb28-9">        <span class="co"># float: KL-strength coefficient</span></span>
+<span id="cb28-10">        beta<span class="op">=</span><span class="fl">0.1</span>,</span>
+<span id="cb28-11">        <span class="co"># float: lower than typical SFT</span></span>
+<span id="cb28-12">        learning_rate<span class="op">=</span><span class="fl">5e-6</span>,</span>
+<span id="cb28-13">        <span class="co"># int</span></span>
+<span id="cb28-14">        max_length<span class="op">=</span><span class="dv">512</span>,</span>
+<span id="cb28-15">        <span class="co"># int</span></span>
+<span id="cb28-16">        max_prompt_length<span class="op">=</span><span class="dv">256</span>,</span>
+<span id="cb28-17">    ),</span>
+<span id="cb28-18">    <span class="co"># columns: prompt, chosen, rejected</span></span>
+<span id="cb28-19">    train_dataset<span class="op">=</span>dataset,</span>
+<span id="cb28-20">    processing_class<span class="op">=</span>tokenizer,</span>
+<span id="cb28-21">    <span class="co"># optional: combine with Chapter 34's LoRA setup</span></span>
+<span id="cb28-22">    peft_config<span class="op">=</span>lora_config,</span>
+<span id="cb28-23">)</span></code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb29-1"><span class="im">from</span> trl <span class="im">import</span> PPOTrainer, PPOConfig</span>
+<span id="cb29-2"></span>
+<span id="cb29-3">ppo_config <span class="op">=</span> PPOConfig(</span>
+<span id="cb29-4">    learning_rate<span class="op">=</span><span class="fl">1.4e-5</span>,</span>
+<span id="cb29-5">    batch_size<span class="op">=</span><span class="dv">16</span>,</span>
+<span id="cb29-6">    mini_batch_size<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb29-7">    <span class="co"># str: "kl", "abs", "mse", or "full"</span></span>
+<span id="cb29-8">    kl_penalty<span class="op">=</span><span class="st">"kl"</span>,</span>
+<span id="cb29-9">    <span class="co"># float: starting beta; PPOTrainer can adapt it during</span></span>
+<span id="cb29-10">    <span class="co"># training</span></span>
+<span id="cb29-11">    init_kl_coef<span class="op">=</span><span class="fl">0.2</span>,</span>
+<span id="cb29-12">)</span>
+<span id="cb29-13">trainer <span class="op">=</span> PPOTrainer(</span>
+<span id="cb29-14">    ppo_config,</span>
+<span id="cb29-15">    model<span class="op">=</span>policy,</span>
+<span id="cb29-16">    ref_model<span class="op">=</span>reference,</span>
+<span id="cb29-17">    tokenizer<span class="op">=</span>tokenizer,</span>
+<span id="cb29-18">)</span>
+<span id="cb29-19"><span class="co"># then, per batch: generate responses -&gt; score with reward_model -&gt;</span></span>
+<span id="cb29-20"><span class="co"># trainer.step(...)</span></span></code></pre></div>
+</section>
+<section id="common-imports-2" class="level3">
+<h3 class="anchored" data-anchor-id="common-imports-2">Common Imports</h3>
+<div class="sourceCode" id="cb30"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb30-1"><span class="im">import</span> torch</span>
+<span id="cb30-2"><span class="im">import</span> torch.nn.functional <span class="im">as</span> F</span>
+<span id="cb30-3"><span class="im">from</span> transformers <span class="im">import</span> (</span>
+<span id="cb30-4">    AutoModelForCausalLM,</span>
+<span id="cb30-5">    AutoModelForSequenceClassification,</span>
+<span id="cb30-6">    AutoTokenizer,</span>
+<span id="cb30-7">)</span>
+<span id="cb30-8"><span class="im">from</span> trl <span class="im">import</span> (</span>
+<span id="cb30-9">    RewardTrainer,</span>
+<span id="cb30-10">    RewardConfig,</span>
+<span id="cb30-11">    DPOTrainer,</span>
+<span id="cb30-12">    DPOConfig,</span>
+<span id="cb30-13">    PPOTrainer,</span>
+<span id="cb30-14">    PPOConfig,</span>
+<span id="cb30-15">)</span>
+<span id="cb30-16"><span class="im">from</span> peft <span class="im">import</span> LoraConfig, TaskType</span>
+<span id="cb30-17"><span class="im">from</span> datasets <span class="im">import</span> Dataset</span></code></pre></div>
+</section>
+<section id="aws-sagemaker-quick-reference-2" class="level3">
+<h3 class="anchored" data-anchor-id="aws-sagemaker-quick-reference-2">AWS SageMaker Quick Reference</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>SageMaker approach</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Run <code>trl</code> DPO/PPO/RewardTrainer training</td>
+<td><code>sagemaker.huggingface.HuggingFace</code> estimator, custom <code>train.py</code> entry point</td>
+<td>Same pattern as Chapter 34’s SFT job</td>
+</tr>
+<tr class="even">
+<td>GPU sizing</td>
+<td><code>ml.g5.2xlarge</code>+</td>
+<td>DPO/PPO hold policy + frozen reference (+ reward model for PPO) in memory simultaneously</td>
+</tr>
+<tr class="odd">
+<td>Register the tuned policy</td>
+<td>SageMaker Model Registry</td>
+<td>Treat the DPO/RLHF output as a new versioned model artefact (Chapter 24)</td>
+</tr>
+<tr class="even">
+<td>Deploy for serving</td>
+<td>SageMaker real-time endpoint</td>
+<td>Same as Chapter 23</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-36-agentic-ai-agent-patterns" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-36-agentic-ai-agent-patterns">Chapter 36 — Agentic AI &amp; Agent Patterns</h2>
+<section id="the-agent-loop" class="level3">
+<h3 class="anchored" data-anchor-id="the-agent-loop">The Agent Loop</h3>
+<pre class="text"><code>observe → reason → act → observe (result) → reason → act
+  → ... → stop</code></pre>
+</section>
+<section id="react-turn-structure" class="level3">
+<h3 class="anchored" data-anchor-id="react-turn-structure">ReAct Turn Structure</h3>
+<pre class="text"><code>Thought: &lt;reasoning&gt;
+Action: &lt;tool_name&gt;(&lt;args&gt;)
+Observation: &lt;tool result&gt;
+... repeat ...
+Final Answer: &lt;answer&gt;</code></pre>
+</section>
+<section id="planning-strategies" class="level3">
+<h3 class="anchored" data-anchor-id="planning-strategies">Planning Strategies</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Strategy</th>
+<th>Adapts mid-task</th>
+<th>Reviewable before running</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Iterative (ReAct)</td>
+<td>Yes</td>
+<td>No</td>
+</tr>
+<tr class="even">
+<td>Plan-and-execute</td>
+<td>Less</td>
+<td>Yes</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="multi-agent-patterns" class="level3">
+<h3 class="anchored" data-anchor-id="multi-agent-patterns">Multi-Agent Patterns</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Pattern</th>
+<th>Structure</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Sequential handoff</td>
+<td>A → B, one-way</td>
+<td>Low</td>
+</tr>
+<tr class="even">
+<td>Supervisor/worker</td>
+<td>Decompose + dispatch + synthesise</td>
+<td>Moderate</td>
+</tr>
+<tr class="odd">
+<td>Debate/critique</td>
+<td>Two agents critique each other</td>
+<td>~2x+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="failure-mode-cheat-sheet" class="level3">
+<h3 class="anchored" data-anchor-id="failure-mode-cheat-sheet">Failure Mode Cheat Sheet</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Failure</th>
+<th>Cause</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Infinite/near-infinite loop</td>
+<td>Ambiguous tool result, model retries</td>
+<td>Hard step-limit guardrail</td>
+</tr>
+<tr class="even">
+<td>Tool misuse</td>
+<td>Plausible-looking wrong arguments</td>
+<td>Narrow, well-described schemas</td>
+</tr>
+<tr class="odd">
+<td>Compounding errors</td>
+<td>Bad early observation poisons later context</td>
+<td>No full fix: minimize + catch early</td>
+</tr>
+<tr class="even">
+<td>Cost/latency blowup</td>
+<td>Every step is a full model call</td>
+<td>Bound steps; prefer fewer, well-scoped tools</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="core-loop-skeleton" class="level3">
+<h3 class="anchored" data-anchor-id="core-loop-skeleton">Core Loop Skeleton</h3>
+<div class="sourceCode" id="cb33"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb33-1"><span class="kw">def</span> run_agent(task, max_steps<span class="op">=</span><span class="dv">6</span>):</span>
+<span id="cb33-2">    trajectory <span class="op">=</span> []</span>
+<span id="cb33-3">    <span class="cf">for</span> step <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, max_steps <span class="op">+</span> <span class="dv">1</span>):</span>
+<span id="cb33-4">        decision <span class="op">=</span> policy(step, trajectory)</span>
+<span id="cb33-5">        <span class="cf">if</span> decision <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb33-6">            <span class="cf">return</span> {<span class="st">"status"</span>: <span class="st">"answered"</span>, <span class="st">"trajectory"</span>: trajectory}</span>
+<span id="cb33-7">        result <span class="op">=</span> TOOLS[decision[<span class="st">"action"</span>]](<span class="op">**</span>decision[<span class="st">"args"</span>])</span>
+<span id="cb33-8">        trajectory.append({</span>
+<span id="cb33-9">            <span class="st">"step"</span>: step, <span class="op">**</span>decision, <span class="st">"observation"</span>: result</span>
+<span id="cb33-10">        })</span>
+<span id="cb33-11">    <span class="cf">return</span> {</span>
+<span id="cb33-12">        <span class="st">"status"</span>: <span class="st">"step_limit_reached"</span>,</span>
+<span id="cb33-13">        <span class="st">"trajectory"</span>: trajectory,</span>
+<span id="cb33-14">    }</span></code></pre></div>
+</section>
+<section id="aws-equivalent" class="level3">
+<h3 class="anchored" data-anchor-id="aws-equivalent">AWS Equivalent</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Concept</th>
+<th>Bedrock Agents equivalent</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Tool</td>
+<td>Action group (Lambda-backed)</td>
+</tr>
+<tr class="even">
+<td>Agent loop</td>
+<td>Managed by <code>invoke_agent</code></td>
+</tr>
+<tr class="odd">
+<td>Trajectory logging</td>
+<td>Built-in tracing</td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="chapter-37-capstone-project" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-37-capstone-project">Chapter 37 — Capstone Project</h2>
+<section id="lifecycle-stage-chapter-crosswalk" class="level3">
+<h3 class="anchored" data-anchor-id="lifecycle-stage-chapter-crosswalk">Lifecycle Stage → Chapter Crosswalk</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Lifecycle stage</th>
+<th>Relevant chapters</th>
+<th>“Done” looks like</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Problem framing</td>
+<td>2</td>
+<td>Written problem statement with cost-justified success metric</td>
+</tr>
+<tr class="even">
+<td>Data understanding / cleaning</td>
+<td>7, 9</td>
+<td>Missingness, outliers, imbalance characterised before modelling</td>
+</tr>
+<tr class="odd">
+<td>Feature engineering</td>
+<td>13, 14</td>
+<td>Built inside a <code>Pipeline</code>, not ad hoc notebook cells</td>
+</tr>
+<tr class="even">
+<td>Model selection</td>
+<td>11, 12</td>
+<td>At least a baseline and a stronger model compared</td>
+</tr>
+<tr class="odd">
+<td>Validation</td>
+<td>13, 17</td>
+<td>Cross-validation used, not a single split alone</td>
+</tr>
+<tr class="even">
+<td>Evaluation</td>
+<td>16</td>
+<td>Metric justified against business cost, not accuracy by default</td>
+</tr>
+<tr class="odd">
+<td>Governance</td>
+<td>21</td>
+<td>Fairness/bias concern named, even if out of scope</td>
+</tr>
+<tr class="even">
+<td>Experiment tracking</td>
+<td>22</td>
+<td>Hyperparameters and results logged reproducibly</td>
+</tr>
+<tr class="odd">
+<td>Deployment</td>
+<td>23</td>
+<td>A real serialised pipeline + callable prediction function</td>
+</tr>
+<tr class="even">
+<td>Monitoring</td>
+<td>25</td>
+<td>A drift check proven to fire on a realistic future-shift scenario</td>
+</tr>
+<tr class="odd">
+<td>GenAI extension (optional)</td>
+<td>30–36</td>
+<td>Only if the problem naturally calls for it</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="effort-allocation-template" class="level3">
+<h3 class="anchored" data-anchor-id="effort-allocation-template">Effort Allocation Template</h3>
+<pre class="text"><code>Problem framing + data understanding   15%
+Cleaning + feature engineering         25%
+Modelling + evaluation                 25%
+Deployment (even minimal)              20%
+Monitoring (even minimal)              10%
+Write-up / presentation                 5%</code></pre>
+</section>
+<section id="self-assessment-rubric" class="level3">
+<h3 class="anchored" data-anchor-id="self-assessment-rubric">Self-Assessment Rubric</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Dimension</th>
+<th>Weak</th>
+<th>Strong</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Problem framing</td>
+<td>“Predict column X,” no business question</td>
+<td>Specific decision informed, cost-justified success criteria</td>
+</tr>
+<tr class="even">
+<td>Data handling</td>
+<td>Already-clean, or mess silently dropped</td>
+<td>Real mess handled explicitly and reproducibly</td>
+</tr>
+<tr class="odd">
+<td>Modelling</td>
+<td>One model, one metric, no validation</td>
+<td>Multiple models, cross-validated, metric justified</td>
+</tr>
+<tr class="even">
+<td>Deployment</td>
+<td>Fitted object in a notebook cell only</td>
+<td>Real, callable prediction function</td>
+</tr>
+<tr class="odd">
+<td>Monitoring</td>
+<td>None</td>
+<td>Drift check demonstrated against a real shift scenario</td>
+</tr>
+<tr class="even">
+<td>Communication</td>
+<td>Raw metrics, no translation</td>
+<td>Results translated to business impact</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="psi-interpretation" class="level3">
+<h3 class="anchored" data-anchor-id="psi-interpretation">PSI Interpretation</h3>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>PSI</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>&lt; 0.1</td>
+<td>No significant shift</td>
+</tr>
+<tr class="even">
+<td>0.1 – 0.25</td>
+<td>Moderate shift</td>
+</tr>
+<tr class="odd">
+<td>&gt; 0.25</td>
+<td>Major shift</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="repository-template" class="level3">
+<h3 class="anchored" data-anchor-id="repository-template">Repository Template</h3>
+<pre class="text"><code>my_capstone/
+├── README.md
+├── data/{raw,processed}/
+├── notebooks/01_eda.ipynb
+├── src/{clean,train,predict}.py
+├── monitoring/drift_check.py
+├── models/model.joblib
+└── requirements.txt</code></pre>
+
+
+</section>
+</section>

@@ -104,7 +104,7 @@ Listing&nbsp;8.4: Window function syntax: PARTITION BY, ORDER BY, and an optiona
 <section id="using-sql-at-scale" class="level3" data-number="8.2.5">
 <h3 data-number="8.2.5" class="anchored" data-anchor-id="using-sql-at-scale"><span class="header-section-number">8.2.5</span> Using SQL at Scale</h3>
 <p>A query that runs fine on a thousand-row table can take minutes, or fail outright, on a billion-row one. The SQL hasn’t changed. What has changed is how much data the engine has to touch to answer it. A badly formed query touches far more of it than necessary.</p>
-<p>The starting point for any slow query is <code>EXPLAIN</code>, or <code>EXPLAIN ANALYZE</code>, which actually runs the query and reports real timings instead of estimates. It shows the query plan: the sequence of scans, joins, and aggregations the engine chose, and roughly how much work each step costs. A <strong>sequential scan</strong> reads every row in a table. An <strong>index scan</strong> reads only the rows that match a condition, using a structure built in advance to look them up directly. On a large table, the difference between the two is often the difference between milliseconds and minutes.</p>
+<p>The starting point for any slow query is <code>EXPLAIN</code>, or <code>EXPLAIN ANALYZE</code>, which runs the query and reports real timings instead of estimates. It shows the query plan: the sequence of scans, joins, and aggregations the engine chose, and roughly how much work each step costs. A <strong>sequential scan</strong> reads every row in a table. An <strong>index scan</strong> reads only the rows that match a condition, using a structure built in advance to look them up directly. On a large table, the difference between the two is often the difference between milliseconds and minutes.</p>
 <p>Four habits keep a query fast as data grows:</p>
 <ul>
 <li><strong>Filter early.</strong> A <code>WHERE</code> clause applied before a <code>JOIN</code> shrinks the table the join has to process. Most modern query planners reorder this automatically, but not always. A query that filters manually inside a CTE before joining never depends on the planner getting it right.</li>
@@ -121,7 +121,7 @@ Listing&nbsp;8.4: Window function syntax: PARTITION BY, ORDER BY, and an optiona
 </section>
 <section id="procedures" class="level2" data-number="8.4">
 <h2 data-number="8.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">8.4</span> Procedures</h2>
-<p id="proc-8-1"><strong>Procedure 8.1 (Register a DataFrame as a SQL Table and Query It).</strong> <em>When to use:</em> data is already in Python as a pandas DataFrame, and the next transformation is more naturally expressed as SQL than as chained pandas calls: most often once a query needs a <code>GROUP BY</code>, a multi-table <code>JOIN</code>, or a window function.</p>
+<p id="proc-8-1"><strong>Procedure 8.1 (Register a DataFrame as a SQL Table and Query It).</strong> <em>When to use:</em> data is already in Python as a pandas DataFrame, and the next transformation is more naturally expressed as SQL than as chained pandas calls. This is most often the case once a query needs a <code>GROUP BY</code>, a multi-table <code>JOIN</code>, or a window function.</p>
 <div id="lst-duckdb-register" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
 <figure class="quarto-float quarto-float-lst figure">
 <figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-duckdb-register-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
@@ -297,7 +297,7 @@ Listing&nbsp;8.11: Reading a query plan with EXPLAIN ANALYZE
 </div>
 </figure>
 </div>
-<p><strong>Common mistake:</strong> running plain <code>EXPLAIN</code> and reading its cost estimates as if they were real timings. Estimates come from table statistics that can be stale or wrong. <code>EXPLAIN ANALYZE</code> actually executes the query and reports real row counts and timings at each step, which is what a genuine performance investigation needs.</p>
+<p><strong>Common mistake:</strong> running plain <code>EXPLAIN</code> and reading its cost estimates as if they were real timings. Estimates come from table statistics that can be stale or wrong. <code>EXPLAIN ANALYZE</code> executes the query and reports real row counts and timings at each step, which is what a genuine performance investigation needs.</p>
 </section>
 <section id="worked-example" class="level2" data-number="8.5">
 <h2 data-number="8.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">8.5</span> Worked Example</h2>
@@ -437,7 +437,7 @@ Listing&nbsp;8.14: Cohort retention: first order, cohort membership, and second 
 </section>
 <section id="mental-model" class="level2" data-number="8.9">
 <h2 data-number="8.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">8.9</span> Mental Model</h2>
-<p>SQL is a language for asking questions of sets. Not describing procedures. Every analytical question worth writing a query for reduces to the same underlying operation: partition the data into groups, optionally order the rows within those groups, then either aggregate the group down to one row (<code>GROUP BY</code>) or attach a computed value to every row without collapsing it (a window function). Once every query is read through that lens, window functions stop being a scary advanced feature and become the obvious tool for “I need <code>GROUP BY</code>’s aggregation, but I need to keep all my rows.”</p>
+<p>SQL is a language for asking questions of sets. Not describing procedures. Every analytical question worth writing a query for reduces to the same underlying operation. Partition the data into groups, and optionally order the rows within those groups. Then either aggregate the group down to one row (<code>GROUP BY</code>) or attach a computed value to every row without collapsing it (a window function). Once every query is read through that lens, window functions stop being a scary advanced feature and become the obvious tool for “I need <code>GROUP BY</code>’s aggregation, but I need to keep all my rows.”</p>
 
 
 <div id="refs" class="references csl-bib-body hanging-indent" role="list">

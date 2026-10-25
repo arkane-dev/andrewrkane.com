@@ -44,7 +44,7 @@ const rendered = join(bookDir, '_book');
 
 // ── 2. The chapter list, in reading order, from Quarto's own config.
 const yml = readFileSync(join(bookDir, '_quarto.yml'), 'utf8');
-// index.qmd is the print edition's dedication page. The web edition starts at the Preface.
+// index.qmd only holds print front matter (title, copyright and dedication). The web edition starts at the Preface.
 const files = [...yml.matchAll(/^\s+-\s+(\S+\.qmd)\s*$/gm)].map((m) => m[1].replace(/\.qmd$/, '')).filter((f) => f !== 'index');
 const meta = (key) => yml.match(new RegExp(`^\\s+${key}:\\s*"?(.*?)"?\\s*$`, 'm'))?.[1] ?? '';
 const book = { slug, title: meta('title'), subtitle: meta('subtitle'), author: meta('author'), chapters: [], anchors: {} };

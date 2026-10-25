@@ -147,6 +147,7 @@ Listing&nbsp;20.5: ARIMA forecast vs.&nbsp;the naive baseline, over a 28-day hor
 <span id="cb6-11"><span class="co">#     DataConfig={'DatasetGroupArn': dataset_group_arn},</span></span>
 <span id="cb6-12"><span class="co"># )</span></span></code></pre></div>
 <p><strong>When to prefer Amazon Forecast over hand-rolled ARIMA:</strong> with many related series (hundreds of SKUs, stores, or sensors), where Forecast trains global models across all series and handles algorithm selection automatically. That includes, implicitly, the naive-baseline comparison this chapter insists on doing by hand. For a single series or a handful, <code>statsmodels</code>/<code>pmdarima</code> is faster to iterate on and easier to explain to stakeholders.</p>
+<p>Amazon Forecast closed to new customers in 2024. Existing accounts can still use it, and AWS points new users to SageMaker Canvas’s time-series forecasting or SageMaker’s built-in DeepAR algorithm. The same advice applies to those.</p>
 </div>
 </section>
 <section id="history-and-further-reading" class="level2" data-number="20.6">

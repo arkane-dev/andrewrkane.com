@@ -1,4 +1,4 @@
-<p>Scan, don’t read. This appendix collects each chapter’s lookup material — key terms, API summaries, formulas, decision guides, and metrics — organized by chapter. Keep it open while working; it is not meant to be read start to finish.</p>
+<p>Scan, don’t read. This appendix collects each chapter’s lookup material, organised by chapter: key terms, API summaries, formulas, decision guides, and metrics. Keep it open while working; it is not meant to be read start to finish.</p>
 <section id="chapter-1-history-landscape" class="level2">
 <h2 class="anchored" data-anchor-id="chapter-1-history-landscape">Chapter 1 — History &amp; Landscape</h2>
 <section id="ai-ml-timeline-at-a-glance" class="level3">
@@ -171,14 +171,14 @@
 <section id="nested-scope-of-terms" class="level3">
 <h3 class="anchored" data-anchor-id="nested-scope-of-terms">Nested Scope of Terms</h3>
 <pre class="text"><code>Artificial Intelligence
-└── Machine Learning
-    ├── Classical ML (linear models, trees, SVMs, ensembles)
-    └── Deep Learning
-        ├── CNNs (images)
-        ├── RNNs / LSTMs (sequences)
-        └── Transformers (text, code, images, multimodal)
-            └── Large Language Models (GPT, Claude, Llama, Gemini)
-                └── Foundation Models (pretrained, then adapted)</code></pre>
+`-- Machine Learning
+    |-- Classical ML (linear models, trees, SVMs, ensembles)
+    `-- Deep Learning
+        |-- CNNs (images)
+        |-- RNNs / LSTMs (sequences)
+        `-- Transformers (text, code, images, multimodal)
+            `-- Large Language Models (GPT, Claude, Llama, Gemini)
+                `-- Foundation Models (pretrained, then adapted)</code></pre>
 </section>
 <section id="when-to-use-which-approach" class="level3">
 <h3 class="anchored" data-anchor-id="when-to-use-which-approach">When to Use Which Approach</h3>
@@ -386,14 +386,14 @@ SUCCESS METRIC
 </section>
 <section id="the-ml-suitability-checklist" class="level3">
 <h3 class="anchored" data-anchor-id="the-ml-suitability-checklist">The ML Suitability Checklist</h3>
-<pre class="text"><code>✓ There is a clear, measurable prediction target
-✓ Historical data exists (or can be constructed)
-✓ Features/label relationship is stable over time
-✓ Enough examples exist (rule of thumb: ≥ 1,000/class)
-✓ Features at prediction time are enough to predict
-✓ A simple rule does NOT already work well enough
-✓ The cost-benefit of ML vs. rule justifies the effort
-✓ The action enabled by the prediction is operationalised</code></pre>
+<pre class="text"><code>[ ] There is a clear, measurable prediction target
+[ ] Historical data exists (or can be constructed)
+[ ] Features/label relationship is stable over time
+[ ] Enough examples exist (rule of thumb: &gt;= 1,000/class)
+[ ] Features at prediction time are enough to predict
+[ ] A simple rule does NOT already work well enough
+[ ] The cost-benefit of ML vs. rule justifies the effort
+[ ] The action enabled by the prediction is operationalised</code></pre>
 </section>
 <section id="aws-sagemaker-quick-reference" class="level3">
 <h3 class="anchored" data-anchor-id="aws-sagemaker-quick-reference">AWS SageMaker Quick Reference</h3>
@@ -420,8 +420,8 @@ SUCCESS METRIC
 </table>
 </section>
 </section>
-<section id="chapter-3-math-foundations-statistics-probability-linear-algebra" class="level2">
-<h2 class="anchored" data-anchor-id="chapter-3-math-foundations-statistics-probability-linear-algebra">Chapter 3 — Math Foundations: Statistics, Probability &amp; Linear Algebra</h2>
+<section id="chapter-3-maths-foundations-statistics-probability-linear-algebra" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-3-maths-foundations-statistics-probability-linear-algebra">Chapter 3 — Maths Foundations: Statistics, Probability &amp; Linear Algebra</h2>
 <section id="key-terms-1" class="level3">
 <h3 class="anchored" data-anchor-id="key-terms-1">Key Terms</h3>
 <table class="caption-top table">
@@ -476,11 +476,11 @@ SUCCESS METRIC
 <table class="caption-top table">
 <colgroup>
 <col style="width: 16%">
-<col style="width: 16%">
-<col style="width: 16%">
-<col style="width: 16%">
-<col style="width: 16%">
-<col style="width: 16%">
+<col style="width: 12%">
+<col style="width: 12%">
+<col style="width: 14%">
+<col style="width: 23%">
+<col style="width: 20%">
 </colgroup>
 <thead>
 <tr class="header">
@@ -488,7 +488,7 @@ SUCCESS METRIC
 <th>Parameters</th>
 <th>Mean</th>
 <th>Variance</th>
-<th>scipy/numpy</th>
+<th>scipy / numpy</th>
 <th>Use when</th>
 </tr>
 </thead>
@@ -618,7 +618,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 </tr>
 <tr class="even">
 <td>Correlation</td>
-<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">Cov</mi><mo>⁡</mo><mo stretchy="false">(</mo><mi>X</mi><mo separator="true">,</mo><mi>Y</mi><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><msub><mi>σ</mi><mi>X</mi></msub><msub><mi>σ</mi><mi>Y</mi></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\operatorname{Cov}(X,Y)/(\sigma_X\sigma_Y)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop"><span class="mord mathrm" style="margin-right:0.0139em;">Cov</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.2222em;">Y</span><span class="mclose">)</span><span class="mord">/</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0785em;">X</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.2222em;">Y</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">Cov</mi><mo>⁡</mo><mo stretchy="false">(</mo><mi>X</mi><mo separator="true">,</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\operatorname{Cov}(X,Y)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop"><span class="mord mathrm" style="margin-right:0.0139em;">Cov</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.2222em;">Y</span><span class="mclose">)</span></span></span></span> / <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><msub><mi>σ</mi><mi>X</mi></msub><msub><mi>σ</mi><mi>Y</mi></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(\sigma_X\sigma_Y)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0785em;">X</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0359em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.2222em;">Y</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span></td>
 <td><code>np.corrcoef(x,y)</code></td>
 <td>Scale-independent, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">[</mo><mo>−</mo><mn>1</mn><mo separator="true">,</mo><mn>1</mn><mo stretchy="false">]</mo></mrow><annotation encoding="application/x-tex">[-1,1]</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mord">−</span><span class="mord">1</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mclose">]</span></span></span></span></td>
 </tr>
@@ -692,7 +692,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <td><code>stats.pearsonr(x, y)</code></td>
 </tr>
 <tr class="even">
-<td>Spearman ρ</td>
+<td>Spearman <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>ρ</mi></mrow><annotation encoding="application/x-tex">\rho</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">ρ</span></span></span></span></td>
 <td>Monotonic correlation (non-parametric)</td>
 <td>None</td>
 <td><code>stats.spearmanr(x, y)</code></td>
@@ -853,8 +853,8 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 </table>
 </section>
 </section>
-<section id="chapter-4-math-foundations-calculus-optimisation" class="level2">
-<h2 class="anchored" data-anchor-id="chapter-4-math-foundations-calculus-optimisation">Chapter 4 — Math Foundations: Calculus &amp; Optimisation</h2>
+<section id="chapter-4-maths-foundations-calculus-optimisation" class="level2">
+<h2 class="anchored" data-anchor-id="chapter-4-maths-foundations-calculus-optimisation">Chapter 4 — Maths Foundations: Calculus &amp; Optimisation</h2>
 <section id="key-terms-2" class="level3">
 <h3 class="anchored" data-anchor-id="key-terms-2">Key Terms</h3>
 <table class="caption-top table">
@@ -1103,7 +1103,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <td>General neural network training</td>
 </tr>
 <tr class="even">
-<td>Warmup + cosine</td>
+<td>Warm-up + cosine</td>
 <td>Linear ramp then cosine decay</td>
 <td>Transformer training (standard)</td>
 </tr>
@@ -1407,7 +1407,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <p><strong><code>scipy.stats.entropy(pk, qk=None, base=None, axis=0)</code></strong>: returns entropy of <code>pk</code>, or <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mrow><mi mathvariant="normal">K</mi><mi mathvariant="normal">L</mi></mrow><mo stretchy="false">(</mo><mi>p</mi><mi>k</mi><mi mathvariant="normal">∥</mi><mi>q</mi><mi>k</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\mathrm{KL}(pk \| qk)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">KL</span></span><span class="mopen">(</span><span class="mord mathnormal">p</span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mord">∥</span><span class="mord mathnormal" style="margin-right:0.0359em;">q</span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mclose">)</span></span></span></span> if <code>qk</code> is given. <code>pk</code> need not be pre-normalised. <code>base=None</code> gives nats; <code>base=2</code> gives bits.</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1">h <span class="op">=</span> scipy.stats.entropy([<span class="fl">0.5</span>, <span class="fl">0.5</span>], base<span class="op">=</span><span class="dv">2</span>)   <span class="co"># 1.0 bit</span></span>
 <span id="cb9-2">kl <span class="op">=</span> scipy.stats.entropy(p, q, base<span class="op">=</span><span class="dv">2</span>)         <span class="co"># KL(p || q) in bits</span></span></code></pre></div>
-<p><strong><code>sklearn.metrics.log_loss(y_true, y_pred, labels=None, normalize=True)</code></strong>: returns cross-entropy (log) loss. <code>y_pred</code> is predicted probabilities, shape <code>(n_samples,)</code> or <code>(n_samples, n_classes)</code>.</p>
+<p><strong><code>log_loss</code></strong>, called as <code>sklearn.metrics.log_loss(y_true, y_pred, labels=None, normalize=True)</code>, returns the cross-entropy (log) loss. <code>y_pred</code> is predicted probabilities, shape <code>(n_samples,)</code> or <code>(n_samples, n_classes)</code>.</p>
 <div class="sourceCode" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1">loss <span class="op">=</span> log_loss(y_true, y_pred_proba)</span></code></pre></div>
 <p><strong><code>sklearn.feature_selection.mutual_info_classif(X, y, discrete_features='auto', n_neighbors=3, random_state=None)</code></strong> (and <code>mutual_info_regression</code> for continuous targets): returns an <code>ndarray</code> of shape <code>(n_features,)</code>, estimated mutual information with the target in nats, non-negative.</p>
 <div class="sourceCode" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1">mi <span class="op">=</span> mutual_info_classif(X, y, random_state<span class="op">=</span><span class="dv">42</span>)</span>
@@ -1463,15 +1463,15 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <section id="decision-guide" class="level3">
 <h3 class="anchored" data-anchor-id="decision-guide">Decision Guide</h3>
 <pre class="text"><code>Do you need to rank features by predictive power?
-├── Yes
-│   ├── Only linear relationships, want speed?
-│   │   → correlation
-│   └── Non-linear relationships, or unsure?
-│       → mutual_info_classif/regression
-└── No
-    ├── Training/evaluating a classifier?
-    │   → cross-entropy / log_loss
-    └── Comparing two known distributions
+|-- Yes
+|   |-- Only linear relationships, want speed?
+|   |   → correlation
+|   `-- Non-linear relationships, or unsure?
+|       → mutual_info_classif/regression
+`-- No
+    |-- Training/evaluating a classifier?
+    |   → cross-entropy / log_loss
+    `-- Comparing two known distributions
         (drift, prior vs. posterior)? → KL divergence</code></pre>
 </section>
 <section id="metrics-at-a-glance" class="level3">
@@ -1512,7 +1512,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 </tr>
 <tr class="even">
 <td>Mutual information</td>
-<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn></mrow><annotation encoding="application/x-tex">0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span> to <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>min</mi><mo>⁡</mo><mo stretchy="false">(</mo><mi>H</mi><mo stretchy="false">(</mo><mi>X</mi><mo stretchy="false">)</mo><mo separator="true">,</mo><mi>H</mi><mo stretchy="false">(</mo><mi>Y</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\min(H(X), H(Y))</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">min</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0813em;">H</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0813em;">H</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.2222em;">Y</span><span class="mclose">))</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn></mrow><annotation encoding="application/x-tex">0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span> to the smaller of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>H</mi><mo stretchy="false">(</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">H(X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0813em;">H</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>H</mi><mo stretchy="false">(</mo><mi>Y</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">H(Y)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0813em;">H</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.2222em;">Y</span><span class="mclose">)</span></span></span></span></td>
 <td>Higher means more informative</td>
 <td>Feature selection ranking</td>
 </tr>
@@ -1650,7 +1650,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <tbody>
 <tr class="odd">
 <td><code>numpy</code></td>
-<td>Fast N-dimensional arrays, math</td>
+<td>Fast N-dimensional arrays, maths</td>
 <td>Any numerical computation, linear algebra</td>
 </tr>
 <tr class="even">
@@ -2571,26 +2571,26 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <section id="plot-type-decision-guide" class="level3">
 <h3 class="anchored" data-anchor-id="plot-type-decision-guide">Plot Type Decision Guide</h3>
 <pre class="text"><code>What are you looking at?
-├── One numeric variable
-│   ├── Shape/skew/modality?
-│   │   -&gt; histogram + KDE (sns.histplot(kde=True))
-│   ├── Quartiles/outliers only? -&gt; boxplot
-│   └── Shape AND quartiles? -&gt; violin plot
-├── One categorical variable
-│   └── Frequency of each level?
-│       -&gt; bar chart (value_counts().plot(kind='bar'))
-├── Two numeric variables
-│   ├── Relationship shape? -&gt; scatter plot
-│   └── Strength across many pairs?
-│       -&gt; correlation heatmap (sns.heatmap(df.corr()))
-├── One numeric + one categorical
-│   └── Distribution shifts by group?
-│       -&gt; boxplot/violin split by category, or KDE
-├── Two categorical variables
-│   └── Association?
-│       -&gt; cross-tab + stacked bar, or pivot heatmap
-└── 3+ numeric variables
-    └── Full pairwise structure?
+|-- One numeric variable
+|   |-- Shape/skew/modality?
+|   |   -&gt; histogram + KDE (sns.histplot(kde=True))
+|   |-- Quartiles/outliers only? -&gt; boxplot
+|   `-- Shape AND quartiles? -&gt; violin plot
+|-- One categorical variable
+|   `-- Frequency of each level?
+|       -&gt; bar chart (value_counts().plot(kind='bar'))
+|-- Two numeric variables
+|   |-- Relationship shape? -&gt; scatter plot
+|   `-- Strength across many pairs?
+|       -&gt; correlation heatmap (sns.heatmap(df.corr()))
+|-- One numeric + one categorical
+|   `-- Distribution shifts by group?
+|       -&gt; boxplot/violin split by category, or KDE
+|-- Two categorical variables
+|   `-- Association?
+|       -&gt; cross-tab + stacked bar, or pivot heatmap
+`-- 3+ numeric variables
+    `-- Full pairwise structure?
         -&gt; pairplot (sns.pairplot, hue=target)</code></pre>
 </section>
 <section id="plot-type-comparison" class="level3">
@@ -3118,18 +3118,18 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <section id="decision-guide-should-this-be-a-full-lifecycle-project" class="level3">
 <h3 class="anchored" data-anchor-id="decision-guide-should-this-be-a-full-lifecycle-project">Decision Guide: Should This Be a Full Lifecycle Project?</h3>
 <pre class="text"><code>Does a simple rule already meet the required performance?
-├── Yes → Ship the rule. Not a lifecycle project.
-└── No
-    ├── Does historical labelled data exist
-    │   (or can it be constructed cheaply)?
-    │   ├── No → Data collection project first.
-    │   │        Revisit once labels exist.
-    │   └── Yes
-    │       ├── One-off analysis, no deployed system?
-    │       │   ├── Yes → EDA/analytics task, not
-    │       │   │        a full lifecycle project.
-    │       │   └── No → Full lifecycle project.
-    │       │        Use the charter template.</code></pre>
+|-- Yes → Ship the rule. Not a lifecycle project.
+`-- No
+    |-- Does historical labelled data exist
+    |   (or can it be constructed cheaply)?
+    |   |-- No → Data collection project first.
+    |   |        Revisit once labels exist.
+    |   `-- Yes
+    |       |-- One-off analysis, no deployed system?
+    |       |   |-- Yes → EDA/analytics task, not
+    |       |   |        a full lifecycle project.
+    |       |   `-- No → Full lifecycle project.
+    |       |        Use the charter template.</code></pre>
 </section>
 <section id="lifecycle-stage-owners-raci-shorthand" class="level3">
 <h3 class="anchored" data-anchor-id="lifecycle-stage-owners-raci-shorthand">Lifecycle Stage Owners (RACI Shorthand)</h3>
@@ -3298,22 +3298,22 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
-<col style="width: 14%">
+<col style="width: 10%">
+<col style="width: 13%">
+<col style="width: 11%">
+<col style="width: 11%">
+<col style="width: 13%">
+<col style="width: 25%">
 </colgroup>
 <thead>
 <tr class="header">
 <th>Algorithm</th>
 <th>Task</th>
 <th>Interpretable</th>
-<th>Handles Nonlinearity</th>
-<th>Needs Scaling</th>
-<th>Handles Missing</th>
-<th>sklearn Class</th>
+<th>Non-linear</th>
+<th>Needs scaling</th>
+<th>Missing values</th>
+<th>sklearn class</th>
 </tr>
 </thead>
 <tbody>
@@ -3321,7 +3321,7 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <td>Logistic Regression</td>
 <td>Classification</td>
 <td>Yes</td>
-<td>No (linear boundary)</td>
+<td>No (linear)</td>
 <td>Yes</td>
 <td>No</td>
 <td><code>LogisticRegression</code></td>
@@ -3350,7 +3350,7 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <td>Yes (if shallow)</td>
 <td>Yes</td>
 <td>No</td>
-<td>No</td>
+<td>Yes (sklearn 1.3+)</td>
 <td><code>DecisionTreeClassifier</code> / <code>Regressor</code></td>
 </tr>
 <tr class="odd">
@@ -3377,7 +3377,7 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <td>No</td>
 <td>Yes</td>
 <td>No</td>
-<td>No</td>
+<td>Yes (sklearn 1.4+)</td>
 <td><code>RandomForestClassifier</code> / <code>Regressor</code></td>
 </tr>
 <tr class="even">
@@ -3458,18 +3458,18 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <section id="algorithm-selection-decision-tree" class="level3">
 <h3 class="anchored" data-anchor-id="algorithm-selection-decision-tree">Algorithm Selection Decision Tree</h3>
 <pre class="text"><code>What is your target?
-├── Discrete category → Classification
-│   ├── Need interpretability?
-│   │   ├── Yes → LogisticRegression (linear) or
-│   │   │         DecisionTree (max_depth=4)
-│   │   └── No  → RandomForest or XGBoost
-│   │             (usually best on tabular)
-│   └── Text data? → MultinomialNB or fine-tuned
-│       transformer
-└── Continuous number → Regression
-    ├── Linear relationship? → LinearRegression / Ridge
-    ├── Nonlinear? → RandomForestRegressor or XGBRegressor
-    └── Time series? → Specialised forecasting models</code></pre>
+|-- Discrete category → Classification
+|   |-- Need interpretability?
+|   |   |-- Yes → LogisticRegression (linear) or
+|   |   |         DecisionTree (max_depth=4)
+|   |   `-- No  → RandomForest or XGBoost
+|   |             (usually best on tabular)
+|   `-- Text data? → MultinomialNB or fine-tuned
+|       transformer
+`-- Continuous number → Regression
+    |-- Linear relationship? → LinearRegression / Ridge
+    |-- Nonlinear? → RandomForestRegressor or XGBRegressor
+    `-- Time series? → Specialised forecasting models</code></pre>
 </section>
 <section id="key-hyperparameters-to-know" class="level3">
 <h3 class="anchored" data-anchor-id="key-hyperparameters-to-know">Key Hyperparameters to Know</h3>
@@ -3677,7 +3677,7 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <td>Impurity (Gini/variance)</td>
 <td>Sum of impurity reduction at splits</td>
 <td>Fast, no extra data</td>
-<td>Biased toward high-cardinality features</td>
+<td>Biased towards high-cardinality features</td>
 </tr>
 <tr class="even">
 <td>Permutation</td>
@@ -3970,6 +3970,12 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <section id="encoding-strategy-comparison" class="level3">
 <h3 class="anchored" data-anchor-id="encoding-strategy-comparison">Encoding Strategy Comparison</h3>
 <table class="caption-top table">
+<colgroup>
+<col style="width: 21%">
+<col style="width: 21%">
+<col style="width: 28%">
+<col style="width: 28%">
+</colgroup>
 <thead>
 <tr class="header">
 <th>Encoding</th>
@@ -4038,7 +4044,7 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 </tr>
 <tr class="even">
 <td><code>MinMaxScaler</code></td>
-<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mi>x</mi><mo>−</mo><mi>min</mi><mo>⁡</mo><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mi>max</mi><mo>⁡</mo><mo>−</mo><mi>min</mi><mo>⁡</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(x-\min)/(\max-\min)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">min</span><span class="mclose">)</span><span class="mord">/</span><span class="mopen">(</span><span class="mop">max</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">min</span><span class="mclose">)</span></span></span></span></td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mi>x</mi><mo>−</mo><mi>min</mi><mo>⁡</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(x-\min)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">min</span><span class="mclose">)</span></span></span></span> / <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mi>max</mi><mo>⁡</mo><mo>−</mo><mi>min</mi><mo>⁡</mo><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(\max-\min)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mop">max</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">min</span><span class="mclose">)</span></span></span></span></td>
 <td>Very</td>
 <td>Bounded input needed</td>
 </tr>
@@ -4060,19 +4066,19 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <section id="decision-guide-1" class="level3">
 <h3 class="anchored" data-anchor-id="decision-guide-1">Decision Guide</h3>
 <pre class="text"><code>Is the column categorical?
-├── Yes
-│   ├── Cardinality &lt; 20?
-│   │   ├── Has natural order? → OrdinalEncoder
-│   │   └── No order           → OneHotEncoder
-│   └── Cardinality &gt;= 20?
-│       ├── Tree-based model? → LabelEncoder
-│       └── Linear/other model?
-│           → Frequency or CV target encoding
-└── No (numeric)
-    ├── Datetime?
-    │   → extract hour/dow/month + cyclical sin/cos
-    ├── Right-skewed? → log1p transform
-    └── Feeding linear/distance model?
+|-- Yes
+|   |-- Cardinality &lt; 20?
+|   |   |-- Has natural order? → OrdinalEncoder
+|   |   `-- No order           → OneHotEncoder
+|   `-- Cardinality &gt;= 20?
+|       |-- Tree-based model? → LabelEncoder
+|       `-- Linear/other model?
+|           → Frequency or CV target encoding
+`-- No (numeric)
+    |-- Datetime?
+    |   → extract hour/dow/month + cyclical sin/cos
+    |-- Right-skewed? → log1p transform
+    `-- Feeding linear/distance model?
         → StandardScaler / RobustScaler</code></pre>
 </section>
 <section id="common-imports-4" class="level3">
@@ -4296,16 +4302,16 @@ c-10,0,-16.667,5,-20,15z M188 15 H145 v585 v1200 v585 h43z"></path></svg></span>
 <section id="decision-guide-2" class="level3">
 <h3 class="anchored" data-anchor-id="decision-guide-2">Decision Guide</h3>
 <pre class="text"><code>Need the output to feed a downstream model (not a plot)?
-├── Yes
-│   ├── Want to keep original feature meaning?
-│   │   → Feature selection (filter/wrapper/embedded)
-│   └── OK losing interpretability for compactness?
-│       → PCA
-└── No — just exploring / visualising
-    ├── Fast look, large dataset (100k+ rows)? → UMAP
-    ├── Best local cluster separation, small-medium
-    │   dataset? → t-SNE
-    └── Fast, deterministic, reproducible 2D view? → PCA</code></pre>
+|-- Yes
+|   |-- Want to keep original feature meaning?
+|   |   → Feature selection (filter/wrapper/embedded)
+|   `-- OK losing interpretability for compactness?
+|       → PCA
+`-- No — just exploring / visualising
+    |-- Fast look, large dataset (100k+ rows)? → UMAP
+    |-- Best local cluster separation, small-medium
+    |   dataset? → t-SNE
+    `-- Fast, deterministic, reproducible 2D view? → PCA</code></pre>
 </section>
 <section id="api-function-summary-1" class="level3">
 <h3 class="anchored" data-anchor-id="api-function-summary-1">API / Function Summary</h3>
@@ -4679,7 +4685,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <td>Grid Search</td>
 <td>Exhaustive over grid</td>
 <td>Exponential in #params</td>
-<td>≤3 params, fast model</td>
+<td><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≤</mo></mrow><annotation encoding="application/x-tex">\leq</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7719em;vertical-align:-0.136em;"></span><span class="mrel">≤</span></span></span></span> 3 params, fast model</td>
 </tr>
 <tr class="odd">
 <td>Random Search</td>
@@ -5164,7 +5170,7 @@ Small, clean dataset, tight non-linear boundary?
 </tr>
 <tr class="odd">
 <td>Real-time anomaly scoring on streams</td>
-<td>Kinesis Data Analytics <code>RANDOM_CUT_FOREST</code></td>
+<td>Managed Service for Apache Flink calling a deployed model (Kinesis Data Analytics for SQL, with <code>RANDOM_CUT_FOREST</code>, retired in January 2026)</td>
 </tr>
 </tbody>
 </table>
@@ -5216,6 +5222,10 @@ Small, clean dataset, tight non-linear boundary?
 <section id="acf-pacf-model-order-cheat-sheet" class="level3">
 <h3 class="anchored" data-anchor-id="acf-pacf-model-order-cheat-sheet">ACF / PACF → Model Order Cheat Sheet</h3>
 <table class="caption-top table">
+<colgroup>
+<col style="width: 57%">
+<col style="width: 42%">
+</colgroup>
 <thead>
 <tr class="header">
 <th>Pattern</th>
@@ -5352,14 +5362,14 @@ M1001 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlis
 <section id="decision-guide-4" class="level3">
 <h3 class="anchored" data-anchor-id="decision-guide-4">Decision Guide</h3>
 <pre class="text"><code>Stationary (ADF p &lt; 0.05)?
-├── No → difference it, re-test
-└── Yes
-    ├── Single series, need uncertainty intervals?
-    │   → ARIMA/SARIMA
-    ├── Many related series / external features?
-    │   → Lag-feature gradient boosting
-    ├── Missing data / holiday effects? → Prophet
-    └── Very large dataset, many series?
+|-- No → difference it, re-test
+`-- Yes
+    |-- Single series, need uncertainty intervals?
+    |   → ARIMA/SARIMA
+    |-- Many related series / external features?
+    |   → Lag-feature gradient boosting
+    |-- Missing data / holiday effects? → Prophet
+    `-- Very large dataset, many series?
         → Deep learning (LSTM / TFT)</code></pre>
 </section>
 <section id="aws-sagemaker-quick-reference-12" class="level3">
@@ -5378,7 +5388,7 @@ M1001 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlis
 <tbody>
 <tr class="odd">
 <td>AutoML forecasting across many series</td>
-<td>Amazon Forecast, <code>create_auto_predictor</code></td>
+<td>SageMaker Canvas time-series forecasting (Amazon Forecast, <code>create_auto_predictor</code>, for existing accounts only)</td>
 </tr>
 <tr class="even">
 <td>Custom deep learning forecaster</td>

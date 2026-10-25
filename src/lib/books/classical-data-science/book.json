@@ -30,7 +30,7 @@
      "level": 2
     }
    ],
-   "words": 529
+   "words": 522
   },
   {
    "slug": "ch01-history-and-landscape",
@@ -106,7 +106,7 @@
      "level": 2
     }
    ],
-   "words": 3249
+   "words": 3252
   },
   {
    "slug": "ch02-business-problem-framing",
@@ -200,13 +200,13 @@
      "level": 2
     }
    ],
-   "words": 3316
+   "words": 3315
   },
   {
    "slug": "ch03-math-stats-probability-linear-algebra",
    "file": "ch03-math-stats-probability-linear-algebra",
    "number": "3",
-   "title": "Math Foundations: Statistics, Probability & Linear Algebra",
+   "title": "Maths Foundations: Statistics, Probability & Linear Algebra",
    "kind": "chapter",
    "sections": [
     {
@@ -300,13 +300,13 @@
      "level": 2
     }
    ],
-   "words": 5468
+   "words": 5466
   },
   {
    "slug": "ch04-math-calculus-optimization",
    "file": "ch04-math-calculus-optimization",
    "number": "4",
-   "title": "Math Foundations: Calculus & Optimisation",
+   "title": "Maths Foundations: Calculus & Optimisation",
    "kind": "chapter",
    "sections": [
     {
@@ -418,7 +418,7 @@
      "level": 2
     }
    ],
-   "words": 4547
+   "words": 4548
   },
   {
    "slug": "ch05-information-theory",
@@ -512,7 +512,7 @@
      "level": 2
     }
    ],
-   "words": 3947
+   "words": 3940
   },
   {
    "slug": "ch06-python-ecosystem",
@@ -624,7 +624,7 @@
      "level": 2
     }
    ],
-   "words": 3234
+   "words": 3231
   },
   {
    "slug": "ch07-data-cleaning-wrangling",
@@ -730,7 +730,7 @@
      "level": 2
     }
    ],
-   "words": 4494
+   "words": 4492
   },
   {
    "slug": "ch08-sql-for-data-science",
@@ -824,7 +824,7 @@
      "level": 2
     }
    ],
-   "words": 4060
+   "words": 4063
   },
   {
    "slug": "ch09-exploratory-data-analysis",
@@ -994,7 +994,7 @@
      "level": 2
     }
    ],
-   "words": 3780
+   "words": 3781
   },
   {
    "slug": "ch11-supervised-learning-overview",
@@ -1100,7 +1100,7 @@
      "level": 2
     }
    ],
-   "words": 3810
+   "words": 3816
   },
   {
    "slug": "ch12-ensemble-methods",
@@ -1200,7 +1200,7 @@
      "level": 2
     }
    ],
-   "words": 2805
+   "words": 2815
   },
   {
    "slug": "ch13-cross-validation-model-selection",
@@ -1394,7 +1394,7 @@
      "level": 2
     }
    ],
-   "words": 3024
+   "words": 3021
   },
   {
    "slug": "ch15-feature-selection-dimensionality-reduction",
@@ -1494,7 +1494,7 @@
      "level": 2
     }
    ],
-   "words": 4437
+   "words": 4430
   },
   {
    "slug": "ch16-model-evaluation",
@@ -1594,7 +1594,7 @@
      "level": 2
     }
    ],
-   "words": 2250
+   "words": 2243
   },
   {
    "slug": "ch17-hyperparameter-optimization",
@@ -1676,7 +1676,7 @@
      "level": 2
     }
    ],
-   "words": 2114
+   "words": 2115
   },
   {
    "slug": "ch18-regularization",
@@ -1782,7 +1782,7 @@
      "level": 2
     }
    ],
-   "words": 2411
+   "words": 2410
   },
   {
    "slug": "ch19-unsupervised-learning",
@@ -1876,7 +1876,7 @@
      "level": 2
     }
    ],
-   "words": 2464
+   "words": 2470
   },
   {
    "slug": "ch20-time-series",
@@ -1970,7 +1970,7 @@
      "level": 2
     }
    ],
-   "words": 2356
+   "words": 2391
   },
   {
    "slug": "appendix-a-quick-reference",
@@ -1992,15 +1992,15 @@
      "level": 2
     },
     {
-     "id": "chapter-3-math-foundations-statistics-probability-linear-algebra",
+     "id": "chapter-3-maths-foundations-statistics-probability-linear-algebra",
      "number": "",
-     "title": "Chapter 3 — Math Foundations: Statistics, Probability & Linear Algebra",
+     "title": "Chapter 3 — Maths Foundations: Statistics, Probability & Linear Algebra",
      "level": 2
     },
     {
-     "id": "chapter-4-math-foundations-calculus-optimisation",
+     "id": "chapter-4-maths-foundations-calculus-optimisation",
      "number": "",
-     "title": "Chapter 4 — Math Foundations: Calculus & Optimisation",
+     "title": "Chapter 4 — Maths Foundations: Calculus & Optimisation",
      "level": 2
     },
     {
@@ -2100,7 +2100,7 @@
      "level": 2
     }
    ],
-   "words": 9782
+   "words": 9829
   },
   {
    "slug": "appendix-b-answers",
@@ -2122,15 +2122,15 @@
      "level": 2
     },
     {
-     "id": "chapter-3-math-foundations-statistics-probability-linear-algebra",
+     "id": "chapter-3-maths-foundations-statistics-probability-linear-algebra",
      "number": "",
-     "title": "Chapter 3 — Math Foundations: Statistics, Probability & Linear Algebra",
+     "title": "Chapter 3 — Maths Foundations: Statistics, Probability & Linear Algebra",
      "level": 2
     },
     {
-     "id": "chapter-4-math-foundations-calculus-optimisation",
+     "id": "chapter-4-maths-foundations-calculus-optimisation",
      "number": "",
-     "title": "Chapter 4 — Math Foundations: Calculus & Optimisation",
+     "title": "Chapter 4 — Maths Foundations: Calculus & Optimisation",
      "level": 2
     },
     {
@@ -2230,7 +2230,7 @@
      "level": 2
     }
    ],
-   "words": 14708
+   "words": 14705
   }
  ],
  "anchors": {
@@ -6187,20 +6187,20 @@
    "label": "Chapter 2 — Business Problem Framing"
   },
   "3:quick reference": {
-   "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-3-math-foundations-statistics-probability-linear-algebra",
+   "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-3-maths-foundations-statistics-probability-linear-algebra",
    "label": "Quick Reference, Chapter 3"
   },
-  "appendix-a-quick-reference:chapter 3 — math foundations: statistics, probability & linear algebra": {
-   "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-3-math-foundations-statistics-probability-linear-algebra",
-   "label": "Chapter 3 — Math Foundations: Statistics, Probability & Linear Algebra"
+  "appendix-a-quick-reference:chapter 3 — maths foundations: statistics, probability & linear algebra": {
+   "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-3-maths-foundations-statistics-probability-linear-algebra",
+   "label": "Chapter 3 — Maths Foundations: Statistics, Probability & Linear Algebra"
   },
   "4:quick reference": {
-   "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-4-math-foundations-calculus-optimisation",
+   "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-4-maths-foundations-calculus-optimisation",
    "label": "Quick Reference, Chapter 4"
   },
-  "appendix-a-quick-reference:chapter 4 — math foundations: calculus & optimisation": {
-   "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-4-math-foundations-calculus-optimisation",
-   "label": "Chapter 4 — Math Foundations: Calculus & Optimisation"
+  "appendix-a-quick-reference:chapter 4 — maths foundations: calculus & optimisation": {
+   "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-4-maths-foundations-calculus-optimisation",
+   "label": "Chapter 4 — Maths Foundations: Calculus & Optimisation"
   },
   "5:quick reference": {
    "href": "/books/classical-data-science/appendix-a-quick-reference#chapter-5-information-theory-basics",
@@ -6338,13 +6338,13 @@
    "href": "/books/classical-data-science/appendix-b-answers#chapter-2-business-problem-framing",
    "label": "Chapter 2 — Business Problem Framing"
   },
-  "appendix-b-answers:chapter 3 — math foundations: statistics, probability & linear algebra": {
-   "href": "/books/classical-data-science/appendix-b-answers#chapter-3-math-foundations-statistics-probability-linear-algebra",
-   "label": "Chapter 3 — Math Foundations: Statistics, Probability & Linear Algebra"
+  "appendix-b-answers:chapter 3 — maths foundations: statistics, probability & linear algebra": {
+   "href": "/books/classical-data-science/appendix-b-answers#chapter-3-maths-foundations-statistics-probability-linear-algebra",
+   "label": "Chapter 3 — Maths Foundations: Statistics, Probability & Linear Algebra"
   },
-  "appendix-b-answers:chapter 4 — math foundations: calculus & optimisation": {
-   "href": "/books/classical-data-science/appendix-b-answers#chapter-4-math-foundations-calculus-optimisation",
-   "label": "Chapter 4 — Math Foundations: Calculus & Optimisation"
+  "appendix-b-answers:chapter 4 — maths foundations: calculus & optimisation": {
+   "href": "/books/classical-data-science/appendix-b-answers#chapter-4-maths-foundations-calculus-optimisation",
+   "label": "Chapter 4 — Maths Foundations: Calculus & Optimisation"
   },
   "appendix-b-answers:chapter 5 — information theory basics": {
    "href": "/books/classical-data-science/appendix-b-answers#chapter-5-information-theory-basics",

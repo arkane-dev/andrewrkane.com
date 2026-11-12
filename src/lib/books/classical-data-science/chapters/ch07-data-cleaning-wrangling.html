@@ -329,7 +329,8 @@ Listing&nbsp;7.8: Deliberately poisoning a clean synthetic dataset with every de
 <span id="cb8-16"><span class="co"># Encoding errors: UTF-8 city names read back as Latin-1</span></span>
 <span id="cb8-17">office_cities_messy <span class="op">=</span> <span class="bu">list</span>(office_cities)</span>
 <span id="cb8-18"><span class="cf">for</span> i <span class="kw">in</span> np.random.choice(n, <span class="dv">8</span>, replace<span class="op">=</span><span class="va">False</span>):</span>
-<span id="cb8-19">    office_cities_messy[i] <span class="op">=</span> office_cities_messy[i].encode(<span class="st">'utf-8'</span>).decode(<span class="st">'latin1'</span>)</span></code></pre></div>
+<span id="cb8-19">    city <span class="op">=</span> office_cities_messy[i]</span>
+<span id="cb8-20">    office_cities_messy[i] <span class="op">=</span> city.encode(<span class="st">'utf-8'</span>).decode(<span class="st">'latin1'</span>)</span></code></pre></div>
 </div>
 </figure>
 </div>

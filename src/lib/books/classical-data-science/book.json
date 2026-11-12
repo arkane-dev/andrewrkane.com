@@ -418,7 +418,7 @@
      "level": 2
     }
    ],
-   "words": 4548
+   "words": 4704
   },
   {
    "slug": "ch05-information-theory",
@@ -730,7 +730,7 @@
      "level": 2
     }
    ],
-   "words": 4492
+   "words": 4495
   },
   {
    "slug": "ch08-sql-for-data-science",
@@ -2100,7 +2100,7 @@
      "level": 2
     }
    ],
-   "words": 9829
+   "words": 9835
   },
   {
    "slug": "appendix-b-answers",
@@ -2230,7 +2230,7 @@
      "level": 2
     }
    ],
-   "words": 14705
+   "words": 14784
   }
  ],
  "anchors": {

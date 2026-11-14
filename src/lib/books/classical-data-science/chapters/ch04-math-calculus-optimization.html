@@ -96,10 +96,10 @@
 <h2 data-number="4.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">4.3</span> Trade-offs and Limits</h2>
 <p><strong>Convex versus non-convex loss surfaces.</strong> For a convex loss function (logistic regression’s is one example), gradient descent is guaranteed to find the single global minimum. A convex bowl has no other minima to get stuck in. Neural network loss surfaces are not convex. They are riddled with local minima and saddle points. Gradient descent finds <em>a</em> good minimum, not provably <em>the</em> best one.</p>
 <p>Recall the terrain from this chapter’s Motivation: for a model with two weights, height at each point is loss. A convex loss function is that terrain shaped like a single bowl, one valley, one lowest point, no way to get stuck anywhere else. A non-convex loss function is terrain like this instead:</p>
-<div id="fig-loss-surface-nonconvex" class="quarto-float quarto-figure quarto-figure-center anchored">
+<div id="fig-loss-surface-nonconvex" class="quarto-float quarto-figure quarto-figure-center anchored" alt="A 3D surface shaped like a bowl with two dips in its floor. The deeper dip is on the left. A shallower dip sits to its right, with a low ridge between them.">
 <figure class="quarto-float quarto-float-fig figure">
 <div aria-describedby="fig-loss-surface-nonconvex-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<img src="/books/classical-data-science/images/ch04/loss-surface-nonconvex.png" class="img-fluid figure-img" style="width:55.0%" alt="A non-convex loss surface: a deep valley (the global minimum) and a shallower one beside it (a local minimum), separated by a ridge." loading="lazy">
+<img src="/books/classical-data-science/images/ch04/loss-surface-nonconvex.png" class="img-fluid figure-img" style="width:55.0%" alt="A 3D surface shaped like a bowl with two dips in its floor. The deeper dip is on the left. A shallower dip sits to its right, with a low ridge between them." loading="lazy">
 </div>
 <figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-loss-surface-nonconvex-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
 Figure&nbsp;4.1: A non-convex loss surface: a deep valley (the global minimum) and a shallower one beside it (a local minimum), separated by a ridge.

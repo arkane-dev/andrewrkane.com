@@ -1,7 +1,7 @@
 {
  "slug": "classical-data-science",
  "title": "Classical Data Science",
- "subtitle": "A Solutions Architect's Field Guide, Volume 1",
+ "subtitle": "A Solutions Architect's Field Guide to AI, Volume 1",
  "author": "Andrew R. Kane",
  "chapters": [
   {
@@ -30,7 +30,7 @@
      "level": 2
     }
    ],
-   "words": 522
+   "words": 524
   },
   {
    "slug": "ch01-history-and-landscape",

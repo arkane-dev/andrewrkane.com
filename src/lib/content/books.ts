@@ -10,7 +10,7 @@ import type { Book } from './types';
 //   pdfHref: the PDF in a release or on the CDN
 //   payHref: the pay-what-you-want page (Ko-fi, Gumroad, Stripe Payment Link, …)
 export const series = {
-	title: "A Solutions Architect's Field Guide",
+	title: "A Solutions Architect's Field Guide to AI",
 	zh: '架构师手册',
 	summary: 'A field guide for solutions architects moving into data science and AI. Four volumes, 83 chapters, from statistics to world models. Every chapter pairs the ideas with trade-offs, a worked example and code you can run.'
 };
@@ -20,7 +20,7 @@ export const books: Book[] = [
 		slug: 'classical-data-science',
 		volume: 1,
 		title: 'Classical Data Science',
-		subtitle: "A Solutions Architect's Field Guide, Volume 1",
+		subtitle: "A Solutions Architect's Field Guide to AI, Volume 1",
 		zh: '经典',
 		summary: 'The foundations. Framing the business problem, the maths, Python and SQL. Then the classical ML toolkit: ensembles, validation, features, evaluation and time series.',
 		chapters: 20,
@@ -33,7 +33,7 @@ export const books: Book[] = [
 		slug: 'modern-ai',
 		volume: 2,
 		title: 'Modern AI',
-		subtitle: "A Solutions Architect's Field Guide, Volume 2",
+		subtitle: "A Solutions Architect's Field Guide to AI, Volume 2",
 		zh: '现代',
 		summary: 'From MLOps to LLMs. Responsible AI, deployment and monitoring. Then neural networks, transformers, RAG, fine-tuning, RLHF and agents.',
 		chapters: 17,
@@ -44,7 +44,7 @@ export const books: Book[] = [
 		slug: 'systems-performance',
 		volume: 3,
 		title: 'Systems & Performance',
-		subtitle: "A Solutions Architect's Field Guide, Volume 3",
+		subtitle: "A Solutions Architect's Field Guide to AI, Volume 3",
 		zh: '系统',
 		summary: 'Making it fast. GPU architecture, CUDA and Triton kernels. Then CPU performance: profiling, SIMD, parallelism and memory. Ends with an end-to-end optimization.',
 		chapters: 20,
@@ -55,7 +55,7 @@ export const books: Book[] = [
 		slug: 'applied-ai-domains',
 		volume: 4,
 		title: 'Applied AI Domains',
-		subtitle: "A Solutions Architect's Field Guide, Volume 4",
+		subtitle: "A Solutions Architect's Field Guide to AI, Volume 4",
 		zh: '应用',
 		summary: 'Three frontiers. Physical AI: perception, world models, VLAs and robot policies. Image models, from CNNs to diffusion. Knowledge graphs, GraphRAG and agentic reasoning.',
 		chapters: 26,

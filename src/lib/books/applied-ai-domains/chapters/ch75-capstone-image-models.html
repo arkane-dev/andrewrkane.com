@@ -1,0 +1,248 @@
+<p>Every chapter in this track taught one piece in isolation, on a task built to make that piece’s lesson land cleanly. Chapter 69’s transfer-learning exercises used a backbone that already existed. Chapter 72’s VAE generated unconditionally, with no downstream use for what it produced. Chapter 74’s evaluation metrics were computed with a purpose-built toy CLIP, not a model built for anything else. Each isolation was the right pedagogical choice at the time, but a real project rarely gets to keep its perception, generation, and evaluation pieces neatly separated, and the interactions <em>between</em> pieces are exactly where a track built chapter-by-chapter tends to reveal something a single-topic chapter can’t. This capstone forces one of those interactions: train a real backbone for a real classification task, then reuse <em>that exact backbone</em>, not a fresh, unrelated network, as both the conditioning signal for a generator and the feature extractor for evaluating what the generator produces.</p>
+<section id="motivation" class="level2" data-number="75.1">
+<h2 data-number="75.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">75.1</span> Motivation</h2>
+<p>The capstone chains three pieces into one pipeline on a single small dataset (<code>sklearn</code>’s 8x8 digits). A small ResNet-style backbone (Chapter 69) is pretrained on 8 digit classes only, then adapted to 2 entirely unseen classes with just 8 labelled examples per class, comparing feature extraction against fine-tuning, the same decision Chapter 69 built a reference table for. A class-conditional VAE (Chapter 72) generates new digit images, conditioned not on a raw one-hot label but on the <em>backbone’s own learned embedding</em> for each class: an explicit dependency between the discriminative and generative halves, not two unrelated demos bolted together. The generated images are then scored using FID-style and class-conditional-accuracy metrics computed with the <em>same backbone</em>, reused as the feature extractor (Chapter 74), exactly the choice a team without ImageNet-scale infrastructure has to make in practice.</p>
+</section>
+<section id="exposition" class="level2" data-number="75.2">
+<h2 data-number="75.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">75.2</span> Exposition</h2>
+<section id="chaining-real-pieces-together-surfaces-what-isolated-demos-cannot" class="level3" data-number="75.2.1">
+<h3 data-number="75.2.1" class="anchored" data-anchor-id="chaining-real-pieces-together-surfaces-what-isolated-demos-cannot"><span class="header-section-number">75.2.1</span> Chaining Real Pieces Together Surfaces What Isolated Demos Cannot</h3>
+<p>Building three separate demos, one per chapter, cannot surface a bug that only exists at the seam between two of them. This capstone’s pipeline has exactly two such seams: the backbone feeding the generator’s conditioning signal, and the backbone feeding the evaluation metrics. Both produced genuine findings that no single-chapter tutorial would have caught: a real evaluation bug, and a real hyperparameter failure mode, described in full below.</p>
+</section>
+<section id="the-conditioning-signal-is-the-backbones-own-embedding-not-a-fresh-label" class="level3" data-number="75.2.2">
+<h3 data-number="75.2.2" class="anchored" data-anchor-id="the-conditioning-signal-is-the-backbones-own-embedding-not-a-fresh-label"><span class="header-section-number">75.2.2</span> The Conditioning Signal Is the Backbone’s Own Embedding, Not a Fresh Label</h3>
+<p>Rather than conditioning the generator on a one-hot class label the way Chapter 73’s diffusion model did, this capstone conditions on the backbone’s <code>embed()</code> output: a per-class mean taken over the full dataset. This carries a real consequence: the conditioning vector inherits whatever the backbone actually learned to separate classes by, including cases where separation is weak. The backbone was never trained on classes 8 and 9, and their class-embedding distance measured noticeably closer (1.35) than most pretrained-class pairs (2.6-7.6). The conditioning signal for those two classes genuinely carries less separating information, a direct, measured consequence of the backbone never having seen them during pretraining, not a modeling choice made for convenience.</p>
+</section>
+<section id="a-frozen-backbone-must-actually-be-frozen" class="level3" data-number="75.2.3">
+<h3 data-number="75.2.3" class="anchored" data-anchor-id="a-frozen-backbone-must-actually-be-frozen"><span class="header-section-number">75.2.3</span> A Frozen Backbone Must Actually Be Frozen</h3>
+<p><code>BatchNorm</code> layers behave differently in training mode (normalizing using the statistics of the current batch) versus evaluation mode (normalizing using running statistics accumulated during training). A backbone that is only ever <em>read from</em> after training, as a frozen feature extractor, a conditioning source, or an evaluation metric, needs <code>.eval()</code> called on it explicitly, exactly the same discipline <code>torch.no_grad()</code> gets for gradients. Skipping this is not a cosmetic mistake: a small batch of generated images that are unusually similar to each other can produce per-batch normalization statistics that amplify noise instead of removing it, corrupting every embedding the “frozen” backbone produces from that point forward.</p>
+</section>
+<section id="classification-correctness-and-distributional-realism-are-different-things" class="level3" data-number="75.2.4">
+<h3 data-number="75.2.4" class="anchored" data-anchor-id="classification-correctness-and-distributional-realism-are-different-things"><span class="header-section-number">75.2.4</span> Classification Correctness and Distributional Realism Are Different Things</h3>
+<p>A downstream classifier recognizing a generated sample as its intended class is necessary evidence a generator works, but it is not sufficient evidence the generator is <em>good</em>. A model can satisfy a classification metric completely while still being measurably less diverse and less distributionally realistic than real data. This is exactly the gap Chapter 74 built FID, Inception Score, and CLIPScore to catch, and exactly the reason a generative model should never be certified as “working” on classifier accuracy alone.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="75.3">
+<h2 data-number="75.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">75.3</span> Trade-offs and Limits</h2>
+<p><strong>Fine-tuning beat feature extraction</strong> on the few-shot transfer task, 95.6% versus 87.9% accuracy. With only 16 total labelled examples across both held-out classes, unfreezing the residual block and training it at a small learning rate still generalized better than keeping the backbone frozen. This is consistent with Chapter 69’s guidance that fine-tuning tends to win once there is <em>some</em> labelled data, even a little, but it is not free: fine-tuning risks catastrophic forgetting of the pretrained classes if the learning rate or epoch count is too aggressive, which is why the backbone’s learning rate (<code>1e-4</code>) was kept an order of magnitude below the new head’s (<code>1e-2</code>).</p>
+<p><strong>The generator produces recognizable but not fully realistic digits.</strong> Every single generated sample was classified as its intended class: the conditioning genuinely works. But FID against real data measured roughly 32x higher than the real-vs-real sanity baseline, and sample diversity measured far below real data’s own diversity. This is the same VAE blurriness and mode-narrowing Chapter 72 documented directly: the model learned “what makes a 3 look like a 3” well enough to fool a classifier, without learning the full spread of ways a 3 can legitimately look. A production version of this same pipeline would need a real-resolution backbone rather than a 5,000-parameter toy, a pretrained diffusion model rather than a from-scratch VAE for generation quality, a real Inception-v3 or domain-specific feature extractor for FID rather than reusing a small task-specific backbone, and a labelled evaluation set large enough that FID’s covariance estimate is not as noisy as it is at toy scale. The <em>shape</em> of the pipeline (backbone, adapt it, generate from it, evaluate honestly) carries over unchanged; only the scale of each piece needs to grow.</p>
+</section>
+<section id="procedures" class="level2" data-number="75.4">
+<h2 data-number="75.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">75.4</span> Procedures</h2>
+<p id="proc-75-1"><strong>Procedure 75.1 (Reuse a Trained Backbone as a Generator’s Conditioning Signal).</strong> <em>When to use:</em> a trained classifier exists, and a generator is wanted whose outputs are tied to that classifier’s learned representation of each class, rather than an arbitrary one-hot label.</p>
+<div id="lst-backbone-conditioning" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-backbone-conditioning-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;75.1: Per-class mean backbone embedding, used as the generator’s conditioning vector
+</figcaption>
+<div aria-describedby="lst-backbone-conditioning-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="co"># critical: see Procedure 75.2</span></span>
+<span id="cb1-2">backbone.<span class="bu">eval</span>()</span>
+<span id="cb1-3"><span class="cf">with</span> torch.no_grad():</span>
+<span id="cb1-4">    all_embeddings <span class="op">=</span> backbone.embed(X_full)</span>
+<span id="cb1-5"></span>
+<span id="cb1-6">class_embeddings <span class="op">=</span> torch.stack([</span>
+<span id="cb1-7">    all_embeddings[y_full <span class="op">==</span> c].mean(<span class="dv">0</span>) <span class="cf">for</span> c <span class="kw">in</span> <span class="bu">range</span>(n_classes)</span>
+<span id="cb1-8">])</span>
+<span id="cb1-9"></span>
+<span id="cb1-10"><span class="co"># Feed class_embeddings[label] into the generator's decoder</span></span>
+<span id="cb1-11"><span class="co"># alongside the latent code z</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Why this matters:</strong> the conditioning vector now carries whatever the backbone actually learned to separate classes by, including it being poorly separated for classes the backbone was never trained on. This capstone’s held-out classes 8/9 embeddings measured a distance of 1.35 apart, versus 2.6-7.6 for most pretrained-class pairs.</p>
+<p id="proc-75-2"><strong>Procedure 75.2 (Avoid the BatchNorm Eval-Mode Bug).</strong> <em>When to use:</em> any time a model containing <code>BatchNorm</code> layers is trained and then reused <em>read-only</em> afterward, as a frozen feature extractor, a conditioning source, or an evaluation metric.</p>
+<div id="lst-batchnorm-eval" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-batchnorm-eval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;75.2: Switching BatchNorm to running statistics before read-only reuse
+</figcaption>
+<div aria-describedby="lst-batchnorm-eval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="co"># switches BatchNorm to use its running mean/var, not per-batch</span></span>
+<span id="cb2-2"><span class="co"># statistics</span></span>
+<span id="cb2-3">backbone.<span class="bu">eval</span>()</span>
+<span id="cb2-4"><span class="cf">with</span> torch.no_grad():</span>
+<span id="cb2-5">    embeddings <span class="op">=</span> backbone.embed(new_data)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Symptom if this is skipped:</strong> predictions or embeddings on data that differs from the training distribution, such as small batches of generated images that are unusually similar to each other, can come back essentially random, because <code>BatchNorm</code> in training mode normalizes using statistics computed from that batch alone. <strong>Rule of thumb:</strong> call <code>.eval()</code> immediately after the last training loop that updates a model’s parameters, before it is used for anything else in the rest of the pipeline. This is the same discipline as wrapping inference in <code>torch.no_grad()</code>.</p>
+<p id="proc-75-3"><strong>Procedure 75.3 (Diagnose and Fix Posterior Collapse in a Conditional VAE).</strong> <em>When to use:</em> a VAE’s KL loss converges to approximately zero and generated samples don’t vary with the latent code or the conditioning signal.</p>
+<div id="lst-posterior-collapse" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-posterior-collapse-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;75.3: Diagnosing posterior collapse via the KL loss term, and the fix
+</figcaption>
+<div aria-describedby="lst-posterior-collapse-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># loss = recon_loss + BETA * kl_loss</span></span>
+<span id="cb3-2"><span class="co">#</span></span>
+<span id="cb3-3"><span class="co"># Symptom: kl_loss -&gt; ~0.0000, generated samples look the same</span></span>
+<span id="cb3-4"><span class="co"># regardless of z or cond</span></span>
+<span id="cb3-5"><span class="co"># Fix: lower BETA. This chapter's worked example went BETA=0.5</span></span>
+<span id="cb3-6"><span class="co"># (collapsed, kl~0.00000)</span></span>
+<span id="cb3-7"><span class="co">#      -&gt; BETA=0.1 (healthy, kl converged to ~0.02, generated</span></span>
+<span id="cb3-8"><span class="co"># samples classified</span></span>
+<span id="cb3-9"><span class="co">#      correctly 100% of the time by an independent probe)</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Why this matters:</strong> this is the same failure mode Chapter 72 named directly (“reconstructions are blurry or generic, KL loss near zero” means beta is too high), reappearing whenever a new VAE is built, regardless of what it is conditioned on. Always check the KL loss term separately from the total loss. A total loss that looks fine can hide a KL term that has quietly gone to zero.</p>
+<p id="proc-75-4"><strong>Procedure 75.4 (Choose Between Classifier Accuracy and Distributional Metrics When Evaluating a Generator).</strong> <em>When to use:</em> deciding whether a generative model is good enough to ship.</p>
+<div id="lst-eval-decision" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-eval-decision-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;75.4: Decision sequence: classifier accuracy first, then distributional metrics, before shipping
+</figcaption>
+<div aria-describedby="lst-eval-decision-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># 1. Does a downstream classifier recognise generated</span></span>
+<span id="cb4-2"><span class="co">#    samples as the intended class?</span></span>
+<span id="cb4-3"><span class="cf">if</span> class_conditional_accuracy <span class="op">&lt;</span> some_threshold:</span>
+<span id="cb4-4">    <span class="co"># generation is broken: fix conditioning/training</span></span>
+<span id="cb4-5">    <span class="co"># before anything else</span></span>
+<span id="cb4-6">    <span class="cf">pass</span></span>
+<span id="cb4-7"><span class="cf">else</span>:</span>
+<span id="cb4-8">    <span class="co"># 2. Classifier accuracy alone is NOT sufficient</span></span>
+<span id="cb4-9">    <span class="co">#    evidence of quality.</span></span>
+<span id="cb4-10">    <span class="co">#    Check FID against a real-vs-real sanity baseline</span></span>
+<span id="cb4-11">    <span class="co">#    (Procedure 74.6).</span></span>
+<span id="cb4-12">    <span class="co">#    Check sample diversity against real data's own</span></span>
+<span id="cb4-13">    <span class="co">#    diversity.</span></span>
+<span id="cb4-14">    ship_decision <span class="op">=</span> (</span>
+<span id="cb4-15">        (fid_vs_baseline_ratio <span class="op">&lt;</span> acceptable)</span>
+<span id="cb4-16">        <span class="kw">and</span> (diversity_ratio <span class="op">&gt;</span> acceptable)</span>
+<span id="cb4-17">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Why this matters:</strong> this chapter’s generator scored a perfect 1.0000 on class-conditional accuracy while still being measurably less diverse and less distributionally realistic than real data. A model can satisfy one metric completely and still fail another. Ship decisions should check both.</p>
+</section>
+<section id="worked-example" class="level2" data-number="75.5">
+<h2 data-number="75.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">75.5</span> Worked Example</h2>
+<p>The tutorial notebook behind this chapter runs the full pipeline end to end: a backbone pretrained on 8 digit classes, few-shot transfer to 2 held-out classes, a class-conditional VAE generator built on the backbone’s own embeddings, and honest evaluation of the result. Every number below is measured from running the notebook, including the ones that are less than perfect.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Backbone pretrain test accuracy (8 classes)</td>
+<td>1.0000</td>
+</tr>
+<tr class="even">
+<td>Backbone parameters</td>
+<td>5,000</td>
+</tr>
+<tr class="odd">
+<td>Transfer learning, 8-shot, classes 8/9: feature extraction</td>
+<td>0.8790</td>
+</tr>
+<tr class="even">
+<td>Transfer learning, 8-shot, classes 8/9: fine-tuning</td>
+<td>0.9556</td>
+</tr>
+<tr class="odd">
+<td>Conditional VAE parameters</td>
+<td>9,008</td>
+</tr>
+<tr class="even">
+<td>Conditional VAE final reconstruction loss</td>
+<td>0.0397</td>
+</tr>
+<tr class="odd">
+<td>Conditional VAE final KL loss (<code>BETA=0.1</code>)</td>
+<td>0.0197</td>
+</tr>
+<tr class="even">
+<td>10-class linear probe (real data) test accuracy</td>
+<td>0.9694</td>
+</tr>
+<tr class="odd">
+<td>Generated-sample class-conditional accuracy</td>
+<td>1.0000 (80/80)</td>
+</tr>
+<tr class="even">
+<td>Mean FID, real vs.&nbsp;generated</td>
+<td>2.7411</td>
+</tr>
+<tr class="odd">
+<td>Mean FID, real vs.&nbsp;real (sanity baseline)</td>
+<td>0.0856</td>
+</tr>
+<tr class="even">
+<td>Mean sample diversity, generated vs.&nbsp;real</td>
+<td>0.442 vs.&nbsp;1.920</td>
+</tr>
+</tbody>
+</table>
+<p>Two genuine bugs surfaced during development of this pipeline, neither of which a single-chapter tutorial would have caught. First, an early version of this notebook never called <code>backbone.eval()</code> before reusing it as a frozen feature extractor (Procedure 75.2). The result: generated-sample class-conditional accuracy came back at <em>exactly chance</em> (8 out of 80, 10%), which looked like a broken generator. It wasn’t. <code>BatchNorm</code> was computing normalization statistics from each small batch of generated images instead of using the running statistics learned during training, because the backbone was still nominally in training mode. A backbone that scores 96.9% via a linear probe on real held-out data can still produce garbage embeddings on a different kind of input if one line is missing.</p>
+<p>Second, and independently, the VAE was first trained with <code>BETA=0.5</code>, Chapter 72’s default, and suffered posterior collapse: the KL loss collapsed to approximately 0, meaning the decoder learned to ignore both the latent code and the class conditioning entirely (Procedure 75.3). This is the exact failure mode Chapter 72 itself named and warned about, rediscovered independently here rather than looked up: a small, genuine confirmation that a prior chapter’s documented failure modes are real, not just textbook warnings. Lowering <code>BETA</code> to 0.1 fixed it, landing at a healthily non-zero final KL loss of 0.0197.</p>
+<p>With both fixed, the measured result is a real success, but not a perfect one, exactly as Procedure 75.4 predicts it should be checked. Every single generated sample was classified as its intended class (1.0000): the conditioning genuinely works. But FID against real data (2.7411) measured roughly 32x higher than the real-vs-real sanity baseline (0.0856), and sample diversity (0.442) measured far below real data’s own diversity (1.920). Classification correctness and distributional realism are different things, measured by different metrics, and this pipeline’s own numbers show a real, measured gap between them.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker End-to-End Pipeline</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># Backbone pretraining + transfer learning</span></span>
+<span id="cb5-2"><span class="im">from</span> sagemaker.pytorch <span class="im">import</span> PyTorch</span>
+<span id="cb5-3">backbone_estimator <span class="op">=</span> PyTorch(</span>
+<span id="cb5-4">    entry_point<span class="op">=</span><span class="st">"train_backbone.py"</span>,</span>
+<span id="cb5-5">    instance_type<span class="op">=</span><span class="st">"ml.g5.xlarge"</span>,</span>
+<span id="cb5-6">    ...,</span>
+<span id="cb5-7">)</span>
+<span id="cb5-8">backbone_estimator.fit({<span class="st">"pretrain"</span>: pretrain_s3_uri})</span>
+<span id="cb5-9"></span>
+<span id="cb5-10"><span class="co"># Class-conditional generator, using the backbone's exported</span></span>
+<span id="cb5-11"><span class="co"># embeddings as conditioning input</span></span>
+<span id="cb5-12">generator_estimator <span class="op">=</span> PyTorch(</span>
+<span id="cb5-13">    entry_point<span class="op">=</span><span class="st">"train_conditional_vae.py"</span>,</span>
+<span id="cb5-14">    instance_type<span class="op">=</span><span class="st">"ml.g5.xlarge"</span>,</span>
+<span id="cb5-15">    ...,</span>
+<span id="cb5-16">)</span>
+<span id="cb5-17">generator_estimator.fit({</span>
+<span id="cb5-18">    <span class="st">"train"</span>: full_data_s3_uri,</span>
+<span id="cb5-19">    <span class="st">"embeddings"</span>: embeddings_s3_uri,</span>
+<span id="cb5-20">})</span>
+<span id="cb5-21"></span>
+<span id="cb5-22"><span class="co"># Batch evaluation job: FID / class-conditional accuracy</span></span>
+<span id="cb5-23"><span class="co"># over a large generated sample set</span></span>
+<span id="cb5-24"><span class="im">from</span> sagemaker.processing <span class="im">import</span> ScriptProcessor</span>
+<span id="cb5-25">eval_processor <span class="op">=</span> ScriptProcessor(</span>
+<span id="cb5-26">    image_uri<span class="op">=</span>...,</span>
+<span id="cb5-27">    instance_type<span class="op">=</span><span class="st">"ml.m5.xlarge"</span>,</span>
+<span id="cb5-28">    ...,</span>
+<span id="cb5-29">)</span>
+<span id="cb5-30">eval_processor.run(</span>
+<span id="cb5-31">    code<span class="op">=</span><span class="st">"evaluate_generator.py"</span>,</span>
+<span id="cb5-32">    inputs<span class="op">=</span>[...],</span>
+<span id="cb5-33">    outputs<span class="op">=</span>[...],</span>
+<span id="cb5-34">)</span></code></pre></div>
+<p><strong>When to prefer SageMaker for a pipeline shaped like this:</strong> once the backbone and generator are large enough to want independent, parallel jobs for pretraining, transfer learning, and generation, rather than one long sequential notebook. The same three-stage structure this capstone used maps directly onto three separate SageMaker jobs, chained with SageMaker Pipelines to make the backbone-to-generator-to-evaluation dependency explicit as a DAG.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="75.6">
+<h2 data-number="75.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">75.6</span> History and Further Reading</h2>
+<p>Book 2, Chapter 37 (Capstone Project)’s scoping discipline (every stage gets a real, if modest, version, rather than doing one stage impressively and skipping the rest) applies directly here, and this chapter’s pipeline follows it: backbone, transfer learning, generation, and evaluation are all present and all genuinely measured, including the parts that came back less than perfect. The PyTorch documentation on <code>nn.Module.eval()</code> and <code>nn.BatchNorm2d</code> covers the exact mechanism behind the evaluation bug this chapter’s worked example found and fixed, and is worth reading in full by anyone who has not previously been bitten by it.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="75.7">
+<h2 data-number="75.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">75.7</span> How This Connects</h2>
+<p>This chapter builds on every earlier chapter in this track, and specifically reuses three pieces outright: Chapter 69 (ResNet &amp; Deep Architectures)‘s residual block and feature-extraction-versus-fine-tuning framework, Chapter 72 (Generative Foundations)’s VAE architecture and reparameterization trick, and Chapter 74 (Multimodal Models &amp; Evaluation)’s FID formula and diversity check. This is the final chapter of the image models track within this book, and it enables nothing further here. It is often confused with a simple “put it all together” demo that just chains previous chapters’ code with no new insight. The point of a capstone is not the chaining. It is finding out what breaks, or degrades, or needs re-measuring, once the pieces are no longer tested in isolation. This chapter found a real evaluation bug (<code>BatchNorm</code> in train mode) and a real hyperparameter failure mode (posterior collapse) that neither Chapter 69, 72, nor 74 individually would have surfaced.</p>
+</section>
+<section id="exercises" class="level2" data-number="75.8">
+<h2 data-number="75.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">75.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-75-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain, in your own words, why the same three chapters’ individual tutorials could not have caught the <code>BatchNorm</code> eval-mode bug this chapter found.</p></li>
+<li id="ex-75-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the symptom and the fix for posterior collapse, referencing <a href="#lst-posterior-collapse" class="quarto-xref">Listing&nbsp;<span>75.3</span></a>.</p></li>
+<li id="ex-75-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using this chapter’s measured transfer-learning table, compute the absolute and relative improvement fine-tuning achieved over feature extraction, and explain why 16 total labelled examples was still enough for fine-tuning to win, referencing Chapter 69’s guidance.</p></li>
+<li id="ex-75-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-eval-decision" class="quarto-xref">Listing&nbsp;<span>75.4</span></a>, trace through what decision the procedure would produce for a hypothetical generator that scored 1.0000 on class-conditional accuracy but had a FID-vs-baseline ratio of 50x (versus this chapter’s measured 32x) and a diversity ratio of 0.1 (versus this chapter’s measured ~0.23). Justify the decision using this chapter’s own numbers as a reference point.</p></li>
+<li id="ex-75-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter measured the held-out classes 8/9 embedding distance at 1.35, versus 2.6-7.6 for pretrained-class pairs. Using <a href="#lst-backbone-conditioning" class="quarto-xref">Listing&nbsp;<span>75.1</span></a>, explain what practical effect this weaker separation would have on the generator’s ability to produce a recognizably distinct digit for class 8 versus class 9.</p></li>
+<li id="ex-75-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer’s team has built a pipeline structurally identical to this chapter’s (backbone, transfer learning, conditional generator, evaluation), and reports “our generator hits 100% conditional accuracy, so it’s ready to ship.” Using this chapter’s Worked Example, write the two or three sentences you would say to them before agreeing.</p></li>
+<li id="ex-75-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Using this chapter’s Trade-offs section, list the four specific changes needed to move this pipeline’s <em>shape</em> from toy scale to production scale, and explain in one sentence why the shape itself does not need to change.</p></li>
+<li id="ex-75-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Review your own solutions to this track’s earlier exercises (Chapters 67-74). Identify one place where a shortcut or simplification you made would, if chained into a pipeline the way this chapter chains its three pieces, plausibly surface a bug analogous to the two found here.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="75.9">
+<h2 data-number="75.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">75.9</span> Mental Model</h2>
+<p>Every chapter in this track taught a tool. This capstone is the reminder that tools interact, and that some of the most useful things a capstone teaches aren’t in any single chapter’s syllabus: forgetting to call <code>.eval()</code> on a backbone being reused, or a hyperparameter that looked fine in isolation collapsing once it’s wired into a specific model, are the kind of bugs that only show up when pieces are actually connected, not documented in a vacuum.</p>
+
+
+</section>

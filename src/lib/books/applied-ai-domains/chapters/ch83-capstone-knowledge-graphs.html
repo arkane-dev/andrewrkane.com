@@ -1,0 +1,205 @@
+<p>Every chapter in this book’s knowledge-graphs section (Chapters 76 through 82) taught its lesson on the same procurement/ownership scenario (Meridian Holdings, Acme Corp, Fenwick Supplies, and their vendor relationships). That repetition was deliberate: reusing one familiar graph kept each chapter’s specific lesson isolated and easy to follow. But it leaves an important question unanswered: does any of this generalise past the one example used to teach it, or did the pipeline only ever work because the data was hand-tuned to make it work? This capstone, the final chapter of the entire book series, answers that directly, by building the entire pipeline (extraction, construction, traversal, retrieval, evaluation) on a domain none of the earlier chapters ever touched: a small network of AI research papers and their citations.</p>
+<section id="motivation" class="level2" data-number="83.1">
+<h2 data-number="83.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">83.1</span> Motivation</h2>
+<p>Reproducing the same shape of result on new data is stronger evidence than a good result on familiar data. This capstone’s numbers are not identical to Chapter 82’s: different graph, different questions, different specific precision/recall values. What matters is that the <em>pattern</em> is the same: single-hop questions are answered well by both retrieval methods, with GraphRAG holding a modest edge, while multi-hop questions show a real, substantial GraphRAG advantage. That’s the same shape of result <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> and Chapter 82 found on a completely different graph, exactly what would be expected if the underlying claim (“GraphRAG helps specifically with relationship-shaped questions”) is a real property of the methods, not an artefact of one convenient dataset.</p>
+</section>
+<section id="exposition" class="level2" data-number="83.2">
+<h2 data-number="83.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">83.2</span> Exposition</h2>
+<section id="extraction-had-to-be-genuinely-validated-not-assumed" class="level3" data-number="83.2.1">
+<h3 data-number="83.2.1" class="anchored" data-anchor-id="extraction-had-to-be-genuinely-validated-not-assumed"><span class="header-section-number">83.2.1</span> Extraction Had to Be Genuinely Validated, Not Assumed</h3>
+<p>This capstone’s knowledge graph (13 entities, 15 edges) was built from 12 short text passages using the same rule-based extraction discipline <a href="/books/applied-ai-domains/ch78-knowledge-graph-construction" class="quarto-xref"><span>Chapter 78</span></a> established: every single <code>AUTHORED_BY</code>/<code>CITES</code> edge traces back to a specific source passage, checked by hand, not asserted. This matters more here than in Chapter 78, because this is genuinely new data the extraction logic was never tuned against. If the extraction approach only worked by accident on Chapter 78’s specific examples, it would have shown up here as edges that don’t actually match what the text says. It didn’t.</p>
+</section>
+<section id="the-traversal-function-needed-zero-changes" class="level3" data-number="83.2.2">
+<h3 data-number="83.2.2" class="anchored" data-anchor-id="the-traversal-function-needed-zero-changes"><span class="header-section-number">83.2.2</span> The Traversal Function Needed Zero Changes</h3>
+<p><a href="/books/applied-ai-domains/ch81-graph-agentic-reasoning" class="quarto-xref"><span>Chapter 81</span></a>’s adaptive BFS-style traversal was reused for this capstone’s <code>citation_chain_search</code> completely unmodified: same algorithm, applied to a <code>CITES</code> relation instead of an <code>OWNS</code> relation, on an entirely different graph. That it worked without modification is itself informative: the traversal logic was never actually specific to ownership hierarchies, just to the general shape “follow a directed relation outward, hop by hop, with a stopping condition.” A capstone is a good place to discover that a piece of code was more general than its original chapter’s framing suggested.</p>
+</section>
+<section id="the-no-valid-answer-case-reappeared-independently" class="level3" data-number="83.2.3">
+<h3 data-number="83.2.3" class="anchored" data-anchor-id="the-no-valid-answer-case-reappeared-independently"><span class="header-section-number">83.2.3</span> The “No Valid Answer” Case Reappeared, Independently</h3>
+<p><a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> and Chapter 82 each included one question with no valid multi-hop answer, to check both methods correctly report “not found” instead of fabricating a spurious match. This capstone’s benchmark included one too: a citation-chain question about a paper with no outgoing <code>CITES</code> edges in this corpus, so no chain exists, and the traversal correctly stopped at the starting node rather than inventing a path. This wasn’t copied from the earlier chapters’ specific question. It emerged naturally from designing an honest benchmark on new data, a small, genuine confirmation that “always include an unanswerable question” is a generally good benchmark-design habit, not a one-off trick for this book’s specific graph.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="83.3">
+<h2 data-number="83.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">83.3</span> Trade-offs and Limits</h2>
+<p>A capstone on new data costs more than reusing the familiar example. Building a second domain from scratch (new corpus, new entities, new benchmark questions, new gold labels to get right) took real additional work compared to just re-running Chapter 82’s exact pipeline again. That cost bought something a repeat run couldn’t: confidence the result isn’t an artefact of one dataset’s specific quirks. Six questions is still a small benchmark. Like Chapter 82’s eight, this capstone’s six questions are enough to demonstrate the methodology and produce an honest result, not enough to be a rigorous statistical claim. A real production decision should run this same precision/recall-by-type approach over dozens-to-hundreds of questions drawn from actual usage, on whichever domain is actually being deployed to.</p>
+</section>
+<section id="procedures" class="level2" data-number="83.4">
+<h2 data-number="83.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">83.4</span> Procedures</h2>
+<p id="proc-83-1"><strong>Procedure 83.1 (Validate Extraction Against Source Text Before Trusting a New-Domain Graph).</strong> <em>When to use:</em> any time extraction techniques are applied to genuinely new data they weren’t originally tuned against.</p>
+<div id="lst-capstone-kg-validate-extraction" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-kg-validate-extraction-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;83.1: Every extracted edge traced back to its source passage, by hand
+</figcaption>
+<div aria-describedby="lst-capstone-kg-validate-extraction-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="cf">for</span> edge <span class="kw">in</span> extracted_graph.edges(data<span class="op">=</span><span class="va">True</span>):</span>
+<span id="cb1-2">    source_passage <span class="op">=</span> edge[<span class="dv">2</span>][<span class="st">"source_passage_id"</span>]</span>
+<span id="cb1-3">    <span class="co"># manual/logical check</span></span>
+<span id="cb1-4">    <span class="cf">assert</span> edge_is_supported_by(edge, passages[source_passage])</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-83-2"><strong>Procedure 83.2 (Reuse Prior Pipeline Code Unmodified as a Generalisation Test).</strong> <em>When to use:</em> validating that a technique built for one domain wasn’t secretly overfit to that domain’s specific shape.</p>
+<div id="lst-capstone-kg-reuse" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-kg-reuse-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;83.2: Same traversal function, new relation type, new graph, zero code changes
+</figcaption>
+<div aria-describedby="lst-capstone-kg-reuse-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="co"># imported unmodified from Chapter 81</span></span>
+<span id="cb2-2">citation_chain_search <span class="op">=</span> agentic_search</span>
+<span id="cb2-3">result <span class="op">=</span> citation_chain_search(</span>
+<span id="cb2-4">    [<span class="st">"Park"</span>],</span>
+<span id="cb2-5">    target_papers,</span>
+<span id="cb2-6">    get_neighbors,</span>
+<span id="cb2-7">    max_hops<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb2-8">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-83-3"><strong>Procedure 83.3 (Include a “No Valid Answer” Question in Every Retrieval Benchmark).</strong> <em>When to use:</em> any benchmark comparing retrieval methods, on any domain.</p>
+<div id="lst-capstone-kg-no-answer" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-kg-no-answer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;83.3: An unanswerable question checks for honest failure, not fabrication
+</figcaption>
+<div aria-describedby="lst-capstone-kg-no-answer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Design at least one benchmark question with NO valid
+  answer in the graph.
+Both retrieval methods should correctly report "not found."
+A method that fabricates a plausible-looking but false
+  answer here has failed a more important check than any
+  answerable question could reveal.</code></pre>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="83.5">
+<h2 data-number="83.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">83.5</span> Worked Example</h2>
+<p>A knowledge graph built from scratch from 12 short passages about AI research papers and their citations: an entirely new domain, extraction validated per Procedure 83.1:</p>
+<div id="lst-capstone-kg-worked-build" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-kg-worked-build-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;83.4: Extraction, then validation against source text
+</figcaption>
+<div aria-describedby="lst-capstone-kg-worked-build-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">graph <span class="op">=</span> extract_and_validate(</span>
+<span id="cb4-2">    passages,</span>
+<span id="cb4-3">    entity_types<span class="op">=</span>[<span class="st">"PERSON"</span>, <span class="st">"PAPER"</span>],</span>
+<span id="cb4-4">    relation_types<span class="op">=</span>[</span>
+<span id="cb4-5">        <span class="st">"AUTHORED_BY"</span>,</span>
+<span id="cb4-6">        <span class="st">"CITES"</span>,</span>
+<span id="cb4-7">    ],</span>
+<span id="cb4-8">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>13 nodes (7 authors, 6 papers), 15 edges: every <code>AUTHORED_BY</code>/<code>CITES</code> edge validated against its source passage.</strong></p>
+<p>A 6-question benchmark (3 single-hop, 3 multi-hop), scored with Chapter 82’s exact evaluation methodology, unmodified:</p>
+<div id="lst-capstone-kg-worked-benchmark" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-kg-worked-benchmark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;83.5: Same scoring functions as Chapter 82, new domain
+</figcaption>
+<div aria-describedby="lst-capstone-kg-worked-benchmark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">results <span class="op">=</span> [</span>
+<span id="cb5-2">    score_both_pipelines(q, vector_rag, graph_rag)</span>
+<span id="cb5-3">    <span class="cf">for</span> q <span class="kw">in</span> citation_benchmark</span>
+<span id="cb5-4">]</span>
+<span id="cb5-5">aggregate_by_type(results)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question type (n=3 each)</th>
+<th>Vector-RAG precision</th>
+<th>Vector-RAG recall</th>
+<th>GraphRAG precision</th>
+<th>GraphRAG recall</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Single-hop</td>
+<td>0.167</td>
+<td>0.833</td>
+<td><strong>0.350</strong></td>
+<td><strong>1.000</strong></td>
+</tr>
+<tr class="even">
+<td>Multi-hop</td>
+<td>0.343</td>
+<td>0.750</td>
+<td><strong>0.800</strong></td>
+<td><strong>1.000</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Compare this directly against Chapter 82’s numbers on a completely different graph:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question type</th>
+<th>Chapter 82 (procurement graph)</th>
+<th>This capstone (citation graph)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Single-hop</td>
+<td>Vector 0.333/1.000 vs.&nbsp;Graph 0.333/1.000 (exact tie)</td>
+<td>Vector 0.167/0.833 vs.&nbsp;Graph 0.350/1.000 (modest GraphRAG edge)</td>
+</tr>
+<tr class="even">
+<td>Multi-hop</td>
+<td>Vector 0.167/0.312 vs.&nbsp;Graph 0.778/1.000</td>
+<td>Vector 0.343/0.750 vs.&nbsp;Graph 0.800/1.000</td>
+</tr>
+</tbody>
+</table>
+<p>The specific numbers differ (different graph, different questions, different gold labels) exactly as expected. What doesn’t differ is the <em>shape</em>: on both completely unrelated graphs, GraphRAG is at least as good as vector-RAG on single-hop questions (a tie on the procurement graph, a modest edge on the citation graph) and substantially better on multi-hop questions (both precision and recall clearly ahead, on both graphs). This reproduction, on data neither the extraction logic nor the retrieval methods nor the evaluation methodology had ever seen before, is stronger evidence for “GraphRAG helps specifically with relationship-shaped questions” than Chapter 82’s single benchmark alone could provide: a genuinely new test, not a re-run, and it confirmed the same pattern rather than contradicting it.</p>
+<p>The unanswerable-question check, designed independently for this new domain: a question about whether one researcher’s citation chain from a specific paper ever reaches another specific paper, where the starting paper has zero outgoing <code>CITES</code> edges in this corpus. <code>citation_chain_search</code> (Chapter 81’s <code>agentic_search</code>, reused with <strong>zero code changes</strong>) correctly stopped at the starting node and reported no match, rather than fabricating a plausible-looking but false chain. This wasn’t a question copied from an earlier chapter’s specific benchmark; it emerged naturally from designing an honest benchmark on genuinely new data, confirming Procedure 83.3’s practice generalises rather than being a one-off trick tied to the procurement graph’s specific structure.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<p>This capstone’s entire pipeline (extraction, Chapter 78’s pattern, or Amazon Comprehend/Bedrock at production scale; construction, a property graph, self-hosted or Amazon Neptune; retrieval, both vector-RAG and GraphRAG, benchmarked per Chapter 82’s methodology; and evaluation) maps directly onto a real AWS-hosted knowledge-graph deployment, with every architectural decision point (Chapter 77’s property-graph-vs-RDF choice, Chapter 82’s self-hosted-vs-managed choice) reusable unmodified for a new domain, exactly as this capstone demonstrated the underlying pipeline code itself reuses unmodified.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="83.6">
+<h2 data-number="83.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">83.6</span> History and Further Reading</h2>
+<p>This book’s Chapters 76, 77, 78, 80, 81, and 82 are the specific pieces this capstone reuses on new data; revisit any one for depth. Book 2’s capstone chapter’s scoping discipline (“every stage gets a real, if modest, version”) applies directly: extraction, construction, both retrieval strategies, and evaluation are all present and all genuinely measured on this new domain.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="83.7">
+<h2 data-number="83.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">83.7</span> How This Connects</h2>
+<p>This chapter builds on every chapter in this book’s knowledge-graphs section, specifically reusing <a href="/books/applied-ai-domains/ch78-knowledge-graph-construction" class="quarto-xref"><span>Chapter 78</span></a>’s extraction-with-validation discipline, <a href="/books/applied-ai-domains/ch81-graph-agentic-reasoning" class="quarto-xref"><span>Chapter 81</span></a>’s adaptive traversal function (unmodified), and <a href="/books/applied-ai-domains/ch82-evaluating-deploying-graph-llm-systems" class="quarto-xref"><span>Chapter 82</span></a>’s precision/recall-by-type evaluation methodology (unmodified). It is the terminal chapter of this book, and of the entire four-book series: it enables nothing further. It’s often confused with a capstone that just re-runs an earlier chapter’s exact pipeline on the exact same data and calls it a review. The point of building on genuinely new data is specifically to check generalisation, since a re-run of familiar data can’t reveal whether a pipeline generalises or was quietly overfit to one example.</p>
+</section>
+<section id="exercises" class="level2" data-number="83.8">
+<h2 data-number="83.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">83.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-83-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State this capstone’s core methodological claim (“reproducing the same shape of result on new data is stronger evidence than…”) in your own words.</p></li>
+<li id="ex-83-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three specific prior-chapter techniques this capstone reuses (extraction-with-validation, adaptive traversal, precision/recall-by-type evaluation) and state which one required zero code changes to work on the new domain.</p></li>
+<li id="ex-83-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the comparison table (Chapter 82’s exact single-hop tie vs.&nbsp;this capstone’s modest GraphRAG single-hop edge), explain why these two DIFFERENT specific numbers are still consistent with, rather than contradicting, the underlying claim that GraphRAG helps most on multi-hop questions.</p></li>
+<li id="ex-83-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the unanswerable-question result (the citation-chain search correctly stopping rather than fabricating a match), explain why this specific check, reappearing independently on new data, is stronger evidence of good benchmark-design habits than if the exact same unanswerable question had simply been copied from Chapter 82’s benchmark.</p></li>
+<li id="ex-83-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague argues “we already validated GraphRAG’s advantage in the earlier chapters; building a whole second benchmark on a new domain for the capstone is redundant busywork.” Using this chapter’s Motivation and Worked Example, write the two or three sentences you’d say in response.</p></li>
+<li id="ex-83-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 83.2 treats reusing prior code unmodified as a generalisation test. Describe what it would have meant, as a finding, if <code>citation_chain_search</code> had required code changes to work on the new citation graph. What would that have revealed about Chapter 81’s original traversal function?</p></li>
+<li id="ex-83-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Book 2’s capstone chapter’s scoping discipline once more, alongside this capstone’s own structure. Identify one specific way this knowledge-graphs capstone follows that discipline (every stage gets a real, if modest, version) and one way it differs in emphasis given its specific goal of testing generalisation rather than exercising the full data-science lifecycle.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="83.9">
+<h2 data-number="83.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">83.9</span> Mental Model</h2>
+<p>Every chapter in this book’s knowledge-graphs section taught one piece of a pipeline, each time on the same convenient example. This capstone is the check that the pieces weren’t secretly held together by that example’s specific quirks: extraction, traversal, retrieval, and evaluation all built again from nothing on a domain they’d never seen, reproducing the same <em>shape</em> of finding, not the same numbers, that the rest of the book found. That reproducibility is the actual deliverable of a capstone, more than any single new technique, and it is a fitting close to this entire four-book series: every chapter across all four books has insisted on measuring rather than assuming, and this final chapter’s whole contribution is measuring the same claim twice, on two datasets that share nothing but the underlying idea being tested, and watching it hold both times.</p>
+
+
+</section>

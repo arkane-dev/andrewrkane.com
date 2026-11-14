@@ -1,0 +1,354 @@
+<p>Most modelling failures are not algorithmic. They are about what the data scientist failed to notice. A data scientist ships a model without noticing the target is heavily imbalanced, that two features are nearly redundant, or that a column silently changed units after a database migration. Exploratory Data Analysis (EDA) is the discipline that catches these problems before they become modelling problems. A structured, repeatable way of understanding a dataset before any modelling decision is made. It is not a step performed once. It is a mindset that a data scientist returns to after every surprising result. Every new feature. Every model iteration. This chapter builds that mindset into a repeatable sequence: look at each variable alone, look at pairs of variables, look at everything together, and write down what surprised you.</p>
+<section id="motivation" class="level2" data-number="9.1">
+<h2 data-number="9.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">9.1</span> Motivation</h2>
+<p>EDA is a structured conversation with a dataset. The data scientist asks questions and lets the data answer, in a natural progression:</p>
+<ul>
+<li><strong>What do I have?</strong> Shape, types, nulls, duplicates.</li>
+<li><strong>What does each variable look like on its own?</strong> Distributions, outliers, skew.</li>
+<li><strong>How do variables relate to each other?</strong> Correlations, conditional distributions.</li>
+<li><strong>How do variables relate to the target?</strong> The most modelling-relevant question.</li>
+<li><strong>What surprised me?</strong> The important question, asked last on purpose: only once the first four are answered is there enough context to recognise a genuine surprise.</li>
+</ul>
+<p>There is no fixed script for EDA. The path is determined by what the data shows at each step. A surprising distribution at the univariate stage sends the analysis back to the data source. An unexpected correlation at the bivariate stage generates a hypothesis worth testing before any model is trained.</p>
+</section>
+<section id="exposition" class="level2" data-number="9.2">
+<h2 data-number="9.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">9.2</span> Exposition</h2>
+<section id="univariate-analysis" class="level3" data-number="9.2.1">
+<h3 data-number="9.2.1" class="anchored" data-anchor-id="univariate-analysis"><span class="header-section-number">9.2.1</span> Univariate Analysis</h3>
+<p>Univariate analysis examines one variable in isolation. For numeric variables, four properties matter. <strong>Central tendency</strong>: mean and median. If they diverge, the distribution is skewed. <strong>Spread</strong>: standard deviation and interquartile range. A wide spread means the variable carries information a model can use. <strong>Shape</strong>: bell-shaped, skewed, bimodal, or uniform. <strong>Outliers</strong>: extreme values that could be data-entry errors, or unusual, informative cases. For categorical variables, the properties that matter are different. <strong>Cardinality</strong>: how many unique values. A free-text column with thousands of unique values needs different treatment than a five-level category. <strong>Frequency distribution</strong>: is one category dominant enough to make the variable nearly constant? <strong>Rare categories</strong>: values so infrequent that no model can learn a reliable pattern from them.</p>
+</section>
+<section id="bivariate-analysis" class="level3" data-number="9.2.2">
+<h3 data-number="9.2.2" class="anchored" data-anchor-id="bivariate-analysis"><span class="header-section-number">9.2.2</span> Bivariate Analysis</h3>
+<p>Bivariate analysis examines two variables together. The right chart depends on the types involved.</p>
+<ul>
+<li><strong>Two numeric variables.</strong> A scatter plot shows the relationship shape directly. A correlation coefficient summarises its strength: Pearson correlation for linear relationships, Spearman correlation for monotonic-but-non-linear ones.</li>
+<li><strong>A numeric variable against a categorical one.</strong> Box plots or violin plots show whether the numeric distribution shifts across categories. If it does, the categorical variable carries information.</li>
+<li><strong>Two categorical variables.</strong> Cross-tabulations and stacked bar charts reveal whether knowing one tells you something about the other.</li>
+</ul>
+<p>The most important bivariate analysis in a modelling context is <strong>any variable against the target</strong>: does this feature’s distribution differ between target classes, or correlate with target values? If it doesn’t, the feature is a weak candidate for the model regardless of what it measures, or how important the customer thinks it is.</p>
+</section>
+<section id="multivariate-analysis" class="level3" data-number="9.2.3">
+<h3 data-number="9.2.3" class="anchored" data-anchor-id="multivariate-analysis"><span class="header-section-number">9.2.3</span> Multivariate Analysis</h3>
+<p>Multivariate analysis looks at three or more variables simultaneously. A <strong>pairplot</strong> (seaborn’s <code>pairplot</code>) draws a scatter plot for every pair of numeric variables at once, with each variable’s own distribution on the diagonal, coloured by a categorical variable of interest. It’s the fastest way to see a dataset’s full correlation structure in one figure. A <strong>correlation heatmap</strong> shows the Pearson correlation between every pair of numeric variables at a glance: values near ±1 flag strong linear relationships, values near 0 flag independence. Critically, a pair correlated above roughly 0.95 is close to redundant. Including both in a model rarely helps and sometimes hurts.</p>
+</section>
+<section id="the-eda-mindset" class="level3" data-number="9.2.4">
+<h3 data-number="9.2.4" class="anchored" data-anchor-id="the-eda-mindset"><span class="header-section-number">9.2.4</span> The EDA Mindset</h3>
+<p>The most valuable output of an EDA session is not a chart. It is a written <strong>list of hypotheses and surprises</strong>: things that didn’t match expectations. Leads worth following up. Modelling decisions the data is suggesting. Writing these down as they arise, instead of trusting memory, is what turns EDA into a narrative that connects to the feature engineering decisions of Chapter 14.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="9.3">
+<h2 data-number="9.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">9.3</span> Trade-offs and Limits</h2>
+<p>How much EDA is enough? Enough to answer these questions:</p>
+<ul>
+<li>Are there data quality issues that need cleaning?</li>
+<li>Which features look promising?</li>
+<li>Are there obvious feature engineering opportunities?</li>
+<li>Is the target variable behaving as expected?</li>
+</ul>
+<p>Going further than that risks <strong>data snooping</strong>: learning so much about a dataset, including its eventual test set, that later feature choices are implicitly optimised for data the model should never have seen. Running full EDA on a complete dataset before any train/test split is a common mistake for exactly this reason: patterns discovered that way may not hold on new data.</p>
+<p>A second trade-off is visualisation versus summary statistics. Charts reveal shapes that statistics can hide entirely. The classic example is Anscombe’s quartet, four datasets with identical means, variances, and correlation coefficients but visibly different shapes when plotted. The rule is to visualise, even when the summary numbers look informative. A boxplot alone, for instance, can make a bimodal distribution look identical to a unimodal one. Boxplots show quartiles, not shape.</p>
+<p>The same trick is easy to reproduce with fresh data. That makes the point more easily than quoting Anscombe’s original numbers: construct four datasets from scratch, one point at a time, so that all four end up with the same mean, spread, and correlation.</p>
+<div id="lst-matched-stats-quartet" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-matched-stats-quartet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;9.1: Four datasets built by hand to share the same mean, spread, and correlation, but not the same shape
+</figcaption>
+<div aria-describedby="lst-matched-stats-quartet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"></span>
+<span id="cb1-3">rng <span class="op">=</span> np.random.default_rng(<span class="dv">11</span>)</span>
+<span id="cb1-4">x <span class="op">=</span> np.array([<span class="dv">2</span>, <span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">7</span>, <span class="dv">8</span>, <span class="dv">9</span>, <span class="dv">10</span>, <span class="dv">11</span>, <span class="dv">12</span>, <span class="dv">13</span>, <span class="dv">14</span>, <span class="dv">16</span>, <span class="dv">17</span>, <span class="dv">18</span>, <span class="dv">20</span>], dtype<span class="op">=</span><span class="bu">float</span>)</span>
+<span id="cb1-5"></span>
+<span id="cb1-6"><span class="co"># A: a genuine linear relationship, plus noise</span></span>
+<span id="cb1-7">y_linear <span class="op">=</span> <span class="fl">0.60</span> <span class="op">*</span> x <span class="op">+</span> <span class="fl">2.6</span> <span class="op">+</span> rng.normal(<span class="dv">0</span>, <span class="fl">2.9</span>, <span class="bu">len</span>(x))</span>
+<span id="cb1-8">target_mean, target_std <span class="op">=</span> y_linear.mean(), y_linear.std(ddof<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-9"></span>
+<span id="cb1-10"><span class="kw">def</span> match_stats(y_raw, mean, std):</span>
+<span id="cb1-11">    <span class="co">"""Rescale y_raw to a target mean and std. An affine rescale like</span></span>
+<span id="cb1-12"><span class="co">    this changes nothing about the shape, or the correlation with x."""</span></span>
+<span id="cb1-13">    z <span class="op">=</span> (y_raw <span class="op">-</span> y_raw.mean()) <span class="op">/</span> y_raw.std(ddof<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb1-14">    <span class="cf">return</span> z <span class="op">*</span> std <span class="op">+</span> mean</span>
+<span id="cb1-15"></span>
+<span id="cb1-16"><span class="co"># B: a curve, not a line</span></span>
+<span id="cb1-17">y_curved_raw <span class="op">=</span> <span class="op">-</span><span class="fl">0.0644</span> <span class="op">*</span> (x <span class="op">-</span> <span class="fl">13.97</span>) <span class="op">**</span> <span class="dv">2</span> <span class="op">+</span> <span class="dv">40</span> <span class="op">+</span> rng.normal(<span class="dv">0</span>, <span class="fl">0.5</span>, <span class="bu">len</span>(x))</span>
+<span id="cb1-18">y_curved <span class="op">=</span> match_stats(y_curved_raw, target_mean, target_std)</span>
+<span id="cb1-19"></span>
+<span id="cb1-20"><span class="co"># C: the same line as A, with one point pulled far off it</span></span>
+<span id="cb1-21">y_outlier_raw <span class="op">=</span> <span class="fl">0.60</span> <span class="op">*</span> x <span class="op">+</span> <span class="fl">2.6</span> <span class="op">+</span> rng.normal(<span class="dv">0</span>, <span class="fl">0.15</span>, <span class="bu">len</span>(x))</span>
+<span id="cb1-22">y_outlier_raw[<span class="dv">3</span>] <span class="op">+=</span> <span class="fl">9.74</span></span>
+<span id="cb1-23">y_outlier <span class="op">=</span> match_stats(y_outlier_raw, target_mean, target_std)</span>
+<span id="cb1-24"></span>
+<span id="cb1-25"><span class="co"># D: x is nearly constant except for one high-leverage point</span></span>
+<span id="cb1-26">rng2 <span class="op">=</span> np.random.default_rng(<span class="dv">1186</span>)</span>
+<span id="cb1-27">x_leverage <span class="op">=</span> np.full(<span class="bu">len</span>(x), <span class="fl">9.681</span>)</span>
+<span id="cb1-28">x_leverage[:<span class="op">-</span><span class="dv">1</span>] <span class="op">+=</span> rng2.normal(<span class="dv">0</span>, <span class="fl">0.05</span>, <span class="bu">len</span>(x) <span class="op">-</span> <span class="dv">1</span>)</span>
+<span id="cb1-29">x_leverage[<span class="op">-</span><span class="dv">1</span>] <span class="op">=</span> <span class="fl">9.681</span> <span class="op">+</span> <span class="fl">20.79</span></span>
+<span id="cb1-30">x_leverage <span class="op">=</span> match_stats(x_leverage, x.mean(), x.std(ddof<span class="op">=</span><span class="dv">1</span>))</span>
+<span id="cb1-31"></span>
+<span id="cb1-32">y_leverage_raw <span class="op">=</span> target_mean <span class="op">+</span> rng2.normal(<span class="dv">0</span>, <span class="fl">0.4</span>, <span class="bu">len</span>(x))</span>
+<span id="cb1-33">y_leverage_raw[<span class="op">-</span><span class="dv">1</span>] <span class="op">=</span> <span class="fl">11.896</span></span>
+<span id="cb1-34">y_leverage <span class="op">=</span> match_stats(y_leverage_raw, target_mean, target_std)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Running that against the actual generated data confirms the match: all four datasets land at mean <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi><mo>≈</mo><mn>11.07</mn></mrow><annotation encoding="application/x-tex">x \approx 11.07</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">11.07</span></span></span></span>, mean <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>≈</mo><mn>9.69</mn></mrow><annotation encoding="application/x-tex">y \approx 9.69</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6776em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">9.69</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>std</mtext><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>≈</mo><mn>5.35</mn></mrow><annotation encoding="application/x-tex">\text{std}(x) \approx 5.35</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">std</span></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">5.35</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>std</mtext><mo stretchy="false">(</mo><mi>y</mi><mo stretchy="false">)</mo><mo>≈</mo><mn>3.70</mn></mrow><annotation encoding="application/x-tex">\text{std}(y) \approx 3.70</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord text"><span class="mord">std</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">3.70</span></span></span></span>, and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi><mo>≈</mo><mn>0.73</mn></mrow><annotation encoding="application/x-tex">r \approx 0.73</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.73</span></span></span></span>, agreeing to two decimal places. <a href="#fig-matched-stats-quartet" class="quarto-xref">Figure&nbsp;<span>9.1</span></a> plots all four, each with the identical best-fit line drawn on top.</p>
+<div id="fig-matched-stats-quartet" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-matched-stats-quartet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch09/matched-stats-quartet.png" class="img-fluid figure-img" style="width:77.0%" alt="Four datasets built to share the same mean, spread, and correlation. A summary table would report the same four numbers for every one of them." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-matched-stats-quartet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;9.1: Four datasets built to share the same mean, spread, and correlation. A summary table would report the same four numbers for every one of them.
+</figcaption>
+</figure>
+</div>
+<p>Panel A is the honest linear relationship the summary statistics describe. Panel B is a curve, not a line, that happens to produce the same correlation coefficient over this x-range. Panel C is the same line as A with a single point dragged far off it. Panel D is barely a relationship at all: fourteen points stacked at almost the same x-value, with one distant point single-handedly generating the entire correlation. A table of summary statistics reports the same four rows for all of them. Only the chart tells them apart.</p>
+</section>
+<section id="procedures" class="level2" data-number="9.4">
+<h2 data-number="9.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">9.4</span> Procedures</h2>
+<p id="proc-9-1"><strong>Procedure 9.1 (Profile a New DataFrame Fast).</strong> <em>When to use:</em> the first five minutes with any new dataset, before writing a single line of analysis.</p>
+<div id="lst-quick-profile" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-quick-profile-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;9.2: A reusable fast-profiling function for any new dataframe
+</figcaption>
+<div aria-describedby="lst-quick-profile-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="kw">def</span> quick_profile(df: pd.DataFrame) <span class="op">-&gt;</span> <span class="va">None</span>:</span>
+<span id="cb2-4">    <span class="bu">print</span>(<span class="ss">f"Shape: </span><span class="sc">{</span>df<span class="sc">.</span>shape[<span class="dv">0</span>]<span class="sc">}</span><span class="ss"> rows x </span><span class="sc">{</span>df<span class="sc">.</span>shape[<span class="dv">1</span>]<span class="sc">}</span><span class="ss"> columns"</span>)</span>
+<span id="cb2-5">    <span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Dtypes:</span><span class="ch">\n</span><span class="sc">{</span>df<span class="sc">.</span>dtypes<span class="sc">.</span>value_counts()<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb2-6">    <span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Duplicate rows: </span><span class="sc">{</span>df<span class="sc">.</span>duplicated()<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb2-7"></span>
+<span id="cb2-8">    missing <span class="op">=</span> df.isnull().<span class="bu">sum</span>()</span>
+<span id="cb2-9">    missing <span class="op">=</span> missing[missing <span class="op">&gt;</span> <span class="dv">0</span>].sort_values(ascending<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb2-10">    <span class="cf">if</span> <span class="bu">len</span>(missing):</span>
+<span id="cb2-11">        pct_missing <span class="op">=</span> (missing <span class="op">/</span> <span class="bu">len</span>(df) <span class="op">*</span> <span class="dv">100</span>).<span class="bu">round</span>(<span class="dv">1</span>)</span>
+<span id="cb2-12">        <span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Columns with missing values:</span><span class="ch">\n</span><span class="sc">{</span>pct_missing<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb2-13">    <span class="cf">else</span>:</span>
+<span id="cb2-14">        <span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">No missing values."</span>)</span>
+<span id="cb2-15"></span>
+<span id="cb2-16">    <span class="bu">print</span>(<span class="ss">f"</span><span class="ch">\n</span><span class="ss">Numeric summary:</span><span class="ch">\n</span><span class="sc">{</span>df<span class="sc">.</span>describe()<span class="sc">.</span>T<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb2-17"></span>
+<span id="cb2-18">quick_profile(df)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> running <code>.describe()</code> and stopping there. Summary statistics hide shape. Always follow up with a histogram, per Anscombe’s quartet above.</p>
+<p id="proc-9-2"><strong>Procedure 9.2 (Visualise the Missing-Value Pattern).</strong> <em>When to use:</em> immediately after <code>.info()</code> reveals nulls, to determine whether they are random or structural, e.g.&nbsp;a whole block of rows from one data source.</p>
+<div id="lst-missing-heatmap" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-missing-heatmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;9.3: A missing-value heatmap: bright cells mark missing entries
+</figcaption>
+<div aria-describedby="lst-missing-heatmap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb3-2"><span class="im">import</span> seaborn <span class="im">as</span> sns</span>
+<span id="cb3-3"></span>
+<span id="cb3-4">fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">4</span>))</span>
+<span id="cb3-5">sns.heatmap(</span>
+<span id="cb3-6">    df.isnull(),</span>
+<span id="cb3-7">    yticklabels<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb3-8">    cbar<span class="op">=</span><span class="va">False</span>,</span>
+<span id="cb3-9">    cmap<span class="op">=</span><span class="st">'viridis'</span>,</span>
+<span id="cb3-10">    ax<span class="op">=</span>ax,</span>
+<span id="cb3-11">)</span>
+<span id="cb3-12">ax.set_title(<span class="st">'Missing Value Map (bright = missing)'</span>)</span>
+<span id="cb3-13">plt.tight_layout()</span>
+<span id="cb3-14">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-9-3"><strong>Procedure 9.3 (Plot a Distribution).</strong> <em>When to use:</em> for every numeric column, before deciding on transforms or outlier handling.</p>
+<div id="lst-distribution" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-distribution-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;9.4: Histogram-plus-KDE and boxplot side by side for one numeric column
+</figcaption>
+<div aria-describedby="lst-distribution-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">4</span>))</span>
+<span id="cb4-2"></span>
+<span id="cb4-3">sns.histplot(</span>
+<span id="cb4-4">    df[<span class="st">'fare'</span>].dropna(), kde<span class="op">=</span><span class="va">True</span>, ax<span class="op">=</span>axes[<span class="dv">0</span>], color<span class="op">=</span><span class="st">'#4E79A7'</span></span>
+<span id="cb4-5">)</span>
+<span id="cb4-6">axes[<span class="dv">0</span>].axvline(</span>
+<span id="cb4-7">    df[<span class="st">'fare'</span>].mean(), color<span class="op">=</span><span class="st">'red'</span>, linestyle<span class="op">=</span><span class="st">'--'</span>, label<span class="op">=</span><span class="st">'mean'</span></span>
+<span id="cb4-8">)</span>
+<span id="cb4-9">axes[<span class="dv">0</span>].axvline(</span>
+<span id="cb4-10">    df[<span class="st">'fare'</span>].median(),</span>
+<span id="cb4-11">    color<span class="op">=</span><span class="st">'orange'</span>,</span>
+<span id="cb4-12">    linestyle<span class="op">=</span><span class="st">'--'</span>,</span>
+<span id="cb4-13">    label<span class="op">=</span><span class="st">'median'</span>,</span>
+<span id="cb4-14">)</span>
+<span id="cb4-15">axes[<span class="dv">0</span>].legend()</span>
+<span id="cb4-16"></span>
+<span id="cb4-17">sns.boxplot(x<span class="op">=</span>df[<span class="st">'fare'</span>], ax<span class="op">=</span>axes[<span class="dv">1</span>], color<span class="op">=</span><span class="st">'#59A14F'</span>)</span>
+<span id="cb4-18">plt.tight_layout()</span>
+<span id="cb4-19">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> judging shape from a boxplot alone. Boxplots hide bimodality. A two-peaked distribution can look identical to a one-peaked one in a boxplot. Always pair it with a histogram or KDE.</p>
+<p id="proc-9-4"><strong>Procedure 9.4 (Compute and Visualise a Correlation Matrix).</strong> <em>When to use:</em> once a dataset has more than a handful of numeric features and the full relationship structure needs to be seen at once.</p>
+<div id="lst-correlation-matrix" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-correlation-matrix-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;9.5: Correlation heatmap plus a flag for near-redundant feature pairs
+</figcaption>
+<div aria-describedby="lst-correlation-matrix-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb5-2"></span>
+<span id="cb5-3">corr <span class="op">=</span> df[numeric_cols].corr(method<span class="op">=</span><span class="st">'pearson'</span>)</span>
+<span id="cb5-4"></span>
+<span id="cb5-5">fig, ax <span class="op">=</span> plt.subplots(figsize<span class="op">=</span>(<span class="dv">8</span>, <span class="dv">7</span>))</span>
+<span id="cb5-6">mask <span class="op">=</span> np.triu(np.ones_like(corr, dtype<span class="op">=</span><span class="bu">bool</span>))</span>
+<span id="cb5-7">sns.heatmap(</span>
+<span id="cb5-8">    corr,</span>
+<span id="cb5-9">    mask<span class="op">=</span>mask,</span>
+<span id="cb5-10">    annot<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb5-11">    fmt<span class="op">=</span><span class="st">'.2f'</span>,</span>
+<span id="cb5-12">    cmap<span class="op">=</span><span class="st">'coolwarm'</span>,</span>
+<span id="cb5-13">    center<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb5-14">    square<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb5-15">    linewidths<span class="op">=</span><span class="fl">0.5</span>,</span>
+<span id="cb5-16">    ax<span class="op">=</span>ax,</span>
+<span id="cb5-17">)</span>
+<span id="cb5-18">plt.tight_layout()</span>
+<span id="cb5-19">plt.show()</span>
+<span id="cb5-20"></span>
+<span id="cb5-21">high_corr <span class="op">=</span> corr.<span class="bu">abs</span>().unstack().sort_values(ascending<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb5-22">high_corr <span class="op">=</span> high_corr[(high_corr <span class="op">&lt;</span> <span class="fl">1.0</span>) <span class="op">&amp;</span> (high_corr <span class="op">&gt;</span> <span class="fl">0.9</span>)]</span>
+<span id="cb5-23"><span class="bu">print</span>(high_corr.drop_duplicates())</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> using Pearson correlation on a monotonic-but-non-linear relationship (e.g.&nbsp;<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>=</mo><msup><mi>x</mi><mn>2</mn></msup></mrow><annotation encoding="application/x-tex">y = x^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span></span></span></span> restricted to <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi><mo>&gt;</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">x &gt; 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.5782em;vertical-align:-0.0391em;"></span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&gt;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>) and concluding “no relationship” from a low score. Switch to <code>method='spearman'</code> when a non-linear monotonic relationship is suspected, or look at the scatter plot.</p>
+<p id="proc-9-5"><strong>Procedure 9.5 (Detect Outliers).</strong> <em>When to use:</em> after a distribution’s shape has already been seen visually, when a repeatable, code-based flag is needed instead of eyeballing.</p>
+<div id="lst-outliers" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-outliers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;9.6: IQR-rule and z-score outlier flags as reusable functions
+</figcaption>
+<div aria-describedby="lst-outliers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> scipy <span class="im">import</span> stats</span>
+<span id="cb6-2"></span>
+<span id="cb6-3"><span class="kw">def</span> iqr_outliers(series: pd.Series, k: <span class="bu">float</span> <span class="op">=</span> <span class="fl">1.5</span>) <span class="op">-&gt;</span> pd.Series:</span>
+<span id="cb6-4">    <span class="co">"""Flag values outside [Q1 - k*IQR, Q3 + k*IQR]."""</span></span>
+<span id="cb6-5">    q1, q3 <span class="op">=</span> series.quantile([<span class="fl">0.25</span>, <span class="fl">0.75</span>])</span>
+<span id="cb6-6">    iqr <span class="op">=</span> q3 <span class="op">-</span> q1</span>
+<span id="cb6-7">    lower, upper <span class="op">=</span> q1 <span class="op">-</span> k <span class="op">*</span> iqr, q3 <span class="op">+</span> k <span class="op">*</span> iqr</span>
+<span id="cb6-8">    <span class="cf">return</span> (series <span class="op">&lt;</span> lower) <span class="op">|</span> (series <span class="op">&gt;</span> upper)</span>
+<span id="cb6-9"></span>
+<span id="cb6-10"><span class="kw">def</span> zscore_outliers(</span>
+<span id="cb6-11">    series: pd.Series, threshold: <span class="bu">float</span> <span class="op">=</span> <span class="fl">3.0</span></span>
+<span id="cb6-12">) <span class="op">-&gt;</span> pd.Series:</span>
+<span id="cb6-13">    <span class="co">"""Flag values more than `threshold` std devs from the mean."""</span></span>
+<span id="cb6-14">    z <span class="op">=</span> np.<span class="bu">abs</span>(stats.zscore(series.dropna()))</span>
+<span id="cb6-15">    flags <span class="op">=</span> pd.Series(z <span class="op">&gt;</span> threshold, index<span class="op">=</span>series.dropna().index)</span>
+<span id="cb6-16">    <span class="cf">return</span> flags.reindex(series.index, fill_value<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb6-17"></span>
+<span id="cb6-18">mask <span class="op">=</span> iqr_outliers(df[<span class="st">'fare'</span>])</span>
+<span id="cb6-19"><span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span>mask<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">}</span><span class="ss"> outliers (</span><span class="sc">{</span>mask<span class="sc">.</span>mean()<span class="sc">:.1%}</span><span class="ss"> of rows)"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> deleting every flagged outlier automatically. An outlier is a data point to <em>investigate</em>, not always to remove: it might be a data entry error worth fixing or deleting, or a rare but valid case worth keeping so the model can learn from it.</p>
+<p id="proc-9-6"><strong>Procedure 9.6 (Compare a Numeric Variable Across a Categorical Target).</strong> <em>When to use:</em> the single most useful bivariate check before modelling: does this feature separate the target classes?</p>
+<div id="lst-numeric-vs-target" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-numeric-vs-target-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;9.7: Visual and statistical checks for whether a feature separates target classes
+</figcaption>
+<div aria-describedby="lst-numeric-vs-target-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">sns.kdeplot(</span>
+<span id="cb7-2">    data<span class="op">=</span>df, x<span class="op">=</span><span class="st">'fare'</span>, hue<span class="op">=</span><span class="st">'survived'</span>, fill<span class="op">=</span><span class="va">True</span>, common_norm<span class="op">=</span><span class="va">False</span></span>
+<span id="cb7-3">)</span>
+<span id="cb7-4"></span>
+<span id="cb7-5">group_a <span class="op">=</span> df[df[<span class="st">'survived'</span>] <span class="op">==</span> <span class="dv">1</span>][<span class="st">'fare'</span>].dropna()</span>
+<span id="cb7-6">group_b <span class="op">=</span> df[df[<span class="st">'survived'</span>] <span class="op">==</span> <span class="dv">0</span>][<span class="st">'fare'</span>].dropna()</span>
+<span id="cb7-7">t_stat, p_value <span class="op">=</span> stats.ttest_ind(</span>
+<span id="cb7-8">    group_a, group_b, equal_var<span class="op">=</span><span class="va">False</span></span>
+<span id="cb7-9">)</span>
+<span id="cb7-10">signal <span class="op">=</span> (</span>
+<span id="cb7-11">    <span class="st">'likely informative'</span> <span class="cf">if</span> p_value <span class="op">&lt;</span> <span class="fl">0.05</span> <span class="cf">else</span> <span class="st">'weak/no signal'</span></span>
+<span id="cb7-12">)</span>
+<span id="cb7-13"><span class="bu">print</span>(<span class="ss">f"p-value: </span><span class="sc">{</span>p_value<span class="sc">:.2e}</span><span class="ss">  -&gt;  </span><span class="sc">{</span>signal<span class="sc">}</span><span class="ss">"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="9.5">
+<h2 data-number="9.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">9.5</span> Worked Example</h2>
+<p>The tutorial notebook runs a complete, structured EDA on the Titanic passenger dataset (891 rows), following exactly the inspect-univariate-bivariate-multivariate-summarise structure above. The first inspection pass (Procedure 9.1 plus a missing-value heatmap, <a href="#lst-missing-heatmap" class="quarto-xref">Listing&nbsp;<span>9.3</span></a>) turns up three findings that shape everything downstream. <code>age</code> is missing for <strong>19.9%</strong> of passengers, <code>deck</code> for <strong>77.2%</strong>, and <code>embarked</code>/<code>embark_town</code> for 2 rows, few enough to drop safely. <code>age</code> needs imputation, and <code>deck</code> is close to unusable as a raw feature.</p>
+<p>Target analysis comes next, because the target’s own behaviour constrains every metric choice later in the book. Only <strong>38.4%</strong> of passengers survived. That’s a real but moderate imbalance, not the extreme kind that forces specialised techniques. But it’s still enough that accuracy alone would be a misleading metric (Chapter 2’s precision/recall framing).</p>
+<p>Univariate analysis of the numeric features shows <code>fare</code> is heavily right-skewed (skewness <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mn>4.79</mn></mrow><annotation encoding="application/x-tex">\approx 4.79</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">4.79</span></span></span></span>: a small number of very expensive tickets stretch the distribution’s tail), while <code>age</code> is close to symmetric (skewness <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mn>0.39</mn></mrow><annotation encoding="application/x-tex">\approx 0.39</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.39</span></span></span></span>). That skew is not a curiosity. It is the direct reason for log-transforming <code>fare</code> as a feature engineering step, an idea that resurfaces in Chapter 14.</p>
+<p>Bivariate analysis against the target produces the chapter’s clearest signal:</p>
+<div id="lst-survival-by-sex-class" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-survival-by-sex-class-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;9.8: Survival rate by sex and by passenger class
+</figcaption>
+<div aria-describedby="lst-survival-by-sex-class-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1">df.groupby(<span class="st">'sex'</span>)[<span class="st">'survived'</span>].mean()</span>
+<span id="cb8-2">df.groupby(<span class="st">'pclass'</span>)[<span class="st">'survived'</span>].mean()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Run against the actual dataset, this returns a female survival rate of <strong>74.2%</strong> against a male survival rate of <strong>18.9%</strong>. That’s a 55-point gap. It makes sex the strongest single predictor in the dataset, visibly reflecting the historical “women and children first” evacuation policy. Passenger class shows the same kind of gradient: <strong>63.0%</strong> survival in 1st class, <strong>47.3%</strong> in 2nd, and <strong>24.2%</strong> in 3rd. A two-sample t-test comparing fares between survivors (mean £48.40) and non-survivors (mean £22.12) returns <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>≈</mo><mn>6.1</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>15</mn></mrow></msup></mrow><annotation encoding="application/x-tex">p \approx 6.1 \times 10^{-15}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6776em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">6.1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">15</span></span></span></span></span></span></span></span></span></span></span></span>. That’s an overwhelmingly significant difference, consistent with fare acting as a proxy for class and cabin location.</p>
+<p>The multivariate correlation pass (Procedure 9.4) against <code>survived</code> quantifies what the bivariate charts already suggested: <code>pclass</code> correlates at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>0.34</mn></mrow><annotation encoding="application/x-tex">-0.34</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">−</span><span class="mord">0.34</span></span></span></span> (higher class number, i.e.&nbsp;lower status, means lower survival), <code>fare</code> at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>+</mo><mn>0.26</mn></mrow><annotation encoding="application/x-tex">+0.26</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">+</span><span class="mord">0.26</span></span></span></span>, and <code>age</code> at only <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>0.08</mn></mrow><annotation encoding="application/x-tex">-0.08</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">−</span><span class="mord">0.08</span></span></span></span>. That’s a weak marginal effect on its own, one that the notebook’s final multivariate step shows is misleading in isolation. Splitting age distributions by both class and survival status reveals a “children first” effect concentrated specifically in 1st and 2nd class, invisible in the marginal correlation and only visible once class is held fixed. That’s exactly the kind of pattern multivariate analysis exists to surface.</p>
+<p>The notebook closes not with a chart but with a written five-point summary. Target imbalance requires imbalance-aware metrics. Sex is the strongest predictor. Class interacts with sex, rather than acting independently. Fare needs a log transform. And age’s 19.9% missingness should be handled with class-conditional median imputation, plus a <code>was_missing</code> indicator flag, rather than a single global fill value. That summary, not any individual chart, is the actual deliverable EDA hands to Chapter 14.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><span class="co"># SageMaker Data Wrangler generates a "Data Quality and</span></span>
+<span id="cb9-2"><span class="co"># Insights Report" (missing values, target leakage,</span></span>
+<span id="cb9-3"><span class="co"># duplicate rows, correlations, and outliers) without</span></span>
+<span id="cb9-4"><span class="co"># hand-written pandas.</span></span>
+<span id="cb9-5"></span>
+<span id="cb9-6"><span class="co"># SageMaker Studio notebooks run the same pandas/matplotlib/</span></span>
+<span id="cb9-7"><span class="co"># seaborn workflow shown above, against data pulled directly</span></span>
+<span id="cb9-8"><span class="co"># from S3 or Athena:</span></span>
+<span id="cb9-9"><span class="im">import</span> sagemaker</span>
+<span id="cb9-10"><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb9-11"></span>
+<span id="cb9-12">session <span class="op">=</span> sagemaker.Session()</span>
+<span id="cb9-13">bucket <span class="op">=</span> session.default_bucket()</span>
+<span id="cb9-14"><span class="co"># Requires s3fs installed</span></span>
+<span id="cb9-15">df <span class="op">=</span> pd.read_csv(<span class="ss">f"s3://</span><span class="sc">{</span>bucket<span class="sc">}</span><span class="ss">/raw/dataset.csv"</span>)</span></code></pre></div>
+<p><strong>When to prefer SageMaker Data Wrangler:</strong> when a shareable, automatically-generated data quality report is needed for stakeholders, or when the dataset is too large to comfortably profile locally. For a single analyst doing hands-on exploration, notebook pandas and seaborn are faster to iterate with.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="9.6">
+<h2 data-number="9.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">9.6</span> History and Further Reading</h2>
+<p>Thakur’s early chapters give a practical, code-first approach to EDA that this chapter’s procedures closely mirror <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Burkov’s second chapter covers the same territory from a more statistical angle, useful as a complementary framing of skewness, spread, and correlation <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019, 15–25</a>)</span>. Anscombe’s quartet, four datasets sharing identical means, variances, and correlations yet visibly different in shape, is worth a five-minute read on its own. It’s the single best reason for the “always visualise” rule in this chapter’s Trade-offs section. The seaborn documentation gallery is also worth bookmarking directly. Each example chart answers a different EDA question, and the plot type decision guide in Appendix A cross-references it.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="9.7">
+<h2 data-number="9.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">9.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 7 (data must be clean before EDA is meaningful) and Chapter 6 (pandas, matplotlib, and seaborn are the toolkit EDA runs on). It enables Chapter 14 (feature engineering, where EDA’s findings become concrete transformations) and Chapter 11 (choosing which model families are worth trying, informed by what the data’s shape and relationships look like). It is often confused with feature engineering. But EDA is <em>observing</em>, while feature engineering is <em>transforming</em>. EDA’s job is to inform the engineering decisions Chapter 14 makes. Not to make them.</p>
+</section>
+<section id="exercises" class="level2" data-number="9.8">
+<h2 data-number="9.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">9.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-9-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> List the five questions this chapter’s EDA progression asks, in order, and explain in one sentence why “what surprises me?” is placed last rather than first.</p></li>
+<li id="ex-9-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A dataset’s <code>age</code> column has a mean of 29.7 and a median of 24.0. What does the gap between them suggest about the distribution’s shape, and which single chart would confirm it?</p></li>
+<li id="ex-9-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-quick-profile" class="quarto-xref">Listing&nbsp;<span>9.2</span></a> as a starting point, run it against a dataset of your choosing and report which columns, if any, have more than 10% missing values.</p></li>
+<li id="ex-9-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-survival-by-sex-class" class="quarto-xref">Listing&nbsp;<span>9.8</span></a>’s grouping pattern, compute the Titanic survival rate broken down by <code>embarked</code> instead of <code>sex</code>. State whether the spread across categories looks large enough to be a useful feature.</p></li>
+<li id="ex-9-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Reproduce <a href="#lst-correlation-matrix" class="quarto-xref">Listing&nbsp;<span>9.5</span></a>’s “near-redundant pair” check on the Titanic numeric features (<code>survived</code>, <code>pclass</code>, <code>age</code>, <code>sibsp</code>, <code>parch</code>, <code>fare</code>) and confirm whether any pair exceeds the 0.9 threshold.</p></li>
+<li id="ex-9-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The chapter found that <code>age</code>’s marginal correlation with <code>survived</code> was only <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mn>0.08</mn></mrow><annotation encoding="application/x-tex">-0.08</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">−</span><span class="mord">0.08</span></span></span></span>, yet a clear “children first” effect appeared once the data was split by class. Propose one other pair of Titanic features where you’d expect a similar Simpson’s-paradox-style effect. Explain your reasoning before checking it.</p></li>
+<li id="ex-9-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague proposes running full EDA, including test-set rows, before splitting the data, arguing “we’re just looking, not modelling yet.” Using this chapter’s data-snooping discussion, write two or three sentences explaining what could go wrong.</p></li>
+<li id="ex-9-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about Anscombe’s quartet (or its modern descendant, the “Datasaurus Dozen”). Pick one of the four Anscombe datasets. Describe, without plotting it, what summary statistics alone would have told you, and what they would have hidden.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="9.9">
+<h2 data-number="9.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">9.9</span> Mental Model</h2>
+<p>EDA is journalism for datasets. The data scientist is investigating a story: gathering evidence, following leads, being surprised by what turns up, and then writing up findings in a way that helps someone else make a decision. That “someone else” is often future-you, deciding how to build the model.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

@@ -1,0 +1,201 @@
+<p>Book 2’s transformers chapter built a transformer for sequences of word tokens. Images aren’t sequences. They’re 2D grids. For years, that mismatch was reason enough to assume transformers weren’t the right tool for vision, and CNNs (Chapters 68-69) kept winning. Vision Transformers (ViT) asked a simpler question than anyone expected to work: what if you just turn the image into a sequence?</p>
+<section id="motivation" class="level2" data-number="71.1">
+<h2 data-number="71.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">71.1</span> Motivation</h2>
+<p>Slice the image into fixed-size patches (16x16 pixels in the original ViT paper), flatten each patch into a vector, and linearly project it into an embedding, mechanically identical to how a word gets embedded before entering a transformer. Prepend a learnable <code>[CLS]</code> token (borrowed from BERT) whose output after the transformer becomes the classification signal, add positional embeddings, and feed the whole sequence through a standard transformer encoder, the exact same self-attention machinery from Book 2’s transformers chapter, completely unmodified. That’s the entire architectural novelty: nothing about the transformer itself changed, only how an image becomes its input. Worked Example 71 below trains a real ViT against a real CNN, head to head, and measures a result that directly complicates the “ViTs need more data” folklore.</p>
+</section>
+<section id="exposition" class="level2" data-number="71.2">
+<h2 data-number="71.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">71.2</span> Exposition</h2>
+<section id="the-inductive-bias-trade-off" class="level3" data-number="71.2.1">
+<h3 data-number="71.2.1" class="anchored" data-anchor-id="the-inductive-bias-trade-off"><span class="header-section-number">71.2.1</span> The Inductive Bias Trade-off</h3>
+<p>A CNN has two assumptions baked into its architecture: locality (a convolution kernel only looks at a small neighbourhood) and translation equivariance (the same kernel is applied everywhere). These assumptions happen to be true for natural images, so baking them in for free is a large efficiency win. The network doesn’t spend training data learning something already true by construction. A ViT has neither assumption: in the very first self-attention layer, every patch can attend to every other patch, no matter how spatially distant, giving it strictly more expressive freedom to learn long-range relationships a CNN would need many stacked layers to approximate. But that freedom has a cost: since nothing is assumed, everything, including “nearby pixels are usually related,” has to be learned from data. At the scale ViT was originally evaluated (ImageNet, 224x224 images, hundreds of patches, genuinely complex long-range structure), this data-hunger was real and well-documented: ViT needed either very large training sets or large-scale pretraining to match a well-tuned CNN.</p>
+</section>
+<section id="why-worked-example-71s-result-looks-like-it-contradicts-this" class="level3" data-number="71.2.2">
+<h3 data-number="71.2.2" class="anchored" data-anchor-id="why-worked-example-71s-result-looks-like-it-contradicts-this"><span class="header-section-number">71.2.2</span> Why Worked Example 71’s Result Looks Like It Contradicts This</h3>
+<p>Training both architectures on small, low-resolution digit images finds the ViT matching or beating the CNN at every data size tested, including down to very few training examples. That’s not the textbook story, and it isn’t a mistake. It’s a direct illustration of why the inductive-bias trade-off is a trade-off, not a fixed law. A CNN’s locality assumption is valuable specifically to the extent a task has complex spatial/long-range structure a model would otherwise struggle to discover from limited data. A tiny, low-resolution digit has almost none of that complexity. There simply isn’t much long-range structure to miss, so the “free” prior knowledge a CNN gets isn’t worth much here, while full attention across all patches from layer one may just be a more parameter-efficient way to capture the simple correlations that do exist. Scale the images up and add genuinely long-range structure, and the CNN’s advantage in low-data regimes should reappear.</p>
+</section>
+<section id="why-this-matters-for-diffusion-models" class="level3" data-number="71.2.3">
+<h3 data-number="71.2.3" class="anchored" data-anchor-id="why-this-matters-for-diffusion-models"><span class="header-section-number">71.2.3</span> Why This Matters for Diffusion Models</h3>
+<p>Chapter 73 covers diffusion models, many of which, particularly at large scale, use a transformer or transformer-hybrid architecture (“Diffusion Transformers,” DiT) as the denoising network, rather than the U-Net-style CNN architecture used in earlier diffusion work. The same inductive-bias argument explains why: with enough training data and compute, which large-scale image generation training runs genuinely have, the ViT’s greater flexibility to model arbitrary long-range pixel relationships becomes an advantage rather than a data-hunger liability, and the “free” locality assumption a CNN offers becomes less valuable relative to what a data-rich transformer can learn on its own.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="71.3">
+<h2 data-number="71.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">71.3</span> Trade-offs and Limits</h2>
+<p>Self-attention’s cost grows quadratically with sequence length (number of patches), while convolution’s cost grows linearly with image size. Larger images or smaller patches make ViT relatively more expensive than an equivalent CNN, which is why patch size is a real, consequential hyperparameter. A CNN’s inductive bias is a design choice reasoned about directly (this kernel looks at a 3x3 neighbourhood); a ViT’s spatial understanding is entirely learned, more flexible but harder to reason about a priori, generally requiring empirical testing rather than assumption, as Worked Example 71 does directly. This chapter’s toy-scale result is a genuine, honestly-observed finding, but it doesn’t overturn the well-documented, much larger-scale finding that ViTs need substantially more data or pretraining than CNNs to match performance on complex, high-resolution image tasks. Both things are true, at different scales.</p>
+</section>
+<section id="procedures" class="level2" data-number="71.4">
+<h2 data-number="71.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">71.4</span> Procedures</h2>
+<p id="proc-71-1"><strong>Procedure 71.1 (Choose a Patch Size).</strong> <em>When to use:</em> setting up a ViT for a new image size/resolution.</p>
+<div id="lst-vit-patch-size" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vit-patch-size-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;71.1: Sequence length and attention cost scale with patch count
+</figcaption>
+<div aria-describedby="lst-vit-patch-size-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="co"># Sequence length = (image_size / patch_size) ** 2</span></span>
+<span id="cb1-2"><span class="co"># Smaller patches: longer sequence, quadratically</span></span>
+<span id="cb1-3"><span class="co"># more attention compute, but finer spatial granularity.</span></span>
+<span id="cb1-4"><span class="cf">for</span> patch_size <span class="kw">in</span> [<span class="dv">8</span>, <span class="dv">16</span>, <span class="dv">32</span>]:</span>
+<span id="cb1-5">    n_patches <span class="op">=</span> (<span class="dv">224</span> <span class="op">//</span> patch_size) <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb1-6">    <span class="bu">print</span>(</span>
+<span id="cb1-7">        <span class="ss">f"patch_size=</span><span class="sc">{</span>patch_size<span class="sc">}</span><span class="ss">: </span><span class="sc">{</span>n_patches<span class="sc">}</span><span class="ss"> patches, "</span></span>
+<span id="cb1-8">        <span class="ss">f"attn cost ~</span><span class="sc">{</span>n_patches<span class="op">**</span><span class="dv">2</span><span class="sc">:,}</span><span class="ss">"</span></span>
+<span id="cb1-9">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> picking a patch size so small that sequence length (and therefore compute) balloons without any real gain in accuracy for the task’s actual level of detail.</p>
+<p id="proc-71-2"><strong>Procedure 71.2 (Add Positional Encodings for a 2D Patch Grid).</strong> <em>When to use:</em> building or modifying a ViT from scratch.</p>
+<div id="lst-vit-posenc" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vit-posenc-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;71.2: Learned positional embeddings, one row per patch position
+</figcaption>
+<div aria-describedby="lst-vit-posenc-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">n_patches, embed_dim <span class="op">=</span> <span class="dv">16</span>, <span class="dv">32</span></span>
+<span id="cb2-2"><span class="co"># +1 for [CLS]</span></span>
+<span id="cb2-3">pos_embed <span class="op">=</span> nn.Parameter(torch.zeros(<span class="dv">1</span>, n_patches <span class="op">+</span> <span class="dv">1</span>, embed_dim))</span>
+<span id="cb2-4">nn.init.trunc_normal_(pos_embed, std<span class="op">=</span><span class="fl">0.02</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting positional encodings entirely. Self-attention is permutation-invariant, so without positional information, shuffling the patches wouldn’t change the model’s output at all, throwing away spatial information a CNN gets for free through its architecture.</p>
+<p id="proc-71-3"><strong>Procedure 71.3 (Decide Between a CNN and a ViT for a Task).</strong> <em>When to use:</em> choosing an architecture for a new image task, informed by measurement rather than trend.</p>
+<div id="lst-vit-decide" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vit-decide-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;71.3: Factors that actually determine the right choice
+</figcaption>
+<div aria-describedby="lst-vit-decide-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Large labeled dataset or strong pretraining available,
+  complex/high-resolution images with genuine long-range
+  structure -&gt; ViT (or a pretrained ViT) likely wins.
+Small dataset, simple/low-resolution images, limited
+  compute budget -&gt; test BOTH: a CNN's inductive bias
+  may not be needed, as this chapter's own measured result
+  shows, but it may also matter a great deal on other tasks.</code></pre>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="71.5">
+<h2 data-number="71.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">71.5</span> Worked Example</h2>
+<p>A TinyViT (18,154 parameters) and a TinyCNN (5,130 parameters), trained identically on the same digit-classification dataset, evaluated at full training-set size:</p>
+<div id="lst-vit-worked-full" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vit-worked-full-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;71.4: Same task, same training budget, two architectures
+</figcaption>
+<div aria-describedby="lst-vit-worked-full-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">cnn_acc <span class="op">=</span> train_and_eval(TinyCNN(), full_train_data, epochs<span class="op">=</span><span class="dv">60</span>)</span>
+<span id="cb4-2">vit_acc <span class="op">=</span> train_and_eval(TinyViT(), full_train_data, epochs<span class="op">=</span><span class="dv">60</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>Parameters</th>
+<th>Final test accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>TinyCNN</td>
+<td>5,130</td>
+<td>0.8907</td>
+</tr>
+<tr class="even">
+<td>TinyViT</td>
+<td>18,154</td>
+<td><strong>0.9333</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The ViT wins outright on this task’s full training set, despite having no locality or translation-equivariance assumption built in. Full self-attention across all patches from layer one apparently captures this simple task’s correlations at least as well as the CNN’s hand-built spatial prior.</p>
+<p>Testing Exposition’s central question directly, does the ViT’s data-hunger reputation hold at small training-set sizes, or does it only apply at larger scale, by re-training both architectures at progressively smaller training-set sizes:</p>
+<div id="lst-vit-worked-scaling" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-vit-worked-scaling-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;71.5: The same two architectures, re-trained at three small training-set sizes
+</figcaption>
+<div aria-describedby="lst-vit-worked-scaling-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="cf">for</span> n_train <span class="kw">in</span> [<span class="dv">30</span>, <span class="dv">60</span>, <span class="dv">120</span>]:</span>
+<span id="cb5-2">    cnn_acc <span class="op">=</span> train_and_eval(TinyCNN(), train_data[:n_train])</span>
+<span id="cb5-3">    vit_acc <span class="op">=</span> train_and_eval(TinyViT(), train_data[:n_train])</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Training examples</th>
+<th>CNN test accuracy</th>
+<th>ViT test accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>30</td>
+<td>0.1019</td>
+<td><strong>0.2759</strong></td>
+</tr>
+<tr class="even">
+<td>60</td>
+<td>0.2907</td>
+<td><strong>0.4481</strong></td>
+</tr>
+<tr class="odd">
+<td>120</td>
+<td>0.4741</td>
+<td><strong>0.7222</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The ViT doesn’t just match the CNN at small data sizes. It beats it, by a widening margin as training data grows from 30 to 120 examples (0.276 vs.&nbsp;0.102 at n=30; 0.722 vs.&nbsp;0.474 at n=120). This is the opposite of “ViTs need more data than CNNs” folklore, measured directly rather than assumed, and Exposition explains exactly why: this task’s images are small and low-resolution enough that there is very little long-range spatial structure for the CNN’s locality assumption to usefully constrain. The “free” prior knowledge isn’t worth much when the task barely has structure worth being conservative about. This result does not contradict the well-documented ImageNet-scale finding that ViTs are data-hungry; it demonstrates that the inductive-bias trade-off is genuinely scale- and task-dependent, exactly as Trade-offs states, and the only way to know which regime a specific task falls into is to test both, as this Worked Example did.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker.pytorch <span class="im">import</span> PyTorch</span>
+<span id="cb6-2"></span>
+<span id="cb6-3">estimator <span class="op">=</span> PyTorch(</span>
+<span id="cb6-4">    entry_point<span class="op">=</span><span class="st">'train_vit.py'</span>, instance_type<span class="op">=</span><span class="st">'ml.g5.xlarge'</span>,</span>
+<span id="cb6-5">    <span class="co"># or 'cnn', for the comparison</span></span>
+<span id="cb6-6">    hyperparameters<span class="op">=</span>{<span class="st">'patch_size'</span>: <span class="dv">16</span>, <span class="st">'architecture'</span>: <span class="st">'vit'</span>},</span>
+<span id="cb6-7">)</span></code></pre></div>
+<p><strong>When this chapter’s measured result matters for a SageMaker training decision:</strong> defaulting to “ViT needs a huge pretraining dataset, so use a CNN for our small dataset” is exactly the assumption this chapter’s Worked Example measured false for a small-scale, low-complexity task. Procedure 71.3’s “test both” guidance is cheap to run as parallel SageMaker Training Jobs before committing a production architecture choice, regardless of which one folklore suggests.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="71.6">
+<h2 data-number="71.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">71.6</span> History and Further Reading</h2>
+<p>Dosovitskiy et al.’s “An Image is Worth 16x16 Words” <span class="citation" data-cites="dosovitskiy2020vit">(<a href="#ref-dosovitskiy2020vit" role="doc-biblioref">Dosovitskiy et al. 2020</a>)</span> is the original ViT paper. Peebles &amp; Xie’s “Scalable Diffusion Models with Transformers” (DiT) <span class="citation" data-cites="peebles2022dit">(<a href="#ref-peebles2022dit" role="doc-biblioref">Peebles and Xie 2022</a>)</span> covers the transformer backbones for diffusion previewed in Chapter 73.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="71.7">
+<h2 data-number="71.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">71.7</span> How This Connects</h2>
+<p>This chapter builds on Book 2’s transformers chapter (the transformer encoder used here, unmodified) and Chapters 68-69 (the CNN inductive-bias argument this chapter contrasts against, and the depth/receptive-field and transfer-learning context). It enables Chapter 73’s transformer-based diffusion denoisers and Chapter 74, where CLIP’s image encoder is commonly ViT-based. It’s often confused with “ViTs are always better than CNNs” or “ViTs always need more data than CNNs.” Both are scale- and task-dependent claims, not universal laws, and this chapter’s own Worked Example is direct evidence of that: the same architecture that needs massive pretraining at ImageNet scale beat a CNN outright on a small, low-resolution task with as few as 30 training examples.</p>
+</section>
+<section id="exercises" class="level2" data-number="71.8">
+<h2 data-number="71.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">71.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-71-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Describe the two steps that turn an image into a transformer-compatible sequence (patch embedding, <code>[CLS]</code> token + positional embeddings), and state what changes about the transformer encoder itself to process this input.</p></li>
+<li id="ex-71-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the two inductive-bias assumptions a CNN has that a ViT lacks, and state which one is responsible for a ViT’s self-attention being permutation-invariant without positional encodings.</p></li>
+<li id="ex-71-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s data-scaling table (ViT beating CNN by a widening margin from n=30 to n=120), explain what “widening margin” suggests about how each architecture’s sample efficiency scales with a small but growing amount of data, on this specific task.</p></li>
+<li id="ex-71-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s full-data result (CNN 0.8907 with 5,130 params vs.&nbsp;ViT 0.9333 with 18,154 params), explain why comparing final accuracy alone, without also noting the roughly 3.5x parameter-count difference, would give an incomplete picture of the trade-off between the two architectures on this task.</p></li>
+<li id="ex-71-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague says “don’t bother trying a ViT on our small dataset, everyone knows they need huge amounts of data.” Using this chapter’s Worked Example, write the two or three sentences you’d say in response.</p></li>
+<li id="ex-71-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 71.2 warns that forgetting positional encodings makes self-attention permutation-invariant. Describe concretely what would happen to a ViT’s predictions on the SAME image with its patches randomly shuffled, if positional encodings were accidentally omitted.</p></li>
+<li id="ex-71-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about the original ViT paper’s finding on pretraining dataset scale (JFT-300M vs.&nbsp;ImageNet-1k). Explain in your own words why the paper found ViT underperforming ResNet when pretrained on the smaller dataset, but outperforming it when pretrained on the much larger one, connecting this to this chapter’s inductive-bias argument.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="71.9">
+<h2 data-number="71.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">71.9</span> Mental Model</h2>
+<p>A CNN starts with a strong, correct guess about images, nearby things are related, and has to unlearn that guess if it’s ever wrong. A ViT starts with no guess at all and has to learn everything, including things a CNN gets for free. Whether that trade favours the CNN or the ViT depends entirely on how much genuinely complex structure the task has and how much data is available to learn it from, not on which architecture is “newer” or “more powerful” in the abstract. This chapter’s Worked Example is the concrete proof: the same architecture family that needs massive data at ImageNet scale won outright on a task simple enough that a CNN’s free prior knowledge barely mattered.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-dosovitskiy2020vit" class="csl-entry" role="listitem">
+Dosovitskiy, Alexey, Lucas Beyer, Alexander Kolesnikov, et al. 2020. <span>“An Image Is Worth 16x16 Words: Transformers for Image Recognition at Scale.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+<div id="ref-peebles2022dit" class="csl-entry" role="listitem">
+Peebles, William, and Saining Xie. 2022. <span>“Scalable Diffusion Models with Transformers.”</span> <em>IEEE/CVF International Conference on Computer Vision (ICCV)</em>, 4195–205.
+</div>
+</div>
+</section>

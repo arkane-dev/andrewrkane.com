@@ -1,0 +1,315 @@
+<p>Chapter 16 evaluated a classifier by comparing its prediction to a single ground-truth label, correct or incorrect, positive or negative. The whole apparatus of confusion matrices, precision, recall, and F1 depends on exactly one assumption: there is a single correct answer to compare against. That assumption collapses the moment a model generates open-ended text. Ask an LLM to summarise a contract, answer a support question, or draft an email, and there is no single “correct” output to diff against. Two completely different sentences can both be excellent answers. One sentence with a single wrong fact can be a terrible answer even if it’s 95% textually similar to a reference. Accuracy, as a concept, stops applying. This chapter builds the different toolkit needed in its place.</p>
+<section id="motivation" class="level2" data-number="32.1">
+<h2 data-number="32.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">32.1</span> Motivation</h2>
+<p>LLM evaluation quality lives on a spectrum from cheap-and-unreliable to expensive-and-trustworthy. Reference-based metrics (BLEU, ROUGE) are cheap, fast, and give a weak signal. LLM-as-judge is moderate cost with good signal. Human evaluation is expensive, slow, and gold-standard. Production systems rarely pick just one. They typically run automated LLM-judge evaluation continuously (cheap enough for every change) and human evaluation periodically, to calibrate the judge and catch what it misses. Benchmark suites (MMLU, HellaSwag) sit alongside these as a separate tool measuring general model capability, not a specific application’s quality. Worked Example 32 below measures exactly where reference-based metrics succeed and fail, using real computed scores rather than the intuition alone.</p>
+</section>
+<section id="exposition" class="level2" data-number="32.2">
+<h2 data-number="32.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">32.2</span> Exposition</h2>
+<section id="reference-based-metrics-bleu-and-rouge" class="level3" data-number="32.2.1">
+<h3 data-number="32.2.1" class="anchored" data-anchor-id="reference-based-metrics-bleu-and-rouge"><span class="header-section-number">32.2.1</span> Reference-Based Metrics: BLEU and ROUGE</h3>
+<p>BLEU (originally machine translation) and ROUGE (originally summarisation) both measure n-gram overlap between generated text and one or more references. ROUGE-1 counts overlapping unigrams. ROUGE-L finds the longest common subsequence. BLEU computes precision-weighted n-gram overlap with a brevity penalty. Their inadequacy for open-ended generation is structural, not incidental. They measure lexical overlap, not meaning. “The cat sat on the mat” and “A feline was resting on the rug” describe the same thing and share almost no n-grams, so ROUGE scores this pair low despite it being a faithful paraphrase. Conversely, a response that repeats most of a reference’s words but flips a single “not” is lexically near-identical and semantically opposite. Worked Example 32 measures both of these failures directly rather than asserting them. These metrics are still cheap and deterministic, which keeps them in use, but a high ROUGE/BLEU score should be treated as weak evidence of quality, and a low score as no evidence of poor quality.</p>
+</section>
+<section id="llm-as-judge-g-eval-style" class="level3" data-number="32.2.2">
+<h3 data-number="32.2.2" class="anchored" data-anchor-id="llm-as-judge-g-eval-style"><span class="header-section-number">32.2.2</span> LLM-as-Judge (G-Eval Style)</h3>
+<p>The core idea: use a strong LLM, prompted with a scoring rubric, to evaluate another model’s output. G-Eval (Liu et al., 2023) formalised this. Give the judge a task description, a concrete scoring rubric, and usually chain-of-thought instructions to reason before scoring. This works because modern LLMs have a strong enough model of language quality, factuality, and coherence to approximate a human evaluator at a fraction of the cost. But it doesn’t work perfectly, and its failure modes matter more than its mechanics. Position bias: in pairwise comparisons, judges systematically favour whichever response appears first, independent of quality. Mitigated by scoring both orderings and only trusting an agreeing verdict. Verbosity bias: judges tend to rate longer responses as better even when the extra length adds no value. Mitigated by explicit rubric instructions and post-hoc correlation checks between response length and score. Self-preference bias: a model used as judge tends to rate outputs from its own model family more favourably, even at equivalent quality. Mitigated by using a judge from a different family and periodically validating against human scores. None of this makes LLM-as-judge useless. It makes it a calibrated instrument, not an oracle.</p>
+</section>
+<section id="rag-specific-evaluation-ragas-style" class="level3" data-number="32.2.3">
+<h3 data-number="32.2.3" class="anchored" data-anchor-id="rag-specific-evaluation-ragas-style"><span class="header-section-number">32.2.3</span> RAG-Specific Evaluation (RAGAS-Style)</h3>
+<p>RAG (<a href="/books/modern-ai/ch31-rag-vector-databases" class="quarto-xref"><span>Chapter 31</span></a>) introduces failure modes generic quality metrics don’t catch. A model can write fluent, well-structured, entirely wrong answers by ignoring retrieved context, or retrieval can fetch irrelevant documents that never gave the model a chance to answer correctly. RAGAS (Es et al., 2023) decomposes RAG quality into four measurable components: faithfulness (is every claim in the answer supported by the retrieved context?), answer relevance (does the answer address the question asked?), context precision (of the retrieved chunks, how many were actually relevant?), and context recall (did retrieval fetch everything needed?). Faithfulness is the most important of the four for catching hallucination. A RAG system can have perfect retrieval and still hallucinate if the generator ignores the context, and faithfulness is what isolates that specific failure. Context precision/recall isolate retrieval quality specifically, telling whether a bad end-to-end answer was a retrieval problem or a generation problem.</p>
+</section>
+<section id="human-evaluation-and-inter-annotator-agreement" class="level3" data-number="32.2.4">
+<h3 data-number="32.2.4" class="anchored" data-anchor-id="human-evaluation-and-inter-annotator-agreement"><span class="header-section-number">32.2.4</span> Human Evaluation and Inter-Annotator Agreement</h3>
+<p>Despite the cost, human evaluation remains necessary for calibrating an LLM-judge rubric before trusting it at scale, evaluating dimensions judges are known to be unreliable on (subtle domain-specific factual errors, tone/brand fit), and high-stakes launches needing gold-standard sign-off. The statistic that makes human evaluation trustworthy is inter-annotator agreement. If two independent raters disagree constantly, either the task is genuinely ambiguous or the rating guidelines are unclear, and the resulting scores aren’t meaningful. Cohen’s kappa measures agreement beyond what chance would produce. Kappa above 0.6 is generally acceptable. Below 0.4 means the evaluation task needs clearer guidelines before its scores mean anything.</p>
+</section>
+<section id="benchmark-suites" class="level3" data-number="32.2.5">
+<h3 data-number="32.2.5" class="anchored" data-anchor-id="benchmark-suites"><span class="header-section-number">32.2.5</span> Benchmark Suites</h3>
+<p>MMLU, HellaSwag, TruthfulQA, GSM8K, and similar suites measure a model’s general capability on fixed, public question sets. They’re useful as a first filter when choosing a base model, but have two structural limits for production use: contamination (public benchmark questions frequently leak into training data, inflating scores) and irrelevance (a model’s MMLU score says almost nothing about how well it summarises a specific company’s support tickets). Treat benchmarks as a filter, never a substitute for evaluating the actual application.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="32.3">
+<h2 data-number="32.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">32.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Method</th>
+<th>Cost</th>
+<th>Reliability</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Reference-based (BLEU/ROUGE)</td>
+<td>Free, instant</td>
+<td>Low</td>
+<td>Sanity checks, translation-style tasks</td>
+</tr>
+<tr class="even">
+<td>LLM-as-judge</td>
+<td>Low–moderate</td>
+<td>Moderate–high, if calibrated</td>
+<td>Continuous evaluation, regression testing</td>
+</tr>
+<tr class="odd">
+<td>RAGAS-style metrics</td>
+<td>Low–moderate</td>
+<td>Moderate–high</td>
+<td>Isolating retrieval vs.&nbsp;generation failures</td>
+</tr>
+<tr class="even">
+<td>Human evaluation</td>
+<td>High, slow</td>
+<td>Highest, if agreement is good</td>
+<td>Calibration, high-stakes launches</td>
+</tr>
+<tr class="odd">
+<td>Benchmark suites</td>
+<td>Free–low</td>
+<td>N/A to a specific task</td>
+<td>Choosing a base model</td>
+</tr>
+</tbody>
+</table>
+<p>The general shape holds across every method here: cost and reliability move together, and there is no free lunch. The cheap methods (reference-based metrics, benchmarks) are cheap precisely because they measure something adjacent to quality rather than quality itself.</p>
+</section>
+<section id="procedures" class="level2" data-number="32.4">
+<h2 data-number="32.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">32.4</span> Procedures</h2>
+<p id="proc-32-1"><strong>Procedure 32.1 (Write a Good LLM-Judge Rubric).</strong> <em>When to use:</em> any time an LLM-as-judge scorer is being set up, before writing scoring code.</p>
+<div id="lst-eval-rubric" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-eval-rubric-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;32.1: A rubric template with the properties that make judge scores stable
+</figcaption>
+<div aria-describedby="lst-eval-rubric-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1">RUBRIC_TEMPLATE <span class="op">=</span> <span class="st">"""You are an expert evaluator scoring an</span></span>
+<span id="cb1-2"><span class="st">AI assistant's response.</span></span>
+<span id="cb1-3"><span class="st">Question: </span><span class="sc">{question}</span></span>
+<span id="cb1-4"><span class="st">Response: </span><span class="sc">{response}</span></span>
+<span id="cb1-5"></span>
+<span id="cb1-6"><span class="st">Score on </span><span class="sc">{dimension}</span><span class="st"> from 1 to 5 using this rubric:</span></span>
+<span id="cb1-7"><span class="st">1 = </span><span class="sc">{description_1}</span><span class="st">  ...  5 = </span><span class="sc">{description_5}</span></span>
+<span id="cb1-8"></span>
+<span id="cb1-9"><span class="st">Consider ONLY </span><span class="sc">{dimension}</span><span class="st">. Do not reward length, formatting,</span></span>
+<span id="cb1-10"><span class="st">or confidence unless the rubric explicitly asks for it.</span></span>
+<span id="cb1-11"></span>
+<span id="cb1-12"><span class="st">First write one or two sentences of reasoning. Then output exactly:</span></span>
+<span id="cb1-13"><span class="st">SCORE: &lt;integer 1-5&gt;</span></span>
+<span id="cb1-14"><span class="st">"""</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> asking for a bare numeric score with no reasoning step. This produces noisier, less consistent scores than reasoning-then-score. The extra tokens aren’t overhead. They’re what stabilises the judgment.</p>
+<p id="proc-32-2"><strong>Procedure 32.2 (Mitigate Position Bias in Pairwise Comparisons).</strong> <em>When to use:</em> any “which response is better, A or B?” evaluation.</p>
+<div id="lst-eval-debias" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-eval-debias-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;32.2: Only trust a verdict that survives order-swapping
+</figcaption>
+<div aria-describedby="lst-eval-debias-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> compare_debiased(</span>
+<span id="cb2-2">    question,</span>
+<span id="cb2-3">    response_a,</span>
+<span id="cb2-4">    response_b,</span>
+<span id="cb2-5">    model<span class="op">=</span>JUDGE_MODEL,</span>
+<span id="cb2-6">):</span>
+<span id="cb2-7">    winner_1, _ <span class="op">=</span> compare_responses(</span>
+<span id="cb2-8">        question,</span>
+<span id="cb2-9">        response_a,</span>
+<span id="cb2-10">        response_b,</span>
+<span id="cb2-11">        model<span class="op">=</span>model,</span>
+<span id="cb2-12">    )</span>
+<span id="cb2-13">    winner_2, _ <span class="op">=</span> compare_responses(</span>
+<span id="cb2-14">        question,</span>
+<span id="cb2-15">        response_b,</span>
+<span id="cb2-16">        response_a,</span>
+<span id="cb2-17">        model<span class="op">=</span>model,</span>
+<span id="cb2-18">    )</span>
+<span id="cb2-19">    winner_2_mapped <span class="op">=</span> {<span class="st">"A"</span>: <span class="st">"B"</span>, <span class="st">"B"</span>: <span class="st">"A"</span>, <span class="st">"TIE"</span>: <span class="st">"TIE"</span>}[winner_2]</span>
+<span id="cb2-20">    <span class="cf">return</span> winner_1 <span class="cf">if</span> winner_1 <span class="op">==</span> winner_2_mapped <span class="cf">else</span> <span class="st">"TIE"</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-32-3"><strong>Procedure 32.3 (Check for Verbosity Bias Post-Hoc).</strong> <em>When to use:</em> after collecting judge scores, as a standard sanity check.</p>
+<div id="lst-eval-verbosity" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-eval-verbosity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;32.3: Correlating response length with judge score
+</figcaption>
+<div aria-describedby="lst-eval-verbosity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb3-2"></span>
+<span id="cb3-3"><span class="kw">def</span> length_bias_check(responses, judge_scores):</span>
+<span id="cb3-4">    lengths <span class="op">=</span> [<span class="bu">len</span>(r.split()) <span class="cf">for</span> r <span class="kw">in</span> responses]</span>
+<span id="cb3-5">    correlation <span class="op">=</span> np.corrcoef(lengths, judge_scores)[<span class="dv">0</span>, <span class="dv">1</span>]</span>
+<span id="cb3-6">    <span class="cf">if</span> correlation <span class="op">&gt;</span> <span class="fl">0.3</span>:</span>
+<span id="cb3-7">        <span class="bu">print</span>(</span>
+<span id="cb3-8">            <span class="ss">f"Warning: scores correlate with length "</span></span>
+<span id="cb3-9">            <span class="ss">f"(r=</span><span class="sc">{</span>correlation<span class="sc">:.2f}</span><span class="ss">)"</span></span>
+<span id="cb3-10">        )</span>
+<span id="cb3-11">    <span class="cf">return</span> correlation</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-32-4"><strong>Procedure 32.4 (Compute RAGAS-Style Metrics).</strong> <em>When to use:</em> evaluating a RAG pipeline’s retrieval and generation quality separately.</p>
+<div id="lst-eval-ragas" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-eval-ragas-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;32.4: Production RAGAS evaluation via the ragas library
+</figcaption>
+<div aria-describedby="lst-eval-ragas-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> ragas <span class="im">import</span> evaluate</span>
+<span id="cb4-2"><span class="im">from</span> ragas.metrics <span class="im">import</span> (</span>
+<span id="cb4-3">    faithfulness,</span>
+<span id="cb4-4">    answer_relevancy,</span>
+<span id="cb4-5">    context_precision,</span>
+<span id="cb4-6">)</span>
+<span id="cb4-7"></span>
+<span id="cb4-8">results <span class="op">=</span> evaluate(</span>
+<span id="cb4-9">    <span class="co"># question, answer, contexts (the chunks actually retrieved)</span></span>
+<span id="cb4-10">    eval_dataset,</span>
+<span id="cb4-11">    metrics<span class="op">=</span>[faithfulness, answer_relevancy, context_precision],</span>
+<span id="cb4-12">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> passing the full document as <code>contexts</code> instead of the chunks the retriever actually returned. RAGAS is meant to evaluate what was retrieved, not the whole knowledge base, and evaluating against everything hides retrieval-quality problems.</p>
+</section>
+<section id="worked-example" class="level2" data-number="32.5">
+<h2 data-number="32.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">32.5</span> Worked Example</h2>
+<p>Three sentence pairs, each illustrating a specific claim from Exposition, are scored with hand-computed ROUGE-1 and ROUGE-L (unigram overlap and longest-common-subsequence overlap, both as F1):</p>
+<div id="lst-eval-worked-rouge" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-eval-worked-rouge-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;32.5: ROUGE-1 and ROUGE-L, computed directly, no external library
+</figcaption>
+<div aria-describedby="lst-eval-worked-rouge-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="kw">def</span> rouge1(reference, candidate):</span>
+<span id="cb5-2">    ref_c <span class="op">=</span> Counter(reference.lower().split())</span>
+<span id="cb5-3">    cand_c <span class="op">=</span> Counter(candidate.lower().split())</span>
+<span id="cb5-4">    overlap <span class="op">=</span> <span class="bu">sum</span>((ref_c <span class="op">&amp;</span> cand_c).values())</span>
+<span id="cb5-5">    <span class="co"># precision, recall, F1 from overlap / lengths</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Pair</th>
+<th>Reference</th>
+<th>Candidate</th>
+<th>ROUGE-1 F1</th>
+<th>ROUGE-L F1</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Faithful paraphrase</td>
+<td>“The cat sat on the mat”</td>
+<td>“A feline was resting on the rug”</td>
+<td><strong>0.308</strong></td>
+<td>0.308</td>
+</tr>
+<tr class="even">
+<td>One word flipped, opposite meaning</td>
+<td>“…is safe for patients…”</td>
+<td>“…is <strong>not</strong> safe for patients…”</td>
+<td><strong>0.947</strong></td>
+<td>0.947</td>
+</tr>
+<tr class="odd">
+<td>Verbose restatement, same content</td>
+<td>“Restart the server to apply the update.”</td>
+<td>(24-word expansion of the same instruction)</td>
+<td>0.345</td>
+<td>0.207</td>
+</tr>
+</tbody>
+</table>
+<p>The faithful paraphrase, genuinely correct, zero factual difference from the reference, scores 0.308, a middling-to-low ROUGE-1 F1, purely because “cat/feline,” “sat/resting,” and “mat/rug” share no surface form despite matching meaning exactly. The single-word negation, a response that is the factual opposite of the reference and would be dangerous if it were real medical guidance, scores 0.947, nearly a perfect ROUGE match, because eight of the nine reference words appear verbatim in the candidate and “not” is invisible to unigram/LCS overlap scoring. This is Exposition’s inadequacy claim measured, not asserted. On this pair, ROUGE ranks a dangerously wrong answer far above a completely correct one. The verbose restatement shows a different, subtler failure. Recall stays reasonable (0.429 for ROUGE-L, not shown in the table above but computed alongside F1) because most reference words appear somewhere in the much longer candidate, but precision collapses (0.136 for ROUGE-L) because the candidate pads the same content with filler words: exactly the mechanism behind LLM-as-judge’s verbosity bias from Exposition, visible here even in a metric that has nothing to do with an LLM judge.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># Bedrock's model evaluation feature: built-in</span></span>
+<span id="cb6-2"><span class="co"># automatic + human evaluation jobs</span></span>
+<span id="cb6-3"><span class="im">import</span> boto3</span>
+<span id="cb6-4"></span>
+<span id="cb6-5">client <span class="op">=</span> boto3.client(<span class="st">"bedrock"</span>)</span>
+<span id="cb6-6">client.create_evaluation_job(</span>
+<span id="cb6-7">    jobName<span class="op">=</span><span class="st">"rag-answer-quality-eval"</span>,</span>
+<span id="cb6-8">    evaluationConfig<span class="op">=</span>{<span class="st">"automated"</span>: {<span class="st">"datasetMetricConfigs"</span>: [</span>
+<span id="cb6-9">        {</span>
+<span id="cb6-10">            <span class="st">"taskType"</span>: <span class="st">"General"</span>,</span>
+<span id="cb6-11">            <span class="st">"dataset"</span>: {</span>
+<span id="cb6-12">                <span class="st">"name"</span>: <span class="st">"eval-set"</span>,</span>
+<span id="cb6-13">                <span class="st">"datasetLocation"</span>: s3_uri,</span>
+<span id="cb6-14">            },</span>
+<span id="cb6-15">            <span class="st">"metricNames"</span>: [</span>
+<span id="cb6-16">                <span class="st">"Builtin.Correctness"</span>,</span>
+<span id="cb6-17">                <span class="st">"Builtin.Helpfulness"</span>,</span>
+<span id="cb6-18">            ],</span>
+<span id="cb6-19">        },</span>
+<span id="cb6-20">    ]}},</span>
+<span id="cb6-21">    inferenceConfig<span class="op">=</span>{</span>
+<span id="cb6-22">        <span class="st">"models"</span>: [</span>
+<span id="cb6-23">            {<span class="st">"bedrockModel"</span>: {<span class="st">"modelIdentifier"</span>: model_arn}}</span>
+<span id="cb6-24">        ]</span>
+<span id="cb6-25">    },</span>
+<span id="cb6-26">)</span></code></pre></div>
+<p><strong>When to prefer Bedrock Model Evaluation:</strong> it runs both automated (LLM-judge-style) and human evaluation jobs against a chosen model without standing up custom judge-prompting infrastructure. The trade is less rubric-level control than Procedure 32.1’s hand-written prompt gives directly.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="32.6">
+<h2 data-number="32.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">32.6</span> History and Further Reading</h2>
+<p>Liu et al.’s “G-Eval” is the LLM-as-judge framework this chapter’s rubric design follows <span class="citation" data-cites="liu2023geval">(<a href="#ref-liu2023geval" role="doc-biblioref">Liu et al. 2023</a>)</span>. Es et al.’s “RAGAS” is the source paper for the four RAG-specific metrics in Exposition <span class="citation" data-cites="es2023ragas">(<a href="#ref-es2023ragas" role="doc-biblioref">Es et al. 2024</a>)</span>. Murphy (Advanced), Ch. on evaluation, gives related formal background on evaluation methodology more broadly <span class="citation" data-cites="murphy2023pmladvanced">(<a href="#ref-murphy2023pmladvanced" role="doc-biblioref">Murphy 2023</a>)</span>. Burkov’s <em>Hundred-Page Language Models Book</em>, Section 2.6, covers the classical language-model evaluation metrics (perplexity and friends) this chapter’s LLM-as-judge methods sit on top of <span class="citation" data-cites="burkov2025hundredpagellm">(<a href="#ref-burkov2025hundredpagellm" role="doc-biblioref">Burkov 2025</a>)</span>. Zheng et al.’s “Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena” documents position, verbosity, and self-preference bias empirically <span class="citation" data-cites="zheng2023mtbench">(<a href="#ref-zheng2023mtbench" role="doc-biblioref"><span class="nocase">Zheng et al.</span> 2023</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="32.7">
+<h2 data-number="32.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">32.7</span> How This Connects</h2>
+<p>This chapter contrasts directly with Chapter 16’s classical model evaluation, which assumes a single ground-truth label. This chapter exists because that assumption fails for generative text. It builds on <a href="/books/modern-ai/ch31-rag-vector-databases" class="quarto-xref"><span>Chapter 31</span></a>, since RAGAS-style metrics specifically evaluate the retrieval-plus-generation pipeline built there. It enables Chapter 33’s continuous pretraining, Chapter 34’s instruction fine-tuning, and Chapter 36’s agentic AI. Every one of these needs an evaluation gate to know whether a trained or tuned model actually improved, and this chapter is where that gate comes from. It’s often confused with prompt engineering (Chapter 30). Prompt engineering elicits good outputs, evaluation measures whether that succeeded. Both are needed, but they’re separate skills.</p>
+</section>
+<section id="exercises" class="level2" data-number="32.8">
+<h2 data-number="32.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">32.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-32-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the assumption classical evaluation (Chapter 16) depends on, and explain in one sentence why it fails for open-ended text generation.</p></li>
+<li id="ex-32-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three LLM-judge failure modes covered in Exposition (position, verbosity, self-preference bias) and state the standard mitigation for each.</p></li>
+<li id="ex-32-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-eval-worked-rouge" class="quarto-xref">Listing&nbsp;<span>32.5</span></a>’s measured results (paraphrase F1=0.308, opposite-meaning F1=0.947), explain concretely why a CI/CD pipeline (Chapter 24) gating deployments purely on “ROUGE score above threshold X” would be dangerous for a model answering medical or safety-related questions.</p></li>
+<li id="ex-32-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the verbose-restatement row’s precision (0.136) and recall (0.429) for ROUGE-L, explain in your own words why precision dropped so much further than recall did, and connect this to Procedure 32.3’s length-bias check.</p></li>
+<li id="ex-32-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague says “we don’t need an LLM judge, ROUGE against our reference answers is good enough and it’s free.” Using this chapter’s Worked Example, write the two or three sentences you’d say in response.</p></li>
+<li id="ex-32-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 32.2’s <code>compare_debiased</code> returns “TIE” whenever the two orderings disagree. Explain what information is lost by collapsing every disagreement into the single label “TIE,” and describe one situation where that loss would matter for interpreting evaluation results at scale.</p></li>
+<li id="ex-32-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about Cohen’s kappa and why it corrects for chance agreement rather than just reporting raw percent agreement. Construct a scenario (two raters, a binary rating task) where percent agreement is high (e.g.&nbsp;90%) but kappa is low, and explain what that combination reveals about the rating task itself.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="32.9">
+<h2 data-number="32.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">32.9</span> Mental Model</h2>
+<p>Classical evaluation asks “did the model get the right answer?” LLM evaluation asks “was this a good answer, along several independent dimensions, none of which have a single correct value?” This chapter’s Worked Example is the concrete argument for why that shift matters. A metric built entirely around lexical overlap gave its highest score in the entire comparison to the one answer that was factually wrong, and its lowest score to the one answer that was completely correct. That’s proof that “measures something” and “measures quality” are not the same claim.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2025hundredpagellm" class="csl-entry" role="listitem">
+Burkov, Andriy. 2025. <em>The Hundred-Page Language Models Book</em>. True Positive Inc.
+</div>
+<div id="ref-es2023ragas" class="csl-entry" role="listitem">
+Es, Shahul, Jithin James, Luis Espinosa Anke, and Steven Schockaert. 2024. <span>“RAGAs: Automated Evaluation of Retrieval Augmented Generation.”</span> <em>Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics: System Demonstrations</em> (St. Julians, Malta), 150–58.
+</div>
+<div id="ref-liu2023geval" class="csl-entry" role="listitem">
+Liu, Yang, Dan Iter, Yichong Xu, Shuohang Wang, Ruochen Xu, and Chenguang Zhu. 2023. <span>“G-Eval: NLG Evaluation Using GPT-4 with Better Human Alignment.”</span> <em>Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing</em> (Singapore), 2511–22.
+</div>
+<div id="ref-murphy2023pmladvanced" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2023. <em>Probabilistic Machine Learning: Advanced Topics</em>. MIT Press.
+</div>
+<div id="ref-zheng2023mtbench" class="csl-entry" role="listitem">
+<span class="nocase">Zheng, Lianmin, Wei-Lin Chiang, Ying Sheng, et al.</span> 2023. <span>“Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena.”</span> <em>Advances in Neural Information Processing Systems</em> 36.
+</div>
+</div>
+</section>

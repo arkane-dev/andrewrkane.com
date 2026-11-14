@@ -1,0 +1,302 @@
+<p>Chapter 48 established that you must measure before optimizing, but “measure” so far has meant timing a function already suspected of being slow. Real code is rarely that simple: a program has dozens or hundreds of functions, and intuition about which one dominates runtime is frequently wrong. Profiling is the discipline of finding out <em>where time actually goes</em>, with evidence, rather than guessing from how a function “looks”: how much code it has, how many objects it allocates, how clever or naive it seems.</p>
+<section id="motivation" class="level2" data-number="50.1">
+<h2 data-number="50.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">50.1</span> Motivation</h2>
+<p>Two distinct profiling techniques anchor this chapter, and both are used here because they arrive at the same answer independently. <strong>Deterministic profiling</strong> (<code>cProfile</code>) instruments every function call, recording exact counts and cumulative time per function. Complete and precise, at the cost of some overhead and function-level (not always line-level) granularity. <strong>Statistical/sampling profiling</strong> (<code>py-spy</code>) periodically interrupts the running process and records the current call stack, without instrumenting anything. Lower overhead, works on unmodified running processes, and, for <code>py-spy</code> specifically, resolves all the way down to the exact source line. A third tool, <code>perf</code> (introduced in Chapter 49), profiles at the hardware/native-instruction level: the right tool for cache and branch questions, and, as this chapter shows directly, the <em>wrong</em> tool for “which Python function is slow.” A fourth, <code>bpftrace</code>, sits a tier below all three: it doesn’t see Python frames or native instructions at all, only whether the process is asking the kernel for anything, and it measures that directly, from a running system, with the lowest overhead of the four.</p>
+</section>
+<section id="exposition" class="level2" data-number="50.2">
+<h2 data-number="50.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">50.2</span> Exposition</h2>
+<p>The measured numbers in this chapter<span class="ref-rig-mark">†</span> come from a small deliberately-non-obvious demo program run on this book’s reference rig. See the preface.</p>
+<section id="intuition-is-not-evidence-a-concrete-miss" class="level3" data-number="50.2.1">
+<h3 data-number="50.2.1" class="anchored" data-anchor-id="intuition-is-not-evidence-a-concrete-miss"><span class="header-section-number">50.2.1</span> Intuition Is Not Evidence: A Concrete Miss</h3>
+<p>A small program has two functions: <code>parse_records</code>, which allocates 40,000 dictionary objects, and <code>dedupe_slow</code>, which removes duplicates from a list using <code>if item not in seen</code>, checking membership against a plain Python <code>list</code>, not a <code>set</code>. Before measuring, <code>parse_records</code> looks like the more expensive step. It performs 40,000 real object allocations, while <code>dedupe_slow</code> is “just” checking membership.</p>
+<p><code>cProfile</code> found the opposite:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Function</th>
+<th>tottime</th>
+<th>cumtime</th>
+<th>Share of total</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>dedupe_slow</code></td>
+<td>0.700s</td>
+<td>0.701s</td>
+<td>97.9%</td>
+</tr>
+<tr class="even">
+<td><code>parse_records</code></td>
+<td>0.008s</td>
+<td>0.011s</td>
+<td>1.1%</td>
+</tr>
+<tr class="odd">
+<td>(total program)</td>
+<td>—</td>
+<td>0.715s</td>
+<td>100%</td>
+</tr>
+</tbody>
+</table>
+<p>The mechanism, Chapter 51’s territory, is that <code>if item not in seen</code> on a growing <code>list</code> is an <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> scan, repeated <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> times as the list grows: an accidentally quadratic algorithm hiding behind three lines of completely ordinary-looking code, while <code>parse_records</code>’s dict allocations are each fast, constant-time operations that simply don’t add up to much even 40,000 times over.</p>
+</section>
+<section id="two-independent-techniques-one-answer" class="level3" data-number="50.2.2">
+<h3 data-number="50.2.2" class="anchored" data-anchor-id="two-independent-techniques-one-answer"><span class="header-section-number">50.2.2</span> Two Independent Techniques, One Answer</h3>
+<p>Running <code>py-spy record</code> against the identical program, sampling the call stack 300 times per second, found <strong>226 of 227 samples (~99.6%) landed inside <code>dedupe_slow</code>, specifically at the <code>if item not in seen:</code> line</strong>, not just the same function <code>cProfile</code> found, but the exact source line, and via a completely different mechanism: instead of instrumenting every function call, <code>py-spy</code> interrupts the running process at a fixed rate and records whatever the call stack happens to be at that instant. Two independent techniques agreeing this precisely is strong confirmation the finding is real, not an artifact of either measurement method, the same “trust but verify with an independent method” principle that recurs throughout this book.</p>
+</section>
+<section id="a-real-permissions-gotcha-ptrace_scope" class="level3" data-number="50.2.3">
+<h3 data-number="50.2.3" class="anchored" data-anchor-id="a-real-permissions-gotcha-ptrace_scope"><span class="header-section-number">50.2.3</span> A Real Permissions Gotcha: <code>ptrace_scope</code></h3>
+<p>The first attempt to use <code>py-spy</code>, launching the target program separately, then attaching <code>py-spy dump --pid &lt;pid&gt;</code> to the already-running process, fails with <code>Permission Denied</code>. This is not a broken installation. Linux’s <code>yama</code> security module restricts which processes may inspect another process’s memory via <code>ptrace</code> (the same low-level mechanism debuggers use), controlled by <code>/proc/sys/kernel/yama/ptrace_scope</code>. At a setting of <code>1</code> (a common default), a process may only be ptraced by its own direct parent. The fix: let <code>py-spy</code> launch the target program itself (<code>py-spy record -- python script.py</code>), so <code>py-spy</code> <em>is</em> the parent process, and the restriction no longer applies. This is a real, common gotcha in containerized and sandboxed environments specifically, not a <code>py-spy</code> quirk. It’s worth knowing before assuming a profiler installation is broken.</p>
+</section>
+<section id="why-perf-cant-answer-this-question" class="level3" data-number="50.2.4">
+<h3 data-number="50.2.4" class="anchored" data-anchor-id="why-perf-cant-answer-this-question"><span class="header-section-number">50.2.4</span> Why <code>perf</code> Can’t Answer This Question</h3>
+<p>Running <code>perf stat</code> against the same program gives entirely real, accurate numbers (3,392,566,509 cycles, 14,496,828,974 instructions, 3,945,942 cache-misses) but nothing that says <em>which Python function</em> they belong to. <code>perf</code> operates below the Python interpreter: it sees native CPU instructions, and in a standard, non-specially-instrumented CPython build, the overwhelming majority of those instructions are inside <code>_PyEval_EvalFrameDefault</code> (the interpreter’s core bytecode dispatch loop), regardless of which Python-level function is logically executing. <code>perf</code> answers “how is the CPU spending cycles at the hardware level” (Chapter 49’s question). It cannot answer “which Python function is slow” (this chapter’s question). That requires a tool that understands Python’s own call-frame structure, which is exactly what <code>cProfile</code> and <code>py-spy</code> are built to do.</p>
+</section>
+<section id="one-tier-below-both-bpftrace-and-kernel-level-tracing" class="level3" data-number="50.2.5">
+<h3 data-number="50.2.5" class="anchored" data-anchor-id="one-tier-below-both-bpftrace-and-kernel-level-tracing"><span class="header-section-number">50.2.5</span> One Tier Below Both: <code>bpftrace</code> and Kernel-Level Tracing</h3>
+<p><code>cProfile</code> and <code>py-spy</code> both answer questions inside the Python interpreter: which function, which line. There’s a tier below both of them, and below <code>perf</code> too: the kernel itself. <code>bpftrace</code>, built on eBPF (extended Berkeley Packet Filter), attaches lightweight programs directly to kernel tracepoints, syscall entry/exit points, scheduler events, so it can answer a different class of question neither Python-level tool touches: not “which Python function is slow,” but “is this program, whatever language it’s written in, actually asking the kernel for anything at all?” A single <code>bpftrace</code> one-liner can count every <code>read</code>, <code>write</code>, <code>openat</code>, <code>mmap</code>, or <code>futex</code> call a specific process makes, system-wide, with overhead low enough to run in production continuously, something neither <code>cProfile</code>’s instrumentation nor <code>py-spy</code>’s repeated sampling is built for at that scale. It answers a question this chapter’s other three tools cannot: is the bottleneck even inside this process’s own compute at all, or is it waiting on the kernel for something?</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="50.3">
+<h2 data-number="50.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">50.3</span> Trade-offs and Limits</h2>
+<p>Use <code>cProfile</code> when the program’s invocation can be modified (adding <code>-m cProfile</code>, or wrapping the call in code), when exact call counts and cumulative or per-call time broken down by function are needed, and when some profiling overhead (typically 2-5x slowdown from instrumentation) is acceptable. Use <code>py-spy</code> when the running process cannot or should not be modified, a live production service, when line-level granularity with minimal overhead is needed, and remember the <code>ptrace_scope</code> gotcha above if attaching to an already-running process. Use <code>perf</code> when the question is about hardware-level behavior (cache misses, branch mispredictions, IPC, Chapter 49), not “which Python function,” and when profiling native extensions, C libraries, or non-Python processes with no Python frame structure to resolve in the first place. Use <code>bpftrace</code> when the question is “is this process touching the kernel at all,” or when a production system needs continuous, always-on, near-zero-overhead observation that neither <code>cProfile</code>’s instrumentation nor <code>py-spy</code>’s repeated sampling is cheap enough to run forever. It requires root or <code>CAP_BPF</code>/<code>CAP_PERFMON</code>, same permissions class as <code>ncu</code> in Chapter 46, and it answers a different question than the other three tools entirely: not which function is slow, but whether the process is even asking the kernel for anything while it runs.</p>
+</section>
+<section id="procedures" class="level2" data-number="50.4">
+<h2 data-number="50.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">50.4</span> Procedures</h2>
+<p id="proc-50-1"><strong>Procedure 50.1 (Profile a Script With <code>cProfile</code>).</strong> <em>When to use:</em> a script or entry point that can be invoked directly, needing an exact, function-level breakdown of where time goes.</p>
+<div id="lst-cprofile-cli" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cprofile-cli-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;50.1: Profiling a script from the command line, sorted by cumulative time
+</figcaption>
+<div aria-describedby="lst-cprofile-cli-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><span class="ex">python</span> <span class="at">-m</span> cProfile <span class="at">-s</span> cumulative your_script.py</span></code></pre></div>
+</div>
+</figure>
+</div>
+<div id="lst-cprofile-api" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cprofile-api-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;50.2: Profiling a specific function programmatically with cProfile and pstats
+</figcaption>
+<div aria-describedby="lst-cprofile-api-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> cProfile</span>
+<span id="cb2-2"><span class="im">import</span> pstats</span>
+<span id="cb2-3"></span>
+<span id="cb2-4">profiler <span class="op">=</span> cProfile.Profile()</span>
+<span id="cb2-5">profiler.enable()</span>
+<span id="cb2-6">your_function()</span>
+<span id="cb2-7">profiler.disable()</span>
+<span id="cb2-8"></span>
+<span id="cb2-9">stats <span class="op">=</span> pstats.Stats(profiler).sort_stats(<span class="st">'cumulative'</span>)</span>
+<span id="cb2-10">stats.print_stats(<span class="dv">10</span>)   <span class="co"># top 10 functions by cumulative time</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>tottime</code> is time spent in the function itself, excluding calls to other functions; <code>cumtime</code> is <code>tottime</code> plus all functions it called. For finding a hotspot, sort by <code>cumulative</code> first. The function with the highest <code>cumtime</code> at the top of the call chain shows where to look. The deepest function with a high <code>tottime</code> shows exactly what to fix. <strong>Common mistake:</strong> sorting by <code>tottime</code> only and missing a function that’s expensive purely because of what it calls (high <code>cumtime</code>, low <code>tottime</code>). Start with <code>cumulative</code>, then drill into <code>tottime</code> for the specific function actually doing the work.</p>
+<p id="proc-50-2"><strong>Procedure 50.2 (Profile an Already-Running Process With <code>py-spy</code>).</strong> <em>When to use:</em> a long-running service or process that shouldn’t (or can’t) be restarted with different invocation flags.</p>
+<div id="lst-pyspy-attach" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pyspy-attach-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;50.3: Attaching py-spy to an already-running process, and launching a target through py-spy instead
+</figcaption>
+<div aria-describedby="lst-pyspy-attach-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><span class="ex">py-spy</span> dump <span class="at">--pid</span> <span class="op">&lt;</span>PID<span class="op">&gt;</span>                    <span class="co"># one-off stack snapshot</span></span>
+<span id="cb3-2"><span class="co"># sample over time, write a flamegraph</span></span>
+<span id="cb3-3"><span class="ex">py-spy</span> record <span class="at">-o</span> profile.svg <span class="at">--pid</span> <span class="op">&lt;</span>PID<span class="op">&gt;</span></span>
+<span id="cb3-4"></span>
+<span id="cb3-5"><span class="co"># If attaching fails with Permission Denied, launch the</span></span>
+<span id="cb3-6"><span class="co"># target through py-spy instead:</span></span>
+<span id="cb3-7"><span class="ex">py-spy</span> record <span class="at">-o</span> profile.svg <span class="at">--</span> python your_script.py</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> attaching to a process <code>py-spy</code> did not itself launch, and getting <code>Permission Denied</code>. A <code>ptrace_scope</code> setting of <code>1</code> or higher restricts ptrace access to direct parent processes. If the target’s launch can be controlled, prefer launching it <em>through</em> <code>py-spy</code> instead, as shown above; changing <code>ptrace_scope</code> itself requires root and is a system-wide security-relevant setting, not something to flip casually in a shared or production environment.</p>
+<p id="proc-50-3"><strong>Procedure 50.3 (Read <code>py-spy</code>’s Raw Output Format).</strong> <em>When to use:</em> parsing <code>py-spy record -f raw</code> output programmatically, or understanding a <code>flamegraph</code> SVG’s underlying data.</p>
+<div id="lst-pyspy-raw" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pyspy-raw-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;50.4: One line of py-spy raw output: a complete call stack with its sample count
+</figcaption>
+<div aria-describedby="lst-pyspy-raw-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># &lt;module&gt; (script.py:26);main (script.py:22);dedupe_slow</span></span>
+<span id="cb4-2"><span class="co"># (script.py:7) 226</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Each line is <code>stack_frame;stack_frame;...;stack_frame COUNT</code>: an entire call stack, outermost frame first, with a count of how many samples observed exactly that stack. A single dominant line with a count close to the total sample count means one code path accounts for nearly all the time; a spread of many different lines with similar counts means time is genuinely distributed across many call paths. <strong>Common mistake:</strong> interpreting sample count as exact time. With sampling profilers, the count is a statistical estimate, accurate for finding <em>where</em> time goes with enough samples, but not a precise timer the way <code>cProfile</code>’s instrumented counts are.</p>
+<p id="proc-50-4"><strong>Procedure 50.4 (Decide Whether <code>perf</code>, <code>cProfile</code>, or <code>py-spy</code> Is the Right Tool).</strong> <em>When to use:</em> before reaching for a profiler, confirm it’s the one that can actually answer the question at hand.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Question</th>
+<th>Right tool</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Which Python function/line is slow?</td>
+<td><code>cProfile</code> (if invocation can be modified) or <code>py-spy</code> (if not, or lower overhead is needed)</td>
+</tr>
+<tr class="even">
+<td>Is this slow because of cache misses / branch mispredictions?</td>
+<td><code>perf</code> (Chapter 49), but confirm <em>which</em> function first via <code>cProfile</code>/<code>py-spy</code>, then investigate that function’s hardware behavior with <code>perf</code></td>
+</tr>
+<tr class="odd">
+<td>How much total CPU/memory/cache traffic did the whole program use?</td>
+<td><code>perf stat</code> for a whole-process summary</td>
+</tr>
+<tr class="even">
+<td>Is the process even talking to the kernel, or is the time genuinely all in-process compute?</td>
+<td><code>bpftrace</code>, tracing syscall tracepoints for the specific PID (Procedure 50.5)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Common mistake:</strong> running <code>perf stat</code> or <code>perf record</code> on Python code expecting Python-level function names in the output. On a standard CPython build, <code>perf</code> sees mostly <code>_PyEval_EvalFrameDefault</code> regardless of which Python function is running. It cannot resolve Python source lines without specialized support. Use <code>cProfile</code>/<code>py-spy</code> to find the Python-level hotspot first, then reach for <code>perf</code> only to understand <em>why</em> that specific hotspot is slow at the hardware level.</p>
+<p id="proc-50-5"><strong>Procedure 50.5 (Trace a Specific Process’s Syscalls With <code>bpftrace</code>).</strong> <em>When to use:</em> confirming whether a process is doing kernel-visible work (I/O, memory mapping, lock contention) at all, independent of and below the level of any Python-aware profiler.</p>
+<div id="lst-bpftrace-syscalls" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-bpftrace-syscalls-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;50.5: Counting specific syscalls for one PID, with an auto-terminating interval probe
+</figcaption>
+<div aria-describedby="lst-bpftrace-syscalls-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><span class="ex">bpftrace</span> <span class="at">-e</span> <span class="st">'</span></span>
+<span id="cb5-2"><span class="st">tracepoint:syscalls:sys_enter_read    /pid == TARGET_PID/ { @syscalls["read"] = count(); }</span></span>
+<span id="cb5-3"><span class="st">tracepoint:syscalls:sys_enter_write   /pid == TARGET_PID/ { @syscalls["write"] = count(); }</span></span>
+<span id="cb5-4"><span class="st">tracepoint:syscalls:sys_enter_openat  /pid == TARGET_PID/ { @syscalls["openat"] = count(); }</span></span>
+<span id="cb5-5"><span class="st">tracepoint:syscalls:sys_enter_futex   /pid == TARGET_PID/ { @syscalls["futex"] = count(); }</span></span>
+<span id="cb5-6"><span class="st">interval:s:6 { exit(); }</span></span>
+<span id="cb5-7"><span class="st">'</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> requiring root, then giving up on <code>bpftrace</code> entirely after the first <code>EPERM</code>-style failure. Like <code>ncu</code> in Chapter 46, this is standard, expected default-permissions behaviour, not a broken setup; run with <code>sudo</code> or grant <code>CAP_BPF</code>/<code>CAP_PERFMON</code>. <strong>A second common mistake:</strong> treating an empty result (no syscall counts printed) as a tool failure. <code>bpftrace</code> only prints a map entry for syscalls that actually occurred. Zero entries is a real, valid measurement: it means none of the traced syscalls fired during the observation window, not that the trace didn’t work.</p>
+</section>
+<section id="worked-example" class="level2" data-number="50.5">
+<h2 data-number="50.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">50.5</span> Worked Example</h2>
+<p>The companion notebook reproduces the hotspot-finding exercise directly on this book’s reference rig, and the numbers reported through this chapter are exactly what it produces. The demo program is written out first, deliberately structured so intuition points the wrong way:</p>
+<div id="lst-demo-program" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-demo-program-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;50.6: A small program with a deliberately non-obvious hotspot
+</figcaption>
+<div aria-describedby="lst-demo-program-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="kw">def</span> dedupe_slow(items):</span>
+<span id="cb6-2">    <span class="co">"""Accidental O(n^2): 'in' on a growing list scans it</span></span>
+<span id="cb6-3"><span class="co">    end to end each time."""</span></span>
+<span id="cb6-4">    seen <span class="op">=</span> []</span>
+<span id="cb6-5">    result <span class="op">=</span> []</span>
+<span id="cb6-6">    <span class="cf">for</span> item <span class="kw">in</span> items:</span>
+<span id="cb6-7">        <span class="cf">if</span> item <span class="kw">not</span> <span class="kw">in</span> seen:</span>
+<span id="cb6-8">            seen.append(item)</span>
+<span id="cb6-9">            result.append(item)</span>
+<span id="cb6-10">    <span class="cf">return</span> result</span>
+<span id="cb6-11"></span>
+<span id="cb6-12"><span class="kw">def</span> parse_records(n):</span>
+<span id="cb6-13">    <span class="co">"""Builds n dict objects: looks like it should be</span></span>
+<span id="cb6-14"><span class="co">    the more expensive step."""</span></span>
+<span id="cb6-15">    records <span class="op">=</span> []</span>
+<span id="cb6-16">    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb6-17">        records.append({<span class="st">'id'</span>: i, <span class="st">'value'</span>: i <span class="op">*</span> <span class="dv">2</span>})</span>
+<span id="cb6-18">    <span class="cf">return</span> records</span>
+<span id="cb6-19"></span>
+<span id="cb6-20"><span class="kw">def</span> main():</span>
+<span id="cb6-21">    records <span class="op">=</span> parse_records(<span class="dv">40_000</span>)</span>
+<span id="cb6-22">    <span class="co"># ~5x duplication rate</span></span>
+<span id="cb6-23">    ids_with_dupes <span class="op">=</span> [r[<span class="st">'id'</span>] <span class="op">%</span> <span class="dv">8000</span> <span class="cf">for</span> r <span class="kw">in</span> records]</span>
+<span id="cb6-24">    deduped <span class="op">=</span> dedupe_slow(ids_with_dupes)</span>
+<span id="cb6-25">    <span class="cf">return</span> <span class="bu">len</span>(deduped)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Running this under <code>python -m cProfile -s cumulative</code> produces the 0.700s / 0.008s split reported above: <code>dedupe_slow</code> at 97.9% of the 0.715s total, <code>parse_records</code> at 1.1%, confirming intuition was wrong by a wide margin.</p>
+<p>The <code>py-spy</code> section first demonstrates the permissions failure directly, launching the target as a separate process and attempting to attach:</p>
+<div id="lst-pyspy-fail" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pyspy-fail-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;50.7: Reproducing the ptrace_scope Permission Denied error by attaching to an independently-launched process
+</figcaption>
+<div aria-describedby="lst-pyspy-fail-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">target <span class="op">=</span> subprocess.Popen([python_exe, target_path])</span>
+<span id="cb7-2">time.sleep(<span class="fl">0.05</span>)</span>
+<span id="cb7-3">attach_attempt <span class="op">=</span> subprocess.run(</span>
+<span id="cb7-4">    [py_spy_exe, <span class="st">"dump"</span>, <span class="st">"--pid"</span>, <span class="bu">str</span>(target.pid)],</span>
+<span id="cb7-5">    capture_output<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb7-6">    text<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb7-7">)</span>
+<span id="cb7-8"><span class="co"># STDERR: Permission Denied: Try running again with elevated</span></span>
+<span id="cb7-9"><span class="co"># permissions by going 'sudo env "PATH=$PATH" !!'</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Then resolves it by letting <code>py-spy</code> launch the target itself:</p>
+<div id="lst-pyspy-fixed" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pyspy-fixed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;50.8: py-spy launching the target itself, satisfying ptrace_scope as the direct parent process
+</figcaption>
+<div aria-describedby="lst-pyspy-fixed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1">result <span class="op">=</span> subprocess.run(</span>
+<span id="cb8-2">    [</span>
+<span id="cb8-3">        py_spy_exe, <span class="st">"record"</span>, <span class="st">"-o"</span>, raw_out_path,</span>
+<span id="cb8-4">        <span class="st">"-f"</span>, <span class="st">"raw"</span>, <span class="st">"-r"</span>, <span class="st">"300"</span>,</span>
+<span id="cb8-5">        <span class="st">"--"</span>, python_exe, target_path,</span>
+<span id="cb8-6">    ],</span>
+<span id="cb8-7">    capture_output<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb8-8">    text<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb8-9">)</span>
+<span id="cb8-10"><span class="co"># Samples: 227, Errors: 0</span></span>
+<span id="cb8-11"><span class="co"># &lt;module&gt; (profile_target.py:26);main</span></span>
+<span id="cb8-12"><span class="co"># (profile_target.py:22);dedupe_slow (profile_target.py:7) 226</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>226 of 227 samples land on <code>dedupe_slow</code>’s <code>if item not in seen:</code> line, the same conclusion <code>cProfile</code> reached, found completely independently, and precise down to the exact source line rather than just the function.</p>
+<p>Finally, running the identical program under <code>perf stat -e cycles,instructions,cache-misses</code> produces accurate whole-process hardware counters (3,392,566,509 cycles; 14,496,828,974 instructions; 3,945,942 cache-misses) with no indication of which Python function they belong to, confirming <code>perf</code>’s role is hardware-level attribution, not Python-level hotspot location.</p>
+<p>Running Procedure 50.5’s <code>bpftrace</code> script against a longer-running version of the same program, the loop repeated for roughly 6 seconds so there is time for the trace to attach and observe, traces <code>read</code>, <code>write</code>, <code>openat</code>, <code>mmap</code>, <code>munmap</code>, <code>futex</code>, <code>brk</code>, and <code>mprotect</code> for that specific PID<span class="ref-rig-mark">†</span>:</p>
+<pre class="text"><code>Tracing syscalls for pid &lt;PID&gt; for ~6 seconds...
+(no @syscalls entries printed)</code></pre>
+<p>Every count is zero. This is a genuine, interpretable result, not a broken trace. <code>dedupe_slow</code> and <code>parse_records</code> do nothing but build lists and dicts and compare values already resident in memory; a single-threaded program has no other thread to contend with for the GIL, so it never needs a <code>futex</code> to arbitrate; and CPython’s small-object allocator serves allocations from arenas already obtained during interpreter start-up, well before this trace’s observation window began, so the steady-state loop needs no fresh <code>brk</code> or <code>mmap</code> calls either. <code>cProfile</code> and <code>py-spy</code> both located the cost inside <code>dedupe_slow</code>, from the Python side. <code>bpftrace</code>, watching from underneath the interpreter entirely, independently confirms the same conclusion from a different vantage point: there is nothing here for the kernel to do. The bottleneck is 100% in-process compute, not I/O, not memory-mapping churn, not lock contention. Three tools, three different levels of the stack, one answer.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="50.6">
+<h2 data-number="50.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">50.6</span> History and Further Reading</h2>
+<p>The Python <code>cProfile</code> and <code>pstats</code> standard library documentation is the authoritative reference for sort keys, output columns, and programmatic use of profiling data beyond what this chapter covers. The <code>py-spy</code> GitHub repository (<code>benfred/py-spy</code>) documents the <code>dump</code>, <code>record</code>, and <code>top</code> subcommands in more depth, including the <code>ptrace_scope</code> permissions notes this chapter hit directly. <code>man 2 ptrace</code> and the Linux kernel’s <code>yama</code> documentation describe the actual security mechanism behind the permissions gotcha. Gregg’s “Flame Graphs” (brendangregg.com) is the reference for the visual format <code>py-spy record</code>’s default (non-raw) output produces, and for reading one once this chapter’s raw-format output has been seen directly. Rotem’s <em>Software Performance Engineering</em> <span class="citation" data-cites="rotem2025softwareperformance">(<a href="#ref-rotem2025softwareperformance" role="doc-biblioref">Rotem 2025</a>)</span>, Chapter 9, covers static-versus-dynamic profiling and sampling-versus-instrumentation as general concepts, above the specific tools this chapter applies them with, useful context for judging when <code>cProfile</code>’s deterministic instrumentation versus <code>py-spy</code>’s sampling is the right choice for a given problem; its section on Linux kernel profiling with eBPF is the direct source for this chapter’s <code>bpftrace</code> material. The <code>bpftrace</code> project’s own reference guide (<code>github.com/bpftrace/bpftrace</code>) documents the full tracepoint, kprobe, and USDT probe types beyond the syscall tracepoints this chapter uses. Gregg’s <em>Systems Performance</em> <span class="citation" data-cites="gregg2020systemsperformance">(<a href="#ref-gregg2020systemsperformance" role="doc-biblioref">Gregg 2020</a>)</span>, already cited in Chapter 57 for its profile-locate-fix-verify methodology, is also the standard reference for BPF-based tracing specifically: Gregg is one of the tool’s principal real-world popularizers, and the book’s BPF chapter is worth reading once this chapter’s own zero-syscall result has been seen directly.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="50.7">
+<h2 data-number="50.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">50.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 48’s “measure before you fix” discipline, applied here to <em>locating</em> the thing to fix rather than just timing something already suspected, and on Chapter 49’s <code>perf</code> tool, reused here to show its limits for this specific question. It enables Chapter 51, which explains <em>why</em> the hotspot this chapter found, an <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> scan repeated <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> times, is slow, and how to fix it with the right data structure. This chapter was deliberately scoped to <em>finding</em> the problem, not fixing it. It is often confused with guessing from code review alone (“this loop looks expensive”). This chapter’s entire first section is a concrete demonstration of why that instinct, however experienced the reader, can be simply wrong, and profiling is how to find out before spending effort optimizing the wrong function.</p>
+</section>
+<section id="exercises" class="level2" data-number="50.8">
+<h2 data-number="50.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">50.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-50-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain, in your own words, why <code>parse_records</code> (40,000 dict allocations) turned out to be nearly free compared to <code>dedupe_slow</code> (a simple-looking membership check). Name the algorithmic mechanism responsible.</p></li>
+<li id="ex-50-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A teammate says “I read through the function and it looks fine, it can’t be the bottleneck.” Using this chapter’s <code>cProfile</code>-vs-intuition result, write two or three sentences on why code review alone isn’t sufficient evidence.</p></li>
+<li id="ex-50-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 50.1, profile a script containing a function that builds a 50,000-element list via repeated <code>list.insert(0, x)</code> alongside a function that builds the same list via <code>list.append(x)</code>. Report which function dominates <code>cumtime</code> and by roughly what factor.</p></li>
+<li id="ex-50-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 50.4’s decision table, choose the right tool for each of the following questions, and justify each choice in one sentence: (a) “which of these three functions in my ETL script is slowest?”; (b) “is my matrix-multiply loop suffering from cache misses?”; (c) “how many total instructions did my whole batch job execute?”</p></li>
+<li id="ex-50-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s <code>py-spy</code> run found 226 of 227 samples on one line at 300 samples/second, sampling a program that ran for about 0.7 seconds. Explain why a much shorter-running program (say, 5ms total) sampled at the same rate might not produce a reliable hotspot location, and propose a fix using Procedure 50.2’s tooling.</p></li>
+<li id="ex-50-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A production service can’t be restarted or modified in any way, but is suspected of having a slow request handler. Using this chapter’s tool-selection guidance, propose a concrete profiling plan, including which tool(s) to use and in what order, and justify why <code>cProfile</code> alone would not work here.</p></li>
+<li id="ex-50-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the <code>py-spy</code> GitHub repository’s documentation on the <code>ptrace_scope</code> permissions issue. Identify one additional environment (beyond a plain Linux container) where this restriction commonly appears, and one mitigation <code>py-spy</code>’s own documentation recommends besides the “launch through py-spy” fix this chapter used.</p></li>
+<li id="ex-50-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Gregg’s “Flame Graphs” article. Using this chapter’s raw <code>py-spy</code> output line (<code>&lt;module&gt; (profile_target.py:26);main (profile_target.py:22);dedupe_slow (profile_target.py:7) 226</code>), sketch (in words) what the corresponding flame graph would look like: which frame would be widest, and why.</p></li>
+<li id="ex-50-9"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter’s <code>bpftrace</code> trace of <code>dedupe_slow</code>/<code>parse_records</code> recorded zero counts for every traced syscall. Using Procedure 50.5’s Common mistake note, explain why this result should be trusted as a real measurement rather than treated as a sign the trace failed, and state one change to the target program that would be expected to produce a nonzero <code>write</code> count under the identical trace.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="50.9">
+<h2 data-number="50.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">50.9</span> Mental Model</h2>
+<p>Profiling a program by reading its code and guessing the hotspot is like guessing which pipe in a building is leaking by looking at the blueprint: plausible-sounding, and frequently wrong. <code>cProfile</code> is turning on a flow meter at every valve simultaneously; <code>py-spy</code> is walking the building at a fixed interval and noting which room currently has someone frantically mopping. Both approaches find the actual leak; neither requires trusting the blueprint’s implied story about where problems “should” be.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-gregg2020systemsperformance" class="csl-entry" role="listitem">
+Gregg, Brendan. 2020. <em>Systems Performance: Enterprise and the Cloud</em>. 2nd ed. Addison-Wesley.
+</div>
+<div id="ref-rotem2025softwareperformance" class="csl-entry" role="listitem">
+Rotem, Alon. 2025. <em>Software Performance Engineering: A Comprehensive Guide for High-Performance Development</em>. BPB Publications.
+</div>
+</div>
+</section>

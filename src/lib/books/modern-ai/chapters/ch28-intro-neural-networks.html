@@ -1,0 +1,245 @@
+<p>Classical ML algorithms like logistic regression or SVMs require deciding in advance which features to hand them: write the edge detector, hand-craft the grammatical features, engineer the interaction terms. The model is only as good as the human intuition that shaped its inputs. Neural networks sidestep this by learning the features themselves. Give them raw inputs, pixel values, word IDs, sensor readings, and the network learns, layer by layer, what to extract. The cost is more data and more compute. The payoff is that a human stops being the bottleneck on what the model can represent.</p>
+<section id="motivation" class="level2" data-number="28.1">
+<h2 data-number="28.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">28.1</span> Motivation</h2>
+<p>A neural network is a function approximator. It takes an input, applies a series of parameterised mathematical transformations, and produces an output, with the parameters (weights) adjusted during training to minimise the gap between predictions and true labels. The basic unit is the neuron: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>output</mtext><mo>=</mo><mi>σ</mi><mo stretchy="false">(</mo><msub><mi>w</mi><mn>1</mn></msub><msub><mi>x</mi><mn>1</mn></msub><mo>+</mo><msub><mi>w</mi><mn>2</mn></msub><msub><mi>x</mi><mn>2</mn></msub><mo>+</mo><mo>⋯</mo><mo>+</mo><msub><mi>w</mi><mi>n</mi></msub><msub><mi>x</mi><mi>n</mi></msub><mo>+</mo><mi>b</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{output} = \sigma(w_1 x_1 + w_2 x_2 + \dots + w_n x_n + b)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8095em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">output</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="minner">⋯</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:-0.0269em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">n</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.1514em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">n</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">b</span><span class="mclose">)</span></span></span></span>, where <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span> are inputs, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi></mrow><annotation encoding="application/x-tex">w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span></span></span></span> are learned weights, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi></mrow><annotation encoding="application/x-tex">b</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">b</span></span></span></span> is a learned bias, and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi></mrow><annotation encoding="application/x-tex">\sigma</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span></span></span></span> is a nonlinear activation applied after the weighted sum. A layer is a collection of neurons receiving the same inputs. A network is layers stacked in sequence, the output of one becoming the input of the next.</p>
+</section>
+<section id="exposition" class="level2" data-number="28.2">
+<h2 data-number="28.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">28.2</span> Exposition</h2>
+<section id="why-nonlinearity-matters" class="level3" data-number="28.2.1">
+<h3 data-number="28.2.1" class="anchored" data-anchor-id="why-nonlinearity-matters"><span class="header-section-number">28.2.1</span> Why Nonlinearity Matters</h3>
+<p>Without an activation function, stacking layers is pointless. A linear function of a linear function is still linear, so any depth of purely-linear layers collapses to one matrix multiplication. Nonlinear activations break this collapse. ReLU (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>max</mi><mo>⁡</mo><mo stretchy="false">(</mo><mn>0</mn><mo separator="true">,</mo><mi>x</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\max(0, x)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">max</span><span class="mopen">(</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">x</span><span class="mclose">)</span></span></span></span>) is the default for hidden layers: simple, fast to compute, and its gradient is trivial almost everywhere. Sigmoid (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>1</mn><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>x</mi></mrow></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">1/(1+e^{-x})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1/</span><span class="mopen">(</span><span class="mord">1</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0213em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathnormal">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7713em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight">x</span></span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span>) squashes to <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>0</mn><mo separator="true">,</mo><mn>1</mn><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(0,1)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mclose">)</span></span></span></span> for binary output layers. Softmax squashes a vector to a probability distribution for multi-class output layers.</p>
+</section>
+<section id="forward-pass-loss-and-backpropagation" class="level3" data-number="28.2.2">
+<h3 data-number="28.2.2" class="anchored" data-anchor-id="forward-pass-loss-and-backpropagation"><span class="header-section-number">28.2.2</span> Forward Pass, Loss, and Backpropagation</h3>
+<p>A forward pass computes each layer’s output sequentially: <code>h1 = relu(W1 @ x + b1)</code>, <code>h2 = relu(W2 @ h1 + b2)</code>, <code>y = softmax(W3 @ h2 + b3)</code>. A loss function then quantifies how wrong the prediction was: cross-entropy for classification (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>−</mo><mi>log</mi><mo>⁡</mo><mo stretchy="false">(</mo><msub><mover accent="true"><mi>p</mi><mo>^</mo></mover><mtext>true&nbsp;class</mtext></msub><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">-\log(\hat{p}_{\text{true class}})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">−</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mopen">(</span><span class="mord"><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.6944em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord mathnormal">p</span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.1667em;"><span class="mord">^</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">true&nbsp;class</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span>, small when the model is confidently right, large when confidently wrong), mean squared error for regression. Backpropagation computes how much each weight contributed to that loss, its gradient, via the chain rule applied automatically through the computation graph: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="normal">∂</mi><mi>L</mi><mi mathvariant="normal">/</mi><mi mathvariant="normal">∂</mi><mi>w</mi><mo>=</mo><mi mathvariant="normal">∂</mi><mi>L</mi><mi mathvariant="normal">/</mi><mi mathvariant="normal">∂</mi><mtext>output</mtext><mo>×</mo><mi mathvariant="normal">∂</mi><mtext>output</mtext><mi mathvariant="normal">/</mi><mi mathvariant="normal">∂</mi><mtext>hidden</mtext><mo>×</mo><mi mathvariant="normal">∂</mi><mtext>hidden</mtext><mi mathvariant="normal">/</mi><mi mathvariant="normal">∂</mi><mi>w</mi></mrow><annotation encoding="application/x-tex">\partial L/\partial w = \partial L/\partial \text{output} \times \partial \text{output}/\partial \text{hidden} \times \partial \text{hidden}/\partial w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord mathnormal">L</span><span class="mord">/</span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord mathnormal">L</span><span class="mord">/</span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord text"><span class="mord">output</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord text"><span class="mord">output</span></span><span class="mord">/</span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord text"><span class="mord">hidden</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord text"><span class="mord">hidden</span></span><span class="mord">/</span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span></span></span></span>. Modern frameworks compute this with one call, <code>loss.backward()</code>. Gradient descent then updates weights against the gradient: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>w</mi><mo>←</mo><mi>w</mi><mo>−</mo><mi>η</mi><mtext> </mtext><mi mathvariant="normal">∂</mi><mi>L</mi><mi mathvariant="normal">/</mi><mi mathvariant="normal">∂</mi><mi>w</mi></mrow><annotation encoding="application/x-tex">w \leftarrow w - \eta \, \partial L/\partial w</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">←</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">η</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord mathnormal">L</span><span class="mord">/</span><span class="mord" style="margin-right:0.0556em;">∂</span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span></span></span></span>, in practice on small batches (mini-batch gradient descent) rather than the full dataset at once. That’s noisier per step, but far faster and often better-generalising.</p>
+</section>
+<section id="the-universal-approximation-theorem" class="level3" data-number="28.2.3">
+<h3 data-number="28.2.3" class="anchored" data-anchor-id="the-universal-approximation-theorem"><span class="header-section-number">28.2.3</span> The Universal Approximation Theorem</h3>
+<p>A network with a single hidden layer and enough neurons can approximate any continuous function to arbitrary precision. This explains <em>why</em> neural networks are so general, but says nothing about how many neurons are needed or how to train them well. In practice, depth is more parameter-efficient than width. That’s the entire premise behind “deep” learning.</p>
+<p>That capacity claim is easy to over-read as “neural networks have no inductive bias.” They have close to no <em>capacity</em> bias. Almost nothing is off-limits to the hypothesis space. But capacity isn’t the same as what training actually finds. For a small dataset, many different functions fit the training data equally well, and gradient descent doesn’t search among them uniformly. It has a documented preference for smooth, low-complexity functions over jagged, high-complexity ones, sometimes called spectral bias. Two networks with identical capacity can still converge on different functions depending on initialisation, optimiser, and how long training runs. Architecture adds a second, stronger kind of bias on top of that. A convolutional layer is built to assume nearby pixels matter more than distant ones, a structural assumption chosen by the architect, not learned from data (Book 4, Chapter 68 covers this in depth). A plain MLP like the one in this chapter carries the weakest architectural bias of any model in this book. Almost all of its bias comes from the optimiser rather than the architecture, which is exactly why it needs more data than a model built with the right structural assumptions already in place.</p>
+</section>
+<section id="overfitting-and-its-countermeasures" class="level3" data-number="28.2.4">
+<h3 data-number="28.2.4" class="anchored" data-anchor-id="overfitting-and-its-countermeasures"><span class="header-section-number">28.2.4</span> Overfitting and Its Countermeasures</h3>
+<p>Neural networks carry enormous parameter counts. A small MLP might have tens of thousands, GPT-scale models trillions. They can memorise training data while generalising poorly. Three standard tools counter this. Dropout randomly zeroes a fraction of neurons during training (typically 20–50%), forcing the network to avoid depending on any single neuron. All neurons are active at inference, scaled accordingly. Weight decay (L2 regularisation) penalises the sum of squared weights, encouraging many small weights over a few large ones. Early stopping monitors validation loss during training and keeps the weights from the point where it was lowest, discarding whatever the model becomes afterward. Worked Example 28 below measures exactly this last effect directly.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="28.3">
+<h2 data-number="28.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">28.3</span> Trade-offs and Limits</h2>
+<p>Neural networks trade the interpretability and low data requirements of classical ML for representational flexibility. No hand-crafted features, but no legible “why” behind a prediction the way a <code>coef_</code> array offers, and typically an order of magnitude more training data needed before matching a simpler model’s performance. They also introduce a training-time cost simpler models don’t have: dozens to thousands of epochs of gradient descent, versus one <code>.fit()</code> call for logistic regression. On small, already-separable tabular data, like this chapter’s Worked Example, the flexibility that makes neural networks powerful on images and text is mostly unused. A plain logistic regression can match a neural network’s test accuracy while training in a fraction of the time.</p>
+</section>
+<section id="procedures" class="level2" data-number="28.4">
+<h2 data-number="28.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">28.4</span> Procedures</h2>
+<p id="proc-28-1"><strong>Procedure 28.1 (Define a PyTorch Model).</strong> <em>When to use:</em> every time a network architecture needs specifying.</p>
+<div id="lst-nn-define" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nn-define-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;28.1: A two-hidden-layer MLP as an nn.Module
+</figcaption>
+<div aria-describedby="lst-nn-define-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="kw">class</span> MLP(nn.Module):</span>
+<span id="cb1-4">    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, in_dim, hidden, dropout<span class="op">=</span><span class="fl">0.0</span>):</span>
+<span id="cb1-5">        <span class="bu">super</span>().<span class="fu">__init__</span>()</span>
+<span id="cb1-6">        <span class="va">self</span>.net <span class="op">=</span> nn.Sequential(</span>
+<span id="cb1-7">            nn.Linear(</span>
+<span id="cb1-8">                in_dim,</span>
+<span id="cb1-9">                hidden,</span>
+<span id="cb1-10">            ), nn.ReLU(), nn.Dropout(dropout),</span>
+<span id="cb1-11">            nn.Linear(</span>
+<span id="cb1-12">                hidden,</span>
+<span id="cb1-13">                hidden,</span>
+<span id="cb1-14">            ), nn.ReLU(), nn.Dropout(dropout),</span>
+<span id="cb1-15">            nn.Linear(hidden, <span class="dv">1</span>),</span>
+<span id="cb1-16">        )</span>
+<span id="cb1-17">    <span class="kw">def</span> forward(<span class="va">self</span>, x):</span>
+<span id="cb1-18">        <span class="cf">return</span> <span class="va">self</span>.net(x).squeeze(<span class="op">-</span><span class="dv">1</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-28-2"><strong>Procedure 28.2 (Write the Training Loop).</strong> <em>When to use:</em> the standard loop for supervised learning in PyTorch.</p>
+<div id="lst-nn-train-loop" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nn-train-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;28.2: Forward, backward, step: the loop every PyTorch model uses
+</figcaption>
+<div aria-describedby="lst-nn-train-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">criterion <span class="op">=</span> nn.BCEWithLogitsLoss()</span>
+<span id="cb2-2">optimizer <span class="op">=</span> optim.Adam(</span>
+<span id="cb2-3">    model.parameters(),</span>
+<span id="cb2-4">    lr<span class="op">=</span><span class="fl">1e-3</span>,</span>
+<span id="cb2-5">    weight_decay<span class="op">=</span><span class="fl">1e-4</span>,</span>
+<span id="cb2-6">)</span>
+<span id="cb2-7"></span>
+<span id="cb2-8"><span class="cf">for</span> epoch <span class="kw">in</span> <span class="bu">range</span>(num_epochs):</span>
+<span id="cb2-9">    <span class="co"># enables dropout</span></span>
+<span id="cb2-10">    model.train()</span>
+<span id="cb2-11">    <span class="co"># clear gradients from the previous step</span></span>
+<span id="cb2-12">    optimizer.zero_grad()</span>
+<span id="cb2-13">    loss <span class="op">=</span> criterion(model(X_train), y_train)</span>
+<span id="cb2-14">    <span class="co"># compute gradients</span></span>
+<span id="cb2-15">    loss.backward()</span>
+<span id="cb2-16">    <span class="co"># update weights</span></span>
+<span id="cb2-17">    optimizer.step()</span>
+<span id="cb2-18"></span>
+<span id="cb2-19">    <span class="co"># disables dropout</span></span>
+<span id="cb2-20">    model.<span class="bu">eval</span>()</span>
+<span id="cb2-21">    <span class="cf">with</span> torch.no_grad():</span>
+<span id="cb2-22">        val_loss <span class="op">=</span> criterion(model(X_val), y_val).item()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting <code>optimizer.zero_grad()</code>. PyTorch accumulates gradients across calls by default, so skipping this silently corrupts every subsequent gradient with the previous batch’s leftover values.</p>
+<p id="proc-28-3"><strong>Procedure 28.3 (Move Computation to GPU When Available).</strong> <em>When to use:</em> always. The code is identical either way, and the device handles the rest.</p>
+<div id="lst-nn-device" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nn-device-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;28.3: Device-agnostic model and tensor placement
+</figcaption>
+<div aria-describedby="lst-nn-device-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">device <span class="op">=</span> torch.device(</span>
+<span id="cb3-2">    <span class="st">'cuda'</span> <span class="cf">if</span> torch.cuda.is_available() <span class="cf">else</span> <span class="st">'cpu'</span></span>
+<span id="cb3-3">)</span>
+<span id="cb3-4">model <span class="op">=</span> MLP(in_dim, hidden).to(device)</span>
+<span id="cb3-5">X_batch <span class="op">=</span> X_batch.to(device)</span>
+<span id="cb3-6">y_batch <span class="op">=</span> y_batch.to(device)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-28-4"><strong>Procedure 28.4 (Save and Load a Model).</strong> <em>When to use:</em> after training, before serving.</p>
+<div id="lst-nn-save" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nn-save-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;28.4: Save/load weights only: the recommended pattern
+</figcaption>
+<div aria-describedby="lst-nn-save-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">torch.save(model.state_dict(), <span class="st">'model.pt'</span>)</span>
+<span id="cb4-2"></span>
+<span id="cb4-3"><span class="co"># rebuild the same architecture</span></span>
+<span id="cb4-4">model <span class="op">=</span> MLP(in_dim, hidden)</span>
+<span id="cb4-5">model.load_state_dict(torch.load(<span class="st">'model.pt'</span>, map_location<span class="op">=</span><span class="st">'cpu'</span>))</span>
+<span id="cb4-6">model.<span class="bu">eval</span>()</span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="28.5">
+<h2 data-number="28.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">28.5</span> Worked Example</h2>
+<p>Three MLPs, identical architecture (two hidden layers), trained on the Breast Cancer Wisconsin dataset (426 train / 143 test, standardised features), differing only in width and regularisation:</p>
+<div id="lst-nn-worked-configs" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nn-worked-configs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;28.5: Three configurations, otherwise identical training code
+</figcaption>
+<div aria-describedby="lst-nn-worked-configs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># overparameterised, unregularised</span></span>
+<span id="cb5-2">train_model(hidden<span class="op">=</span><span class="dv">256</span>, dropout<span class="op">=</span><span class="fl">0.0</span>, weight_decay<span class="op">=</span><span class="fl">0.0</span>)</span>
+<span id="cb5-3"><span class="co"># same size, WITH dropout + weight decay</span></span>
+<span id="cb5-4">train_model(hidden<span class="op">=</span><span class="dv">256</span>, dropout<span class="op">=</span><span class="fl">0.3</span>, weight_decay<span class="op">=</span><span class="fl">1e-3</span>)</span>
+<span id="cb5-5"><span class="co"># small, unregularised</span></span>
+<span id="cb5-6">train_model(hidden<span class="op">=</span><span class="dv">16</span>,  dropout<span class="op">=</span><span class="fl">0.0</span>, weight_decay<span class="op">=</span><span class="fl">0.0</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The overparameterised, unregularised model (73,985 parameters against 426 training examples, over 170 parameters per example) shows textbook overfitting in its validation-loss curve:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Epoch</th>
+<th>Train loss</th>
+<th>Val loss</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>0.6998</td>
+<td>0.6224</td>
+</tr>
+<tr class="even">
+<td>25</td>
+<td>0.0628</td>
+<td>0.0832</td>
+</tr>
+<tr class="odd">
+<td>50</td>
+<td>0.0305</td>
+<td>0.0747</td>
+</tr>
+<tr class="even">
+<td>75</td>
+<td>0.0142</td>
+<td>0.0798</td>
+</tr>
+<tr class="odd">
+<td>100</td>
+<td>0.0060</td>
+<td>0.0877</td>
+</tr>
+<tr class="even">
+<td>125</td>
+<td>0.0029</td>
+<td>0.0976</td>
+</tr>
+<tr class="odd">
+<td>149 (final)</td>
+<td><strong>0.0016</strong></td>
+<td><strong>0.1054</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Training loss falls monotonically toward zero for all 150 epochs, exactly as expected. But validation loss reaches its minimum of 0.0725 at <strong>epoch 43</strong>, then rises steadily for the remaining 106 epochs to 0.1054 at the end of training. This is early stopping’s justification made numeric. The weights that generalise best are not the weights training the longest would give you. They’re the weights from epoch 43, which training past that point actively makes worse on unseen data even while making training loss better.</p>
+<p>Adding dropout (0.3) and weight decay (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>10</mn><mrow><mo>−</mo><mn>3</mn></mrow></msup></mrow><annotation encoding="application/x-tex">10^{-3}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mtight">3</span></span></span></span></span></span></span></span></span></span></span></span>) to the identical 73,985-parameter architecture measurably narrows this gap: minimum validation loss 0.0688 at epoch 46 (comparable to the unregularised model’s 0.0725), but the final-epoch validation loss is 0.0816, a much smaller rise from its minimum than the unregularised model’s climb from 0.0725 to 0.1054. Regularisation didn’t prevent the network from eventually drifting past its best validation point, but it slowed the drift measurably, exactly as Exposition’s description of dropout and weight decay predicts. Final test-set F1 was statistically indistinguishable across all three configurations (0.9718, 0.9718, 0.9721), including the 785-parameter small network, because Breast Cancer Wisconsin’s 30 features are cleanly separable enough that a simple model matches an overparameterised one at convergence. The overfitting story is visible in the validation-loss trajectory, not in the final headline metric. That’s exactly why monitoring the trajectory, not just the final number, is Procedure 28.2’s point.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker.pytorch <span class="im">import</span> PyTorch</span>
+<span id="cb6-2"></span>
+<span id="cb6-3">estimator <span class="op">=</span> PyTorch(</span>
+<span id="cb6-4">    <span class="co"># contains the model + training loop above</span></span>
+<span id="cb6-5">    entry_point<span class="op">=</span><span class="st">'train.py'</span>,</span>
+<span id="cb6-6">    <span class="co"># GPU instance; ml.m5.xlarge for CPU-only</span></span>
+<span id="cb6-7">    instance_type<span class="op">=</span><span class="st">'ml.g5.xlarge'</span>,</span>
+<span id="cb6-8">    framework_version<span class="op">=</span><span class="st">'2.3'</span>, py_version<span class="op">=</span><span class="st">'py311'</span>,</span>
+<span id="cb6-9">    hyperparameters<span class="op">=</span>{<span class="st">'epochs'</span>: <span class="dv">150</span>, <span class="st">'lr'</span>: <span class="fl">1e-3</span>},</span>
+<span id="cb6-10">)</span>
+<span id="cb6-11">estimator.fit({<span class="st">'train'</span>: s3_train_path, <span class="st">'val'</span>: s3_val_path})</span></code></pre></div>
+<p><strong>When to prefer SageMaker Training Jobs:</strong> the training script itself is unchanged from local PyTorch code. SageMaker’s value is provisioning the right instance type (including GPU) on demand, tearing it down when training finishes, and writing checkpoints/logs to S3 automatically, none of which requires touching the model or training loop code above.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="28.6">
+<h2 data-number="28.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">28.6</span> History and Further Reading</h2>
+<p>Murphy (Intro), Ch. 13, gives the formal derivation of backpropagation this chapter states without proving <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Burkov, Ch. 6, offers an accessible parallel treatment of the same material with a different set of worked derivations <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Burkov’s <em>Hundred-Page Language Models Book</em>, Ch. 1, covers the same vectors-to-gradient-descent foundations from scratch in code, worth a look for readers who want a from-first-principles second pass before Chapter 29’s transformer internals <span class="citation" data-cites="burkov2025hundredpagellm">(<a href="#ref-burkov2025hundredpagellm" role="doc-biblioref">Burkov 2025</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="28.7">
+<h2 data-number="28.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">28.7</span> How This Connects</h2>
+<p>This chapter builds on Book 1’s treatment of gradients and gradient descent (applied here to a specific architecture) and Chapter 18’s regularisation chapter. Dropout and weight decay are the neural-network-specific versions of the same overfitting-control principle covered there. It enables <a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a>, where attention layers are built from the same <code>Linear</code>/activation building blocks introduced here, and Chapter 33’s continuous pretraining, which modifies the weights of an already-trained network rather than starting from random initialisation. It’s often confused with “deep learning” as a separate thing. All deep learning is neural networks. “Deep” just means more than roughly two hidden layers.</p>
+</section>
+<section id="exercises" class="level2" data-number="28.8">
+<h2 data-number="28.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">28.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-28-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Write the neuron formula <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>output</mtext><mo>=</mo><mi>σ</mi><mo stretchy="false">(</mo><mo>…</mo><mtext> </mtext><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\text{output} = \sigma(\dots)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8095em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">output</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="minner">…</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mclose">)</span></span></span></span> and explain in one sentence why removing <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi></mrow><annotation encoding="application/x-tex">\sigma</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span></span></span></span> (the activation function) makes stacking multiple layers pointless.</p></li>
+<li id="ex-28-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> List the three regularisation techniques this chapter covers (dropout, weight decay, early stopping) and state which PyTorch call disables dropout at inference time.</p></li>
+<li id="ex-28-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-nn-worked-configs" class="quarto-xref">Listing&nbsp;<span>28.5</span></a>’s measured validation-loss trajectory for the unregularised 256-hidden model (minimum 0.0725 at epoch 43, rising to 0.1054 by epoch 149), explain what weights an early-stopping implementation should save, and why saving the epoch-149 weights instead would be the wrong choice despite epoch 149 having the lowest <em>training</em> loss.</p></li>
+<li id="ex-28-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> All three configurations in the Worked Example reached test F1 within 0.0003 of each other (0.9718–0.9721) despite parameter counts ranging from 785 to 73,985. Explain why this dataset’s characteristics make the overfitting story visible in the validation-loss curve but invisible in the final F1 score.</p></li>
+<li id="ex-28-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague says “just always use the biggest network you can fit in memory — more parameters can only help.” Using this chapter’s Worked Example, write the two or three sentences you’d say in response.</p></li>
+<li id="ex-28-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 28.2’s training loop calls <code>optimizer.zero_grad()</code> at the start of every step. Explain what would happen to the gradient values across 150 epochs if this line were accidentally deleted, and why the failure wouldn’t necessarily show up as an error.</p></li>
+<li id="ex-28-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about the Universal Approximation Theorem’s original proof (Cybenko, 1989 or Hornik, 1991). Identify what the theorem does <em>not</em> guarantee about a network trained by gradient descent, and explain why this gap between “can approximate” and “will be found by training” matters in practice.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="28.9">
+<h2 data-number="28.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">28.9</span> Mental Model</h2>
+<p>A neural network is an assembly line where each station (layer) transforms data into a more useful representation, until the final station produces a prediction. Training is using calculus and repetition to figure out what each station should do. The architecture is designed, but the station-by-station transformations are learned, not hand-specified. This chapter’s Worked Example is a reminder that “learned” cuts both ways. Left running too long, the assembly line keeps learning the training data’s noise along with its signal. That’s exactly what the validation-loss curve going back up after epoch 43 shows happening in real time.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-burkov2025hundredpagellm" class="csl-entry" role="listitem">
+Burkov, Andriy. 2025. <em>The Hundred-Page Language Models Book</em>. True Positive Inc.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+</div>
+</section>

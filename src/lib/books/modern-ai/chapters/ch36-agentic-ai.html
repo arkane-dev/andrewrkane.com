@@ -1,0 +1,244 @@
+<p>Prompting (Chapter 30), retrieval (<a href="/books/modern-ai/ch31-rag-vector-databases" class="quarto-xref"><span>Chapter 31</span></a>), and evaluation (<a href="/books/modern-ai/ch32-llm-evaluation" class="quarto-xref"><span>Chapter 32</span></a>) all assume a fixed shape: one prompt in, one response out. That’s enough for classification, extraction, or question-answering over retrieved context. It isn’t enough for “book me a flight and email me the confirmation,” “debug this failing test and fix it,” or “research this topic across ten sources and write a summary”: tasks needing an unknown, task-dependent number of steps, decided at run time based on what happens after each step. An agent is what results when a model decides its own next action rather than following a script written in advance.</p>
+<section id="motivation" class="level2" data-number="36.1">
+<h2 data-number="36.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">36.1</span> Motivation</h2>
+<p>The defining loop of an agent is <code>observe → reason → act → observe (the result of that act) → reason → act → ... → stop</code>. Compare this to a single prompt call, which is just <code>reason → act</code> executed once. An agent runs that loop repeatedly, and critically, the model itself decides when to stop, which action to take next, and how to interpret each observation. Tools and stopping conditions are supplied, judgment calls in between are not. This isn’t a new capability bolted onto an LLM. It’s tool calling (Chapter 30) and autoregressive generation (<a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a>) run in a loop, where each tool’s result becomes new context for the next generation step. Worked Example 36 below builds and runs this loop directly, with real executable tools and a real step-limit guardrail, to make the mechanics concrete rather than diagrammatic.</p>
+</section>
+<section id="exposition" class="level2" data-number="36.2">
+<h2 data-number="36.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">36.2</span> Exposition</h2>
+<section id="the-react-pattern" class="level3" data-number="36.2.1">
+<h3 data-number="36.2.1" class="anchored" data-anchor-id="the-react-pattern"><span class="header-section-number">36.2.1</span> The ReAct Pattern</h3>
+<p>ReAct (Reason + Act) is the foundational pattern nearly every agent implementation reduces to. Instead of silently deciding on an action, the model is asked to think out loud before acting: chain-of-thought applied specifically to action selection. A typical turn: <code>Thought: I need X before I can compute Y. Action: search("X"). Observation: &lt;result&gt;. Thought: now I can compute Y. Action: calculator(...). Observation: &lt;result&gt;. Final Answer: ...</code>. Writing the “Thought” step before each action gives the model a place to make its plan explicit in tokens it can condition on, rather than deciding silently with no way to correct course. Modern tool-calling APIs formalise this loop at the API level. The model’s text output <em>is</em> its reasoning trace, its <code>tool_use</code> blocks <em>are</em> its actions. But the underlying pattern is identical to the original ReAct paper’s plain-text scratchpad.</p>
+</section>
+<section id="tool-use-as-the-only-way-an-agent-acts" class="level3" data-number="36.2.2">
+<h3 data-number="36.2.2" class="anchored" data-anchor-id="tool-use-as-the-only-way-an-agent-acts"><span class="header-section-number">36.2.2</span> Tool Use as the Only Way an Agent Acts</h3>
+<p>An agent has no capabilities beyond the tools it’s given. The model cannot “just go look something up.” It can only emit a request to call a function with arguments in a defined schema, finding out what happened only when that function runs and returns a result. This means an agent’s capability surface, and its blast radius if something goes wrong, is entirely bounded by which tools it has access to. A calculator tool can at worst return a wrong number. A tool that deletes files or sends money can at worst do that for real. Tool scoping is therefore the primary safety control, not an implementation detail.</p>
+</section>
+<section id="memory-short-term-vs.-long-term" class="level3" data-number="36.2.3">
+<h3 data-number="36.2.3" class="anchored" data-anchor-id="memory-short-term-vs.-long-term"><span class="header-section-number">36.2.3</span> Memory: Short-Term vs.&nbsp;Long-Term</h3>
+<p>Short-term memory is just the context window: the running transcript of thoughts, actions, and observations accumulated in the loop so far. It’s free but bounded. A long-running agent eventually fills its context window and must summarise, discard old steps, or stop. Long-term memory, information persisting across separate agent runs, or too large for any context window, is where RAG (<a href="/books/modern-ai/ch31-rag-vector-databases" class="quarto-xref"><span>Chapter 31</span></a>) becomes directly relevant: a <code>search_memory</code> tool backed by a vector store, indexed over the agent’s own past interactions rather than a static document set. From the model’s point of view, “recall something learned three days ago” and “retrieve a relevant support ticket” are the same operation: a tool call returning text to reason over.</p>
+</section>
+<section id="planning-and-multi-agent-orchestration" class="level3" data-number="36.2.4">
+<h3 data-number="36.2.4" class="anchored" data-anchor-id="planning-and-multi-agent-orchestration"><span class="header-section-number">36.2.4</span> Planning and Multi-Agent Orchestration</h3>
+<p>Two broad planning strategies exist. Iterative (ReAct-style) decides one action at a time, adapting naturally to surprising observations but risking wandering across many steps. Plan-and-execute writes a full multi-step plan up front, more predictable and reviewable but less adaptive mid-execution if an early assumption turns out wrong. Multi-agent orchestration splits responsibility across agents with narrower toolsets, sequential handoff, supervisor/worker, or debate/critique patterns, but multiplies latency, token cost, and the number of places a failure can occur. A single well-scoped agent with a good toolset outperforms a multi-agent system on most tasks people reach for one on. Default to one agent. Add more only when a single agent’s context or tool surface has demonstrably become the bottleneck.</p>
+</section>
+<section id="failure-modes-to-expect" class="level3" data-number="36.2.5">
+<h3 data-number="36.2.5" class="anchored" data-anchor-id="failure-modes-to-expect"><span class="header-section-number">36.2.5</span> Failure Modes to Expect</h3>
+<p>Infinite or near-infinite loops: a tool returning ambiguous or unsatisfying results can make the model retry indefinitely rather than giving up, which is why every agent loop needs a hard step limit, treated as a distinct explicit outcome rather than a silent timeout. Tool misuse: the model can call a tool with plausible-looking but wrong arguments, or the wrong tool entirely. Narrow, well-described schemas reduce this but nothing eliminates it. Compounding errors: a wrong observation early in a trajectory becomes part of the context for every subsequent step, so the error compounds rather than staying contained. Cost and latency blowup: every step is a full model call, so a ten-step trajectory costs roughly ten times a single prompt call. Worked Example 36 demonstrates the first of these, the infinite-retry failure mode, directly and measurably.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="36.3">
+<h2 data-number="36.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">36.3</span> Trade-offs and Limits</h2>
+<p>Start with one agent and the smallest tool set that solves the task. Only split into multiple agents with concrete evidence (context overload, genuinely distinct specialisations) that one agent isn’t enough. Plan-and-execute is easier to put a human checkpoint in front of. Iterative ReAct adapts better mid-task but is harder to review before it runs. A hand-rolled loop is fully transparent with zero dependencies, at the cost of rebuilding common infrastructure (retries, tracing, multi-agent routing) from scratch. Frameworks (LangGraph, CrewAI) provide that infrastructure for free, at the cost of an abstraction layer between the developer and what’s actually sent to the model. Worth it once the infrastructure is genuinely needed, overkill for a single well-scoped agent.</p>
+</section>
+<section id="procedures" class="level2" data-number="36.4">
+<h2 data-number="36.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">36.4</span> Procedures</h2>
+<p id="proc-36-1"><strong>Procedure 36.1 (Define a Tool Schema for an Agent).</strong> <em>When to use:</em> every time an agent is given a new capability.</p>
+<div id="lst-agent-tool-schema" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agent-tool-schema-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;36.1: A tool schema written for the model’s decision-making, not human docs
+</figcaption>
+<div aria-describedby="lst-agent-tool-schema-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1">weather_tool <span class="op">=</span> {</span>
+<span id="cb1-2">    <span class="st">"name"</span>: <span class="st">"get_weather"</span>,</span>
+<span id="cb1-3">    <span class="st">"description"</span>: (</span>
+<span id="cb1-4">        <span class="st">"Get the current weather for a city. Use this "</span></span>
+<span id="cb1-5">        <span class="st">"whenever the user asks about weather, temperature, "</span></span>
+<span id="cb1-6">        <span class="st">"or conditions in a specific location. Do not guess "</span></span>
+<span id="cb1-7">        <span class="st">"weather from memory: always call this tool."</span></span>
+<span id="cb1-8">    ),</span>
+<span id="cb1-9">    <span class="st">"input_schema"</span>: {</span>
+<span id="cb1-10">        <span class="st">"type"</span>: <span class="st">"object"</span>,</span>
+<span id="cb1-11">        <span class="st">"properties"</span>: {</span>
+<span id="cb1-12">            <span class="st">"city"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},</span>
+<span id="cb1-13">            <span class="st">"units"</span>: {</span>
+<span id="cb1-14">                <span class="st">"type"</span>: <span class="st">"string"</span>,</span>
+<span id="cb1-15">                <span class="st">"enum"</span>: [<span class="st">"celsius"</span>, <span class="st">"fahrenheit"</span>],</span>
+<span id="cb1-16">            },</span>
+<span id="cb1-17">        },</span>
+<span id="cb1-18">        <span class="st">"required"</span>: [<span class="st">"city"</span>],</span>
+<span id="cb1-19">    },</span>
+<span id="cb1-20">}</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> writing a description that explains <em>what the function does</em> but not <em>when to use it</em>. The model chooses between tools from the description text, and a missing triggering condition is a missing signal, not a cosmetic gap.</p>
+<p id="proc-36-2"><strong>Procedure 36.2 (Implement a Step-Limit Guardrail).</strong> <em>When to use:</em> every agent loop, no exceptions.</p>
+<div id="lst-agent-step-limit" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agent-step-limit-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;36.2: A hard cap with an explicit, distinct outcome
+</figcaption>
+<div aria-describedby="lst-agent-step-limit-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> run_agent(task, max_steps<span class="op">=</span><span class="dv">6</span>):</span>
+<span id="cb2-2">    trajectory <span class="op">=</span> []</span>
+<span id="cb2-3">    <span class="cf">for</span> step <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, max_steps <span class="op">+</span> <span class="dv">1</span>):</span>
+<span id="cb2-4">        <span class="co"># the model's next action</span></span>
+<span id="cb2-5">        decision <span class="op">=</span> policy(step, trajectory)</span>
+<span id="cb2-6">        <span class="cf">if</span> decision <span class="kw">is</span> <span class="va">None</span>:</span>
+<span id="cb2-7">            <span class="cf">return</span> {<span class="st">"status"</span>: <span class="st">"answered"</span>, <span class="st">"trajectory"</span>: trajectory}</span>
+<span id="cb2-8">        result <span class="op">=</span> TOOLS[decision[<span class="st">"action"</span>]](<span class="op">**</span>decision[<span class="st">"args"</span>])</span>
+<span id="cb2-9">        trajectory.append({</span>
+<span id="cb2-10">            <span class="st">"step"</span>: step, <span class="op">**</span>decision, <span class="st">"observation"</span>: result</span>
+<span id="cb2-11">        })</span>
+<span id="cb2-12">    <span class="cf">return</span> {</span>
+<span id="cb2-13">        <span class="st">"status"</span>: <span class="st">"step_limit_reached"</span>,</span>
+<span id="cb2-14">        <span class="st">"trajectory"</span>: trajectory,</span>
+<span id="cb2-15">    }</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Key idea:</strong> treat <code>step_limit_reached</code> as a distinct return value, not an exception or silent cutoff. Downstream code and any human reviewer needs to tell “the agent answered” apart from “the agent ran out of steps and the answer is unknown.”</p>
+<p id="proc-36-3"><strong>Procedure 36.3 (Add a Human-in-the-Loop Approval Checkpoint).</strong> <em>When to use:</em> before any tool call with real-world side effects: sending an email, making a purchase, deleting data, deploying code.</p>
+<div id="lst-agent-approval" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agent-approval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;36.3: Blocking risky tool calls on explicit approval
+</figcaption>
+<div aria-describedby="lst-agent-approval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">RISKY_TOOLS <span class="op">=</span> {<span class="st">"send_email"</span>, <span class="st">"delete_file"</span>, <span class="st">"make_payment"</span>}</span>
+<span id="cb3-2"></span>
+<span id="cb3-3"><span class="kw">def</span> act(call):</span>
+<span id="cb3-4">    <span class="cf">if</span> call.name <span class="kw">in</span> RISKY_TOOLS:</span>
+<span id="cb3-5">        prompt <span class="op">=</span> <span class="ss">f"Approve </span><span class="sc">{</span>call<span class="sc">.</span>name<span class="sc">}</span><span class="ss">(</span><span class="sc">{</span>call<span class="sc">.</span><span class="bu">input</span><span class="sc">}</span><span class="ss">)? [y/N] "</span></span>
+<span id="cb3-6">        approval <span class="op">=</span> <span class="bu">input</span>(prompt)</span>
+<span id="cb3-7">        <span class="cf">if</span> approval.strip().lower() <span class="op">!=</span> <span class="st">"y"</span>:</span>
+<span id="cb3-8">            <span class="cf">return</span> <span class="st">"Action was not approved by the human reviewer."</span></span>
+<span id="cb3-9">    <span class="cf">return</span> TOOL_IMPLEMENTATIONS[call.name](call.<span class="bu">input</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="36.5">
+<h2 data-number="36.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">36.5</span> Worked Example</h2>
+<p>No hosted LLM API is used in this Worked Example. Instead, the loop mechanics from Procedure 36.2 are run with a small, fully deterministic scripted policy standing in for the model’s decisions, so every step is real, reproducible, and measured rather than a fabricated transcript of what an LLM “would” say. Two real tools back it: a <code>calculator</code> (genuine arithmetic evaluation) and a <code>flaky_search</code> tool deliberately built to return an ambiguous, unsatisfying result for one specific query, modelling Exposition’s “tool returns ambiguous results” failure mode directly.</p>
+<div id="lst-agent-worked-loop" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agent-worked-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;36.4: The scripted policy retries on an ambiguous observation, exactly as Exposition warns
+</figcaption>
+<div aria-describedby="lst-agent-worked-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="kw">def</span> scripted_policy(step, trajectory):</span>
+<span id="cb4-2">    last_obs <span class="op">=</span> (</span>
+<span id="cb4-3">        trajectory[<span class="op">-</span><span class="dv">1</span>][<span class="st">"observation"</span>] <span class="cf">if</span> trajectory <span class="cf">else</span> <span class="va">None</span></span>
+<span id="cb4-4">    )</span>
+<span id="cb4-5">    <span class="cf">if</span> last_obs <span class="kw">is</span> <span class="va">None</span> <span class="kw">or</span> <span class="st">"No definitive result"</span> <span class="kw">in</span> <span class="bu">str</span>(last_obs):</span>
+<span id="cb4-6">        <span class="cf">return</span> {</span>
+<span id="cb4-7">            <span class="st">"thought"</span>: <span class="st">"..."</span>,</span>
+<span id="cb4-8">            <span class="st">"action"</span>: <span class="st">"flaky_search"</span>,</span>
+<span id="cb4-9">            <span class="st">"args"</span>: {<span class="st">"query"</span>: <span class="st">"population of Atlantis"</span>},</span>
+<span id="cb4-10">        }</span>
+<span id="cb4-11">    <span class="cf">return</span> <span class="va">None</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Run against <code>max_steps=6</code>, the loop’s real, logged trajectory:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Step</th>
+<th>Action</th>
+<th>Observation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td><code>flaky_search("population of Atlantis")</code></td>
+<td>“No definitive result found. Sources disagree.”</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td><code>flaky_search("population of Atlantis")</code></td>
+<td>“No definitive result found. Sources disagree.”</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td><code>flaky_search("population of Atlantis")</code></td>
+<td>“No definitive result found. Sources disagree.”</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td><code>flaky_search("population of Atlantis")</code></td>
+<td>“No definitive result found. Sources disagree.”</td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td><code>flaky_search("population of Atlantis")</code></td>
+<td>“No definitive result found. Sources disagree.”</td>
+</tr>
+<tr class="even">
+<td>6</td>
+<td><code>flaky_search("population of Atlantis")</code></td>
+<td>“No definitive result found. Sources disagree.”</td>
+</tr>
+</tbody>
+</table>
+<p>Final status: <strong><code>step_limit_reached</code></strong>, with all 6 of <code>max_steps=6</code> consumed and 6 real calls made to <code>flaky_search</code>. This is Procedure 36.2’s guardrail doing exactly its job. The scripted policy never gives up on the ambiguous result, exactly matching Exposition’s warning that “a tool that returns ambiguous or unsatisfying results can make the model retry indefinitely rather than giving up.” The hard step limit is what turns an unbounded retry loop into a bounded, explicitly-flagged failure instead of a silent hang. Without the guardrail, this exact policy would call <code>flaky_search</code> forever.</p>
+<p>For contrast, a well-behaved single-tool-call trajectory against the <em>same</em> loop code, using the calculator tool on a query with a clean, well-defined answer:</p>
+<div id="lst-agent-worked-good" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-agent-worked-good-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;36.5: A one-step trajectory: no retry, no ambiguity, done
+</figcaption>
+<div aria-describedby="lst-agent-worked-good-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># → 1.619047619047619</span></span>
+<span id="cb5-2">calculator(<span class="st">"68000000 / 84000000 * 2"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This produces <code>status: "answered"</code> after exactly 1 step. The loop mechanics are identical to the failing trajectory above. Only the tool’s result differs. This side-by-side is the concrete version of Mental Model’s claim: “every agent failure traces back to one of three places.” Here, the difference between a clean 1-step success and a 6-step guardrail-triggered failure was entirely the tool’s observation, not the loop logic around it.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># Amazon Bedrock Agents: managed agent orchestration</span></span>
+<span id="cb6-2"><span class="co"># with built-in tracing</span></span>
+<span id="cb6-3"><span class="im">import</span> boto3</span>
+<span id="cb6-4"></span>
+<span id="cb6-5">client <span class="op">=</span> boto3.client(<span class="st">"bedrock-agent-runtime"</span>)</span>
+<span id="cb6-6">response <span class="op">=</span> client.invoke_agent(</span>
+<span id="cb6-7">    agentId<span class="op">=</span><span class="st">"AGENT123"</span>,</span>
+<span id="cb6-8">    agentAliasId<span class="op">=</span><span class="st">"ALIAS1"</span>,</span>
+<span id="cb6-9">    sessionId<span class="op">=</span><span class="st">"session-1"</span>,</span>
+<span id="cb6-10">    inputText<span class="op">=</span>(</span>
+<span id="cb6-11">        <span class="st">"Find the population of Atlantis and compute a ratio."</span></span>
+<span id="cb6-12">    ),</span>
+<span id="cb6-13">)</span></code></pre></div>
+<p><strong>When to prefer Bedrock Agents:</strong> it manages the observe-reason-act loop, tool invocation (via Lambda-backed “action groups”), and session state without hand-rolling Procedure 36.2’s loop directly. The trade is less visibility into the exact loop mechanics than the hand-rolled version gives, which matters when debugging exactly the kind of retry-loop failure this chapter’s Worked Example demonstrates.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="36.6">
+<h2 data-number="36.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">36.6</span> History and Further Reading</h2>
+<p>Yao et al.’s “ReAct: Synergizing Reasoning and Acting in Language Models” is the original paper this chapter’s pattern is based on <span class="citation" data-cites="yao2022react">(<a href="#ref-yao2022react" role="doc-biblioref">Yao et al. 2023</a>)</span>. Anthropic’s “Building Effective Agents” (anthropic.com/research) gives practical guidance on when to use an agent versus a simpler fixed workflow.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="36.7">
+<h2 data-number="36.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">36.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 30’s tool/function-calling mechanics (the mechanism every agent action goes through) and <a href="/books/modern-ai/ch31-rag-vector-databases" class="quarto-xref"><span>Chapter 31</span></a> (the standard pattern for an agent’s long-term memory). It enables Chapter 37’s capstone, which may combine an agent loop with earlier chapters into a single project. It’s often confused with “agentic” meaning any tool call. A single tool call inside an otherwise fixed pipeline is tool-augmented generation, not an agent. What makes something agentic is the <em>loop</em>: the model deciding its own next step based on the result of its previous one, potentially many times, until it decides it’s done.</p>
+</section>
+<section id="exercises" class="level2" data-number="36.8">
+<h2 data-number="36.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">36.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-36-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Write the agent loop (<code>observe → reason → act → observe → ...</code>) and contrast it with a single prompt call in one sentence.</p></li>
+<li id="ex-36-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State Procedure 36.2’s “key idea” about <code>step_limit_reached</code>, and explain why treating it as a silent cutoff instead would be a problem.</p></li>
+<li id="ex-36-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-agent-worked-loop" class="quarto-xref">Listing&nbsp;<span>36.4</span></a>’s measured trajectory (6 identical retries, <code>step_limit_reached</code> after exactly <code>max_steps=6</code>), explain what would have happened without Procedure 36.2’s guardrail in place, using this chapter’s Failure Modes section.</p></li>
+<li id="ex-36-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Comparing the two Worked Example trajectories (6-step failure vs.&nbsp;1-step success using the identical loop code), explain what this comparison demonstrates about where agent failures actually originate, per Mental Model’s three-place debugging list.</p></li>
+<li id="ex-36-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague wants to build a five-agent system (planner, researcher, coder, reviewer, deployer) for a task that’s currently handled by one well-scoped agent with three tools. Using this chapter’s Trade-offs section, write the two or three sentences you’d say before agreeing to that redesign.</p></li>
+<li id="ex-36-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s Worked Example used a deterministic scripted policy instead of a real LLM. Explain what specifically about the step-limit guardrail’s <em>behaviour</em> is legitimately demonstrated by this substitution, and what would NOT be legitimately demonstrated (i.e., what a real LLM-driven trajectory could show that this one cannot).</p></li>
+<li id="ex-36-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about the debate/critique multi-agent pattern mentioned in Exposition. Identify one specific type of error it’s well-suited to catching that a single-pass agent would likely miss, and explain why the roughly-doubled cost might still be worth it for that specific error type.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="36.9">
+<h2 data-number="36.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">36.9</span> Mental Model</h2>
+<p>An agent is a prompt-and-tools loop, not a new kind of model. Everything it can do is bounded by the tools it’s handed. Everything it does with those tools is governed by the same reasoning-in-context mechanism from Chapter 30, run more than once. Every agent failure traces back to one of three places: a missing or wrong tool, a missing stopping condition, or an early error that compounded because nothing caught it. This chapter’s Worked Example isolated the second of these directly and measurably. The same loop code produced a clean 1-step success and a guardrail-triggered 6-step failure, with the only difference being whether a stopping condition (a clean tool result) was ever reached.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-yao2022react" class="csl-entry" role="listitem">
+Yao, Shunyu, Jeffrey Zhao, Dian Yu, et al. 2023. <span>“ReAct: Synergizing Reasoning and Acting in Language Models.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+</div>
+</section>

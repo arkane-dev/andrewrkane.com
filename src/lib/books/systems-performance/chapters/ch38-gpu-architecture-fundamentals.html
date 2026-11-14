@@ -1,0 +1,250 @@
+<p>Every chapter before this one in the series treated the GPU as an accelerator requested by name, <code>device='cuda'</code>, an instance type on a price sheet, and otherwise left as a black box. That abstraction is the right level almost all the time. But it stops working the moment a workload is slow and you need to know <em>why</em>, or you need to choose between instance types on more than price, or you need to write a kernel yourself. None of that is possible without a real model of what a GPU is and why it is built the way it is. This chapter builds that model from first principles. Not “GPUs are fast,” but specifically what they are fast at, what they are bad at, and the vocabulary, SM, warp, occupancy, Tensor Core, that the rest of this book leans on. It ends with real measurements taken on this book’s reference rig, including a genuinely surprising one about how little a classic textbook cost actually costs on modern hardware.</p>
+<section id="motivation" class="level2" data-number="38.1">
+<h2 data-number="38.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">38.1</span> Motivation</h2>
+<p>A CPU and a GPU solve the same underlying problem, do arithmetic on data, with opposite design philosophies. A CPU is <strong>latency-optimised</strong>. A handful of cores (8-64 on typical hardware), each extremely sophisticated, with deep pipelines, aggressive branch prediction, large caches, and out-of-order execution. The goal is to finish <em>one</em> thread of work as fast as possible, including work full of unpredictable branches and dependent memory accesses. A GPU is <strong>throughput-optimised</strong>. Thousands of much simpler cores, minimal branch prediction, smaller caches, no out-of-order execution. The goal is to finish <em>millions</em> of largely independent, largely uniform pieces of work as fast as possible in aggregate, even if any single piece takes longer than it would on a CPU.</p>
+<p>Neither design is “better.” A GPU is superb at “do this same arithmetic operation to every one of these hundred million numbers,” exactly what <code>torch.matmul</code>, attention, and convolution are, and poor at “run this branchy, pointer-chasing, inherently sequential business logic,” exactly what a CPU is for. The rest of this chapter is about <em>how</em> the GPU achieves that throughput.</p>
+</section>
+<section id="exposition" class="level2" data-number="38.2">
+<h2 data-number="38.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">38.2</span> Exposition</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface.</p>
+<section id="simt-single-instruction-multiple-threads" class="level3" data-number="38.2.1">
+<h3 data-number="38.2.1" class="anchored" data-anchor-id="simt-single-instruction-multiple-threads"><span class="header-section-number">38.2.1</span> SIMT: Single Instruction, Multiple Threads</h3>
+<p>A GPU does not schedule threads individually. It groups them into <strong>warps</strong> of 32 threads (on all current NVIDIA hardware) and issues one instruction per clock to the entire warp. Every thread in the warp executes the same instruction, on its own slice of data, at the same time. This is why the model is called SIMT (Single Instruction, Multiple Threads), a close cousin of the SIMD (Single Instruction, Multiple Data) vector units covered later in this book’s CPU chapters, but implemented at the level of independent hardware threads rather than a single thread’s vector registers.</p>
+<p>This has an immediate, important consequence: <strong>warp divergence</strong>. If threads within the same warp take different branches of an <code>if</code>/<code>else</code>, for instance because the condition depends on <code>thread_id % 2</code>, the hardware historically had to execute both branches serially for the whole warp, masking off the threads that do not apply to each branch. A badly diverged warp could take as long as the sum of all its branches combined, not the max. Modern architectures (Volta, 2017, onward) added <em>independent thread scheduling</em>, which softens this cost considerably. The Worked Example below measures the real overhead on this book’s reference rig, and it is noticeably smaller than the classic worst-case story predicts, though never exactly zero, and it depends heavily on what is inside the branches.</p>
+</section>
+<section id="the-streaming-multiprocessor-sm" class="level3" data-number="38.2.2">
+<h3 data-number="38.2.2" class="anchored" data-anchor-id="the-streaming-multiprocessor-sm"><span class="header-section-number">38.2.2</span> The Streaming Multiprocessor (SM)</h3>
+<p>The SM is the GPU’s basic execution unit, the rough equivalent of a CPU core, though the comparison undersells it. Each SM contains many CUDA cores, a warp scheduler able to keep several warps “in flight” and switch between them for free when one stalls on a memory access, a register file, and a slice of fast on-chip shared memory (covered in depth in Chapter 40). A modern high-end GPU has on the order of 100+ SMs. This book’s reference rig has 170 SMs<span class="ref-rig-mark">†</span>, queried directly in the Worked Example rather than taken from a spec sheet.</p>
+<p>The GPU achieves throughput not by making any single warp fast, but by having so many SMs, each juggling so many warps, that memory-access stalls on one warp are hidden by switching to another warp that is ready to compute. This is <strong>latency hiding through massive parallelism</strong>, and it is the single most important idea in this chapter. A GPU tolerates slow individual memory accesses by having enormous amounts of other work ready to fill the gap. A CPU instead tries to avoid the stall altogether, through branch prediction, prefetching, and big caches. Different problem, different solution.</p>
+</section>
+<section id="cuda-cores-vs.-tensor-cores" class="level3" data-number="38.2.3">
+<h3 data-number="38.2.3" class="anchored" data-anchor-id="cuda-cores-vs.-tensor-cores"><span class="header-section-number">38.2.3</span> CUDA Cores vs.&nbsp;Tensor Cores</h3>
+<p><strong>CUDA cores</strong> are general-purpose ALUs: one thread, one core, ordinary scalar arithmetic (add, multiply, fused multiply-add) in FP32/FP64/INT32. This is what the vector-add and elementwise kernels in Chapters 39-43 run on.</p>
+<p><strong>Tensor Cores</strong> are specialised units that perform an entire small matrix-multiply-accumulate (<code>D = A×B + C</code>, on 4×4 or larger tiles) in a handful of clock cycles, at far higher throughput per watt than the equivalent done on CUDA cores one multiply-add at a time. This matters enormously for this book specifically. The FLOPs formulas from Book 2, Chapter 29’s transformer training math (6ND for training, 2N for inference) are almost entirely matrix multiplications: <code>QKᵀ</code>, <code>softmax(...)V</code>, the feed-forward layers. That means nearly all of an LLM’s compute budget runs on Tensor Cores, not CUDA cores. A GPU’s advertised TFLOPs number for ML workloads is a Tensor Core number, not a CUDA core number, and the two can differ by an order of magnitude on the same chip.</p>
+</section>
+<section id="the-memory-hierarchy-at-a-glance" class="level3" data-number="38.2.4">
+<h3 data-number="38.2.4" class="anchored" data-anchor-id="the-memory-hierarchy-at-a-glance"><span class="header-section-number">38.2.4</span> The Memory Hierarchy, at a Glance</h3>
+<p>Data has to get to the cores to be operated on, and where it lives changes how fast that is by orders of magnitude:</p>
+<pre class="text"><code>Registers (per-thread, fastest, smallest)
+    ↓
+Shared memory (per-SM, fast, programmer-managed, tens of KB)
+    ↓
+L2 cache (chip-wide, shared across all SMs)
+    ↓
+Global memory / HBM (off-chip, largest, slowest: but
+still roughly 1-2 TB/s on modern GPUs)</code></pre>
+<p>This is only the map for now. Chapter 40 is entirely about how to use this hierarchy well, and how badly things go when you do not.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="38.3">
+<h2 data-number="38.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">38.3</span> Trade-offs and Limits</h2>
+<p>GPUs win at massively data-parallel workloads with uniform control flow: matrix multiply, elementwise ops, convolutions, attention. They win at problems where single-operation latency can be traded for aggregate throughput, and at anything dominated by Tensor Core-eligible matrix multiplication, which is essentially all of deep learning. GPUs lose at branchy, data-dependent control flow that differs per thread, where warp divergence eats the throughput advantage. They lose at small problems that cannot fill the GPU with enough parallel work to hide memory latency, since kernel launch overhead alone is often microseconds: trivial for CPUs, real for tiny GPU jobs. And they lose at anything inherently sequential, where one step depends entirely on the previous step’s result.</p>
+</section>
+<section id="procedures" class="level2" data-number="38.4">
+<h2 data-number="38.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">38.4</span> Procedures</h2>
+<p id="proc-38-1"><strong>Procedure 38.1 (Query Your GPU’s Real Specs).</strong> <em>When to use:</em> before sizing any workload. Never plan capacity off a spec sheet when the actual card can be queried directly.</p>
+<div id="lst-gpuarch-specs" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gpuarch-specs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;38.1: Querying real GPU specs instead of trusting a spec sheet
+</figcaption>
+<div aria-describedby="lst-gpuarch-specs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> torch</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="kw">def</span> print_gpu_specs(device<span class="op">=</span><span class="dv">0</span>):</span>
+<span id="cb2-4">    <span class="cf">if</span> <span class="kw">not</span> torch.cuda.is_available():</span>
+<span id="cb2-5">        <span class="bu">print</span>(<span class="st">'No CUDA GPU available.'</span>)</span>
+<span id="cb2-6">        <span class="cf">return</span></span>
+<span id="cb2-7">    props <span class="op">=</span> torch.cuda.get_device_properties(device)</span>
+<span id="cb2-8">    major, minor <span class="op">=</span> torch.cuda.get_device_capability(device)</span>
+<span id="cb2-9">    <span class="bu">print</span>(<span class="ss">f'Name:              </span><span class="sc">{</span>props<span class="sc">.</span>name<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb2-10">    <span class="bu">print</span>(<span class="ss">f'Compute capability: </span><span class="sc">{</span>major<span class="sc">}</span><span class="ss">.</span><span class="sc">{</span>minor<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb2-11">    <span class="bu">print</span>(<span class="ss">f'SM count:          </span><span class="sc">{</span>props<span class="sc">.</span>multi_processor_count<span class="sc">}</span><span class="ss">'</span>)</span>
+<span id="cb2-12">    <span class="bu">print</span>(<span class="ss">f'Total memory:      </span><span class="sc">{</span>props<span class="sc">.</span>total_memory <span class="op">/</span> <span class="fl">1e9</span><span class="sc">:.1f}</span><span class="ss"> GB'</span>)</span>
+<span id="cb2-13">    <span class="bu">print</span>(<span class="ss">f'L2 cache:          </span><span class="sc">{</span>props<span class="sc">.</span>L2_cache_size <span class="op">/</span> <span class="fl">1e6</span><span class="sc">:.0f}</span><span class="ss"> MB'</span>)</span>
+<span id="cb2-14"></span>
+<span id="cb2-15">print_gpu_specs()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming every GPU with the same model name performs identically. Clock speeds, power limits, and even SM counts can differ between vendor SKUs, such as an OEM-underclocked card. Always query, never assume.</p>
+<p id="proc-38-2"><strong>Procedure 38.2 (Benchmark GPU vs.&nbsp;CPU Correctly).</strong> <em>When to use:</em> any time CPU and GPU performance are being compared. The single most common beginner mistake is timing the <em>first</em> GPU call, which includes one-time CUDA context initialisation and kernel JIT compilation costs that have nothing to do with steady-state performance.</p>
+<div id="lst-gpuarch-benchmark" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gpuarch-benchmark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;38.2: Correctly timing a GPU op: warm up, then use CUDA events, not wall-clock time
+</figcaption>
+<div aria-describedby="lst-gpuarch-benchmark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> torch, time</span>
+<span id="cb3-2"></span>
+<span id="cb3-3"><span class="kw">def</span> benchmark_gpu_op(op, <span class="op">*</span>args, warmup<span class="op">=</span><span class="dv">5</span>, reps<span class="op">=</span><span class="dv">10</span>):</span>
+<span id="cb3-4">    <span class="co">"""Times a GPU op correctly: warms up, then times with</span></span>
+<span id="cb3-5"><span class="co">    CUDA events (not wall clock)."""</span></span>
+<span id="cb3-6">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(warmup):</span>
+<span id="cb3-7">        _ <span class="op">=</span> op(<span class="op">*</span>args)</span>
+<span id="cb3-8">    torch.cuda.synchronize()</span>
+<span id="cb3-9"></span>
+<span id="cb3-10">    start <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-11">    end <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-12">    times <span class="op">=</span> []</span>
+<span id="cb3-13">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(reps):</span>
+<span id="cb3-14">        start.record()</span>
+<span id="cb3-15">        _ <span class="op">=</span> op(<span class="op">*</span>args)</span>
+<span id="cb3-16">        end.record()</span>
+<span id="cb3-17">        torch.cuda.synchronize()</span>
+<span id="cb3-18">        times.append(start.elapsed_time(end))</span>
+<span id="cb3-19">    <span class="co"># best-of-N is more stable than mean for GPU microbenchmarks</span></span>
+<span id="cb3-20">    <span class="cf">return</span> <span class="bu">min</span>(times)</span>
+<span id="cb3-21"></span>
+<span id="cb3-22">n <span class="op">=</span> <span class="dv">100_000_000</span></span>
+<span id="cb3-23">a, b <span class="op">=</span> torch.randn(n, device<span class="op">=</span><span class="st">'cuda'</span>), torch.randn(n, device<span class="op">=</span><span class="st">'cuda'</span>)</span>
+<span id="cb3-24">ms <span class="op">=</span> benchmark_gpu_op(<span class="kw">lambda</span> a, b: a <span class="op">*</span> a <span class="op">+</span> b, a, b)</span>
+<span id="cb3-25"><span class="bu">print</span>(<span class="ss">f'</span><span class="sc">{</span>ms<span class="sc">:.3f}</span><span class="ss"> ms'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>warmup</code> discards the first few calls (context init, JIT compile) before timing, typically 3-10 of them. <code>reps</code> sets how many timed repetitions to take the best, least-noisy result from, typically 10-50. <code>torch.cuda.Event</code> gives GPU-side timestamps, the correct tool for timing async CUDA work, since <code>time.perf_counter()</code> around GPU code without a <code>synchronize()</code> call measures almost nothing. <strong>Common mistake:</strong> using <code>time.perf_counter()</code> around GPU code without calling <code>torch.cuda.synchronize()</code> first. CUDA calls are asynchronous. Python returns immediately after <em>launching</em> the kernel, not after it finishes. So an unsynchronised wall-clock timer measures launch overhead, not execution time.</p>
+<p id="proc-38-3"><strong>Procedure 38.3 (Estimate Achieved Memory Bandwidth From a Timing).</strong> <em>When to use:</em> to judge whether an elementwise kernel is running near the GPU’s memory-bandwidth ceiling. A first taste of the roofline thinking formalised in Chapter 43.</p>
+<div id="lst-gpuarch-bandwidth" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gpuarch-bandwidth-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;38.3: Estimating achieved memory bandwidth from a measured kernel time
+</figcaption>
+<div aria-describedby="lst-gpuarch-bandwidth-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="kw">def</span> achieved_bandwidth_gb_s(</span>
+<span id="cb4-2">    n_elements,</span>
+<span id="cb4-3">    n_arrays_touched,</span>
+<span id="cb4-4">    dtype_bytes,</span>
+<span id="cb4-5">    time_ms,</span>
+<span id="cb4-6">):</span>
+<span id="cb4-7">    <span class="co">"""</span></span>
+<span id="cb4-8"><span class="co">    n_arrays_touched: total reads + writes, e.g.</span></span>
+<span id="cb4-9"><span class="co">    'c = a*a + b' touches a (read), b (read), c (write) = 3</span></span>
+<span id="cb4-10"><span class="co">    arrays even though only 2 are named inputs.</span></span>
+<span id="cb4-11"><span class="co">    """</span></span>
+<span id="cb4-12">    bytes_moved <span class="op">=</span> n_elements <span class="op">*</span> n_arrays_touched <span class="op">*</span> dtype_bytes</span>
+<span id="cb4-13">    <span class="cf">return</span> bytes_moved <span class="op">/</span> (time_ms <span class="op">/</span> <span class="dv">1000</span>) <span class="op">/</span> <span class="fl">1e9</span></span>
+<span id="cb4-14"></span>
+<span id="cb4-15">bw <span class="op">=</span> achieved_bandwidth_gb_s(</span>
+<span id="cb4-16">    n_elements<span class="op">=</span><span class="dv">100_000_000</span>,</span>
+<span id="cb4-17">    n_arrays_touched<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb4-18">    dtype_bytes<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb4-19">    time_ms<span class="op">=</span><span class="fl">1.28</span>,</span>
+<span id="cb4-20">)</span>
+<span id="cb4-21"><span class="bu">print</span>(<span class="ss">f'</span><span class="sc">{</span>bw<span class="sc">:.0f}</span><span class="ss"> GB/s'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> comparing achieved bandwidth against the GPU’s <em>compute</em> TFLOPs spec instead of its <em>memory bandwidth</em> spec. An elementwise op like this one does far too little arithmetic per byte moved to ever approach peak FLOPs. It is memory-bound by nature, and the right ceiling to compare against is bandwidth in GB/s, not FLOPs. Chapter 43 formalises this distinction.</p>
+</section>
+<section id="worked-example" class="level2" data-number="38.5">
+<h2 data-number="38.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">38.5</span> Worked Example</h2>
+<p>The companion notebook for this chapter runs entirely on this book’s reference rig and prints real, live-queried numbers rather than spec-sheet figures. Querying the device with Procedure 38.1’s logic returns:</p>
+<pre class="text"><code>GPU name:            NVIDIA GeForce RTX 5090
+Compute capability:  12.0
+SM count:            170
+Total memory:        33.7 GB
+L2 cache:            101 MB
+PyTorch version:     2.11.0+cu128
+Triton version:      3.6.0</code></pre>
+<p>Next, the notebook computes <code>c = a*a + b</code> over 100 million elements, first on CPU and then on GPU, using Procedure 38.2’s warm-up-then-CUDA-events discipline. The CPU, timed as the best of three runs with <code>time.perf_counter()</code>, takes 96.5 ms<span class="ref-rig-mark">†</span>. The GPU, timed as the best of ten runs with CUDA events after five warm-up calls, takes 1.280 ms<span class="ref-rig-mark">†</span>: a 75.4x<span class="ref-rig-mark">†</span> speedup, with a correctness check (<code>max abs diff CPU vs GPU</code>) of exactly <code>0.00e+00</code>. That speedup compares one CPU core’s throughput against the whole GPU. A multi-threaded CPU implementation would close some of the gap, but not most of it, since the GPU’s core-count and memory-bandwidth advantage is structural, not a threading artifact.</p>
+<p>Feed that 1.280 ms timing into Procedure 38.3’s bandwidth estimator (the kernel touches three fp32 arrays: reads <code>a</code> and <code>b</code>, writes <code>c</code>, over 100 million elements):</p>
+<div id="lst-gpuarch-bandwidth-result" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gpuarch-bandwidth-result-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;38.4: Interpreting the achieved bandwidth against the GPU’s peak
+</figcaption>
+<div aria-describedby="lst-gpuarch-bandwidth-result-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">n_arrays_touched <span class="op">=</span> <span class="dv">3</span></span>
+<span id="cb6-2">dtype_bytes <span class="op">=</span> <span class="dv">4</span></span>
+<span id="cb6-3">bytes_moved <span class="op">=</span> n <span class="op">*</span> n_arrays_touched <span class="op">*</span> dtype_bytes</span>
+<span id="cb6-4">achieved_bw_gbs <span class="op">=</span> bytes_moved <span class="op">/</span> (gpu_time_ms <span class="op">/</span> <span class="dv">1000</span>) <span class="op">/</span> <span class="fl">1e9</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This produces 938 GB/s<span class="ref-rig-mark">†</span> of achieved bandwidth, against a theoretical peak of roughly 1.5-1.8 TB/s for this GDDR7 card: about 55%<span class="ref-rig-mark">†</span> of a 1.7 TB/s peak estimate. That is a reasonable result for a simple elementwise kernel, and the first concrete example in this book of a <strong>memory-bound</strong> workload. Adding more arithmetic per element would be nearly free here, because the bottleneck is moving bytes, not computing on them.</p>
+<p>The notebook’s final experiment measures warp divergence directly, using two Triton kernels that do identical arithmetic (a tight loop of <code>tl.where(cond, ..., ...)</code>) but differ in how the condition splits work across a warp. <code>divergent_kernel</code> uses <code>offs % 2 == 0</code>, which alternates every element, splitting every 32-thread warp roughly 16/16 on every iteration. <code>uniform_kernel</code> uses <code>pid % 2 == 0</code>, uniform across a whole block, so each warp takes only one branch:</p>
+<div id="lst-gpuarch-divergence" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gpuarch-divergence-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;38.5: Two Triton kernels that isolate the cost of within-warp divergence
+</figcaption>
+<div aria-describedby="lst-gpuarch-divergence-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="at">@triton.jit</span></span>
+<span id="cb7-2"><span class="kw">def</span> divergent_kernel(</span>
+<span id="cb7-3">    x_ptr,</span>
+<span id="cb7-4">    out_ptr,</span>
+<span id="cb7-5">    n,</span>
+<span id="cb7-6">    BLOCK: tl.constexpr,</span>
+<span id="cb7-7">    ITERS: tl.constexpr,</span>
+<span id="cb7-8">):</span>
+<span id="cb7-9">    pid <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="cb7-10">    offs <span class="op">=</span> pid <span class="op">*</span> BLOCK <span class="op">+</span> tl.arange(<span class="dv">0</span>, BLOCK)</span>
+<span id="cb7-11">    mask <span class="op">=</span> offs <span class="op">&lt;</span> n</span>
+<span id="cb7-12">    x <span class="op">=</span> tl.load(x_ptr <span class="op">+</span> offs, mask<span class="op">=</span>mask)</span>
+<span id="cb7-13">    <span class="co"># alternates WITHIN every warp</span></span>
+<span id="cb7-14">    is_even <span class="op">=</span> (offs <span class="op">%</span> <span class="dv">2</span>) <span class="op">==</span> <span class="dv">0</span></span>
+<span id="cb7-15">    y <span class="op">=</span> x</span>
+<span id="cb7-16">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(ITERS):</span>
+<span id="cb7-17">        y <span class="op">=</span> tl.where(is_even, y <span class="op">*</span> <span class="fl">1.0000001</span>, y <span class="op">+</span> <span class="fl">0.0000001</span>)</span>
+<span id="cb7-18">    tl.store(out_ptr <span class="op">+</span> offs, y, mask<span class="op">=</span>mask)</span>
+<span id="cb7-19"></span>
+<span id="cb7-20"></span>
+<span id="cb7-21"><span class="at">@triton.jit</span></span>
+<span id="cb7-22"><span class="kw">def</span> uniform_kernel(</span>
+<span id="cb7-23">    x_ptr,</span>
+<span id="cb7-24">    out_ptr,</span>
+<span id="cb7-25">    n,</span>
+<span id="cb7-26">    BLOCK: tl.constexpr,</span>
+<span id="cb7-27">    ITERS: tl.constexpr,</span>
+<span id="cb7-28">):</span>
+<span id="cb7-29">    pid <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="cb7-30">    offs <span class="op">=</span> pid <span class="op">*</span> BLOCK <span class="op">+</span> tl.arange(<span class="dv">0</span>, BLOCK)</span>
+<span id="cb7-31">    mask <span class="op">=</span> offs <span class="op">&lt;</span> n</span>
+<span id="cb7-32">    x <span class="op">=</span> tl.load(x_ptr <span class="op">+</span> offs, mask<span class="op">=</span>mask)</span>
+<span id="cb7-33">    <span class="co"># uniform ACROSS each whole block/warp</span></span>
+<span id="cb7-34">    is_even <span class="op">=</span> (pid <span class="op">%</span> <span class="dv">2</span>) <span class="op">==</span> <span class="dv">0</span></span>
+<span id="cb7-35">    y <span class="op">=</span> x</span>
+<span id="cb7-36">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(ITERS):</span>
+<span id="cb7-37">        y <span class="op">=</span> tl.where(is_even, y <span class="op">*</span> <span class="fl">1.0000001</span>, y <span class="op">+</span> <span class="fl">0.0000001</span>)</span>
+<span id="cb7-38">    tl.store(out_ptr <span class="op">+</span> offs, y, mask<span class="op">=</span>mask)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>If warp divergence cost what the classic, pre-Volta SIMT model predicts, <code>divergent_kernel</code> should take roughly twice as long, since the hardware would serially execute both branches for every diverged warp. The measured result, best of 20 runs on 16.7 million elements with 2000 iterations per element: the divergent kernel takes 0.604 ms<span class="ref-rig-mark">†</span>, the uniform kernel takes 0.583 ms<span class="ref-rig-mark">†</span>, an overhead of 3.5%<span class="ref-rig-mark">†</span>, not the roughly 2x the textbook model predicts. This is a genuine, real finding, not an artifact of the experiment. It is the direct, measurable consequence of independent thread scheduling, introduced in the Volta architecture in 2017 and present on this Blackwell-generation reference rig. The lesson is not that divergence does not matter. It is that the classic mental model is a useful first approximation that overstates the cost on modern hardware, that the actual cost depends heavily on what is inside each branch (cheap arithmetic here; a branch containing a slow memory access or very different work per side would diverge more expensively), and that measuring on the actual target hardware beats trusting a rule of thumb, which is the ethos of this entire book.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="38.6">
+<h2 data-number="38.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">38.6</span> History and Further Reading</h2>
+<p>The NVIDIA CUDA C++ Programming Guide, chapters 1-2, is the authoritative source on the architecture and programming model underlying everything in this chapter. NVIDIA’s “Volta: Programmability and Performance” whitepaper introduced independent thread scheduling, the feature that explains the divergence-cost change measured above. EleutherAI’s “Transformer Math 101” blog post, cited in Book 2’s continuous-pretraining chapter, covers the FLOPs formulas this chapter’s Tensor Cores execute. Kipply’s “Transformer Inference Arithmetic” blog post, cited in Book 2’s model-deployment chapter, covers the memory-bandwidth figures this chapter’s HBM tier executes. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 6, covers this same SIMT execution model and SM/warp hierarchy in much greater depth on current Blackwell-class hardware, including four-way warp-scheduler partitioning and dual-issue instruction scheduling, worth reading once this chapter’s warp and occupancy model has been felt directly through the measurements above. Cautaerts and Ghorbanfekr’s <em>GPU-Accelerated Computing with Python 3 and CUDA</em> <span class="citation" data-cites="cautaerts2026gpuaccelerated">(<a href="#ref-cautaerts2026gpuaccelerated" role="doc-biblioref">Cautaerts and Ghorbanfekr 2026</a>)</span>, Chapter 1, covers the same GPGPU motivation and Amdahl’s-law-based speedup estimation from a Python-native, Numba-CUDA starting point, a useful companion for readers who want this chapter’s architectural reasoning without first learning C++.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="38.7">
+<h2 data-number="38.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">38.7</span> How This Connects</h2>
+<p>This chapter builds on Book 2, Chapter 29 (Training a Transformer Model), the operations this book eventually writes kernels for, and the FLOPs and memory-bandwidth material referenced there. It enables Chapter 39 (the programming model that maps onto this hardware model), Chapter 40 (the memory hierarchy in depth), and Chapter 43 (performance tuning, which is largely about keeping the SMs fed and avoiding divergence). It is often confused with the claim “more CUDA cores means faster.” Total throughput depends on SM count, clock speed, memory bandwidth, and, for ML workloads specifically, Tensor Core throughput, none of which the CUDA core count alone captures.</p>
+</section>
+<section id="exercises" class="level2" data-number="38.8">
+<h2 data-number="38.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">38.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-38-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In one or two sentences, explain why a GPU is described as “throughput-optimised” and a CPU as “latency-optimised,” using the SM/warp model from this chapter.</p></li>
+<li id="ex-38-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define warp divergence in your own words, and name the specific hardware feature that reduces its cost on Volta-onward GPUs.</p></li>
+<li id="ex-38-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-gpuarch-bandwidth" class="quarto-xref">Listing&nbsp;<span>38.3</span></a>, compute the achieved bandwidth for a kernel that touches 4 arrays of fp32 data over 50 million elements in 0.9 ms. State whether the result looks memory-bound relative to this chapter’s reference rig’s ~1.7 TB/s estimated peak.</p></li>
+<li id="ex-38-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-gpuarch-benchmark" class="quarto-xref">Listing&nbsp;<span>38.2</span></a>’s warm-up discipline, explain what would go wrong with the measured GPU time if the <code>warmup=5</code> loop were removed entirely, and why the effect would be worse on the very first run of a notebook than on the second.</p></li>
+<li id="ex-38-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter measured a 75.4x speedup comparing one CPU core to the whole GPU. Using the SM count from <a href="#lst-gpuarch-specs" class="quarto-xref">Listing&nbsp;<span>38.1</span></a>’s output (170 SMs), sanity-check whether a naive “SM count times some per-core factor” estimate is a reasonable way to predict this kind of speedup, and explain what it leaves out.</p></li>
+<li id="ex-38-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Design a workload (in one or two sentences, no code required) that you would expect to diverge expensively even on this chapter’s modern, independent-thread-scheduling hardware, and explain what’s different about it from <a href="#lst-gpuarch-divergence" class="quarto-xref">Listing&nbsp;<span>38.5</span></a>’s kernels.</p></li>
+<li id="ex-38-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague argues that since the measured divergence overhead here was only 3.5%, warp divergence is no longer worth worrying about in kernel design. Write the two or three sentences you would say back, using this chapter’s own caveats.</p></li>
+<li id="ex-38-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Skim the NVIDIA “Volta: Programmability and Performance” whitepaper’s section on independent thread scheduling. Summarize, in a few sentences, the specific hardware mechanism that lets diverged threads make progress more flexibly than the pre-Volta model, and relate it to the measured 3.5% overhead in this chapter.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="38.9">
+<h2 data-number="38.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">38.9</span> Mental Model</h2>
+<p>A GPU is a factory with hundreds of assembly lines (SMs), each running dozens of identical, synchronised workers (a warp’s 32 threads) who must all perform the same motion at the same time. The factory’s genius is not that any one worker is fast. It is that when one line’s workers are waiting for a part to arrive (a memory access), the foreman instantly switches them to a different line that already has its parts ready, so the factory floor as a whole never sits idle. Feed it uniform, parallel work and it outproduces anything else available. Give it one worker doing a complicated, branching custom job, and it is slower than a single competent craftsman.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-cautaerts2026gpuaccelerated" class="csl-entry" role="listitem">
+Cautaerts, Niels, and Hossein Ghorbanfekr. 2026. <em>GPU-Accelerated Computing with Python 3 and CUDA: From Low-Level Kernels to Real-World Applications in Scientific Computing and Machine Learning</em>. Packt Publishing.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+</div>
+</section>

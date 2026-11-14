@@ -1,0 +1,272 @@
+<p>An ML model trained on historical hiring data that systematically rejects candidates from certain zip codes. A loan approval system that charges higher rates to people with traditionally female names. A recidivism prediction tool that flags Black defendants as high-risk at twice the rate of white defendants with equivalent records. These are real examples. None of them required malice to happen. They required engineers building systems that were very good at finding patterns, including patterns that encode historical injustice. This chapter is about the practices that prevent that, and the organisational infrastructure that makes those practices last.</p>
+<section id="motivation" class="level2" data-number="21.1">
+<h2 data-number="21.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">21.1</span> Motivation</h2>
+<p>A model has no values. It has an objective function and training data. Whatever patterns exist in that data, fair or not, are fair game for the optimiser. The responsibility for what the model learns, and how it gets used, sits entirely with the people who build and deploy it. Responsible AI means taking that seriously through five lenses. Fairness: does the model treat people equitably across demographic groups? Interpretability: can we trace how the model reached this decision? Robustness: does it keep working when someone deliberately tries to break it? Sustainability: what does building and running it cost? Governance: who is accountable for the data, the model, and the decisions it informs?</p>
+</section>
+<section id="exposition" class="level2" data-number="21.2">
+<h2 data-number="21.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">21.2</span> Exposition</h2>
+<section id="bias-in-ml-sources-and-types" class="level3" data-number="21.2.1">
+<h3 data-number="21.2.1" class="anchored" data-anchor-id="bias-in-ml-sources-and-types"><span class="header-section-number">21.2.1</span> Bias in ML: Sources and Types</h3>
+<p>Bias enters through several distinct channels. Historical bias: if past decisions were discriminatory, training data reflects that directly. A model trained to predict “good employees” from historical hires encodes whatever biases influenced those hires. Proxy variables: protected attributes (race, gender) often correlate with innocuous-looking features (zip code, name, browsing history). A model trained <em>without</em> the protected attribute directly can still discriminate through its proxies. Measurement bias, sample bias, and label bias each distort the signal a model learns from in their own way. A group measured differently, underrepresented, or labelled inconsistently teaches the model a version of reality that isn’t the same for everyone in the data.</p>
+<p>There is no single definition of fairness, and this isn’t a gap in the field. Different definitions are <em>mathematically</em> incompatible with each other in general, so choosing between them is a values question, not a technical one. Demographic parity asks for equal positive-prediction rates across groups. Equalised odds asks for equal true- and false-positive rates. Equal opportunity asks only for equal true-positive rates, appropriate when missing a qualified individual is the primary harm. Calibration asks that predicted probabilities mean the same thing across groups. A hiring tool optimised for demographic parity can still have very unequal false-negative rates between groups. Satisfying one fairness definition says nothing about the others.</p>
+<p>Mitigation happens at three points in the pipeline. Pre-processing: reweight or resample training data, remove proxy variables. In-processing: add a fairness constraint directly to the training loss. Post-processing: adjust decision thresholds separately per group after training.</p>
+</section>
+<section id="model-interpretability" class="level3" data-number="21.2.2">
+<h3 data-number="21.2.2" class="anchored" data-anchor-id="model-interpretability"><span class="header-section-number">21.2.2</span> Model Interpretability</h3>
+<p>When a model’s decision affects someone’s life, “the algorithm said so” isn’t enough. The reasoning has to be inspectable. Global interpretability asks which features matter most overall (feature importance, permutation importance). Local interpretability asks why the model made <em>this specific</em> prediction for <em>this specific</em> person.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Interpretability vs.&nbsp;Explainability
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The two terms get used interchangeably, but they’re not the same thing. The difference has real legal weight. <strong>Interpretability</strong> means the model itself is transparent enough that a person can trace how it reached an answer, the way a shallow decision tree or a linear model’s coefficients can be read directly. <strong>Explainability</strong> means a separate technique, like SHAP or LIME, is applied after training to approximate what a black-box model did. That approximation isn’t the model’s actual reasoning. It’s a second, simpler model built to imitate the first one’s behaviour. It can be a faithful imitation without being a correct one. For a regulator or a plaintiff’s lawyer asking “is this actually why the model denied the loan,” a SHAP value answers “here’s a plausible reconstruction,” not “here’s what happened.” That gap is why Cynthia Rudin’s well-known argument (2019) holds that high-stakes decisions, credit, parole, hiring, are better served by a model that’s interpretable by construction than by a black box wrapped in an explanation layer, even at some cost to raw accuracy. The trade-off isn’t as automatic as it sounds, though. Empirical work (Bell et al., 2022) has found no consistent accuracy penalty for choosing interpretable models in real policy settings. “Black box or nothing” is often a false choice to begin with.</p>
+</div>
+</div>
+<p>SHAP (SHapley Additive exPlanations) is grounded in game theory. Shapley values fairly attribute a coalition’s output to each contributing player. Applied to ML, SHAP computes, for each prediction, how much each feature contributed relative to a baseline (the average prediction). Those contributions sum exactly to the actual prediction. That additivity guarantee holds for any model, but exactness of the individual numbers doesn’t. Computing the true Shapley value means checking every subset of features: exponential in general. Tree-based models are the exception. <code>TreeExplainer</code> computes exact values in polynomial time by exploiting the tree structure directly. Other model types get an approximation instead (<code>KernelExplainer</code>, <code>DeepExplainer</code>), still additive by construction but not the exact game-theoretic answer. This directly answers the question a customer or regulator will ask, “why was this person denied?”, with a mathematically grounded, defensible answer. LIME works differently. For one prediction, it perturbs the input many times, observes how the output changes, and fits a simple local linear model as the explanation. LIME is model-agnostic and intuitive, but less theoretically grounded than SHAP. Use SHAP when possible, LIME when SHAP is too slow or unavailable for the model type.</p>
+</section>
+<section id="robustness" class="level3" data-number="21.2.3">
+<h3 data-number="21.2.3" class="anchored" data-anchor-id="robustness"><span class="header-section-number">21.2.3</span> Robustness</h3>
+<p>A model that scores well on held-out test data can still fail on inputs an adversary crafts specifically to break it: inputs that look unremarkable to a human but exploit exactly where the model’s decision boundary is thin. For a classical classifier, a small, carefully chosen perturbation to pixel values, invisible to the eye, can flip a confident correct prediction to a confident wrong one. For an LLM, the equivalent is a prompt injection or jailbreak: text engineered to make the model ignore its instructions, leak its system prompt, or produce output its guardrails were supposed to block.</p>
+<p>Robustness testing probes for these failures before deployment rather than waiting to find them in production. Adversarial example generation (methods like FGSM and PGD for image models) searches directly for the smallest perturbation that flips a prediction. Red-teaming does the equivalent for LLMs: deliberately trying jailbreak prompts, edge-case inputs, and adversarial phrasing to find where the guardrails fail. Both ask the same question in different domains. Not “does this model perform well on the data it expects,” but “how hard is it to find the input that breaks it.”</p>
+<p>Mitigation follows the same three-point structure as the fairness mitigations above. Before training: curate out data with known attack triggers. During training: adversarial training, where the model trains directly on adversarial examples so it learns to resist them. After training: input validation and guardrail layers that catch adversarial-looking input before it reaches the model. None of this guarantees robustness. It raises the cost of a successful attack, which is usually the realistic goal. Robustness is a moving target against an adaptive adversary, not a property a model earns once and keeps.</p>
+</section>
+<section id="sustainability" class="level3" data-number="21.2.4">
+<h3 data-number="21.2.4" class="anchored" data-anchor-id="sustainability"><span class="header-section-number">21.2.4</span> Sustainability</h3>
+<p>Building and running an ML model has a real environmental cost that responsible AI increasingly has to account for alongside accuracy and fairness. Training a large model consumes real electricity and, depending on the grid it runs on, real carbon. Cloud providers publish carbon-intensity figures per region specifically so this cost can be estimated and, where it matters, minimised by choosing when and where a training run happens. Inference cost compounds differently from training cost. A model trained once but served billions of times can rack up a larger total footprint from serving than from training ever did. That’s exactly why the model-compression techniques in Chapter 23 (distillation, quantisation, pruning) matter for sustainability as well as for latency budgets.</p>
+<p>Sustainability also has a social dimension that resists a clean formula the way carbon intensity does: who does the labour behind a model, data labelling, RLHF preference collection, content moderation of training corpora, and under what conditions. It belongs in the same governance conversation as fairness and privacy, not treated as a separate concern. A model that treats its end users fairly while depending on exploitative labour upstream isn’t the responsible-AI outcome this chapter describes.</p>
+</section>
+<section id="data-governance" class="level3" data-number="21.2.5">
+<h3 data-number="21.2.5" class="anchored" data-anchor-id="data-governance"><span class="header-section-number">21.2.5</span> Data Governance</h3>
+<p>GDPR imposes obligations on every ML system processing EU residents’ data. Purpose limitation: data collected for one purpose can’t silently feed a different model. Data minimisation: don’t train on more data, or more sensitive data, than necessary. The right to explanation: individuals can request the logic behind automated decisions materially affecting them. The right to erasure: deletion requests may require retraining or unlearning. PII in training data creates legal and ethical exposure specifically because a model can memorise and reproduce it. Mitigations include redaction, hashing, synthetic data, and differential privacy. A data contract, a formal agreement between a data producer and consumer specifying schema, semantics, and SLAs, prevents the quieter failure mode where a model silently breaks because an upstream schema changed without anyone downstream being told.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="21.3">
+<h2 data-number="21.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">21.3</span> Trade-offs and Limits</h2>
+<p>Responsible AI practices cost real time. Fairness audits need domain expertise to interpret correctly. SHAP computation scales with features times samples and gets expensive on large datasets. Removing proxy variables can reduce raw accuracy. Red-teaming an LLM for jailbreaks takes real adversarial-thinking effort. Carbon accounting adds a step most training pipelines don’t currently have. Skipping them costs more. GDPR violations can reach 4% of global revenue. Biased systems draw reputational damage that’s hard to undo. Discriminatory automated decisions carry direct legal liability. A model with no robustness testing finds out about its adversarial failure modes from an attacker instead of from a red team. “We’ll add fairness later” doesn’t work as a plan. Fairness has to be designed in from the start, the same way security or testing does.</p>
+</section>
+<section id="procedures" class="level2" data-number="21.4">
+<h2 data-number="21.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">21.4</span> Procedures</h2>
+<p id="proc-21-1"><strong>Procedure 21.1 (Audit a Model for Demographic Bias).</strong> <em>When to use:</em> before deploying any model that makes decisions affecting people.</p>
+<div id="lst-fairness-audit" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-fairness-audit-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;21.1: Per-group selection rate, accuracy, TPR, and FPR
+</figcaption>
+<div aria-describedby="lst-fairness-audit-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> fairness_audit(y_true, y_pred, groups):</span>
+<span id="cb1-2">    df <span class="op">=</span> pd.DataFrame({</span>
+<span id="cb1-3">        <span class="st">'y_true'</span>: y_true, <span class="st">'y_pred'</span>: y_pred, <span class="st">'group'</span>: groups</span>
+<span id="cb1-4">    })</span>
+<span id="cb1-5">    results <span class="op">=</span> []</span>
+<span id="cb1-6">    <span class="cf">for</span> g <span class="kw">in</span> df[<span class="st">'group'</span>].unique():</span>
+<span id="cb1-7">        subset <span class="op">=</span> df[df[<span class="st">'group'</span>] <span class="op">==</span> g]</span>
+<span id="cb1-8">        positives <span class="op">=</span> subset[subset.y_true <span class="op">==</span> <span class="dv">1</span>]</span>
+<span id="cb1-9">        negatives <span class="op">=</span> subset[subset.y_true <span class="op">==</span> <span class="dv">0</span>]</span>
+<span id="cb1-10">        results.append({</span>
+<span id="cb1-11">            <span class="st">'group'</span>: g, <span class="st">'n'</span>: <span class="bu">len</span>(subset),</span>
+<span id="cb1-12">            <span class="st">'selection_rate'</span>: subset[<span class="st">'y_pred'</span>].mean(),</span>
+<span id="cb1-13">            <span class="st">'accuracy'</span>: accuracy_score(</span>
+<span id="cb1-14">                subset[<span class="st">'y_true'</span>],</span>
+<span id="cb1-15">                subset[<span class="st">'y_pred'</span>],</span>
+<span id="cb1-16">            ),</span>
+<span id="cb1-17">            <span class="st">'tpr'</span>: (</span>
+<span id="cb1-18">                positives[<span class="st">'y_pred'</span>].mean()</span>
+<span id="cb1-19">                <span class="cf">if</span> <span class="bu">len</span>(positives) <span class="cf">else</span> <span class="va">None</span></span>
+<span id="cb1-20">            ),</span>
+<span id="cb1-21">            <span class="st">'fpr'</span>: (</span>
+<span id="cb1-22">                negatives[<span class="st">'y_pred'</span>].mean()</span>
+<span id="cb1-23">                <span class="cf">if</span> <span class="bu">len</span>(negatives) <span class="cf">else</span> <span class="va">None</span></span>
+<span id="cb1-24">            ),</span>
+<span id="cb1-25">        })</span>
+<span id="cb1-26">    <span class="cf">return</span> pd.DataFrame(results)</span>
+<span id="cb1-27"></span>
+<span id="cb1-28">rates <span class="op">=</span> fairness_audit(</span>
+<span id="cb1-29">    y_test,</span>
+<span id="cb1-30">    y_pred,</span>
+<span id="cb1-31">    demographic_group,</span>
+<span id="cb1-32">).set_index(<span class="st">'group'</span>)[<span class="st">'selection_rate'</span>]</span>
+<span id="cb1-33"><span class="co"># Disparate Impact Ratio: the 4/5ths rule wants this</span></span>
+<span id="cb1-34"><span class="co"># &gt;= 0.8</span></span>
+<span id="cb1-35">di <span class="op">=</span> rates.<span class="bu">min</span>() <span class="op">/</span> rates.<span class="bu">max</span>()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>What to look for:</strong> a selection-rate gap above roughly 20% between groups suggests disparate impact; a TPR gap means qualified members of one group are missed more often; an FPR gap means one group is wrongly flagged more often.</p>
+<p id="proc-21-2"><strong>Procedure 21.2 (Compute and Plot SHAP Values).</strong> <em>When to use:</em> understanding what a model learned globally, or explaining a specific prediction.</p>
+<div id="lst-shap-values" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-shap-values-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;21.2: SHAP explanations for tree-based models
+</figcaption>
+<div aria-describedby="lst-shap-values-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> shap</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="co"># fast, exact for tree models</span></span>
+<span id="cb2-4">explainer <span class="op">=</span> shap.TreeExplainer(model)</span>
+<span id="cb2-5">shap_values <span class="op">=</span> explainer.shap_values(X_test)</span>
+<span id="cb2-6"></span>
+<span id="cb2-7"><span class="co"># global</span></span>
+<span id="cb2-8">shap.summary_plot(shap_values, X_test, feature_names<span class="op">=</span>feature_names)</span>
+<span id="cb2-9"><span class="co"># one prediction</span></span>
+<span id="cb2-10">shap.waterfall_plot(shap.Explanation(</span>
+<span id="cb2-11">    values<span class="op">=</span>shap_values[i],</span>
+<span id="cb2-12">    base_values<span class="op">=</span>explainer.expected_value,</span>
+<span id="cb2-13">    data<span class="op">=</span>X_test.iloc[i].values,</span>
+<span id="cb2-14">    feature_names<span class="op">=</span>feature_names,</span>
+<span id="cb2-15">))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> running <code>KernelExplainer</code> on a full large test set. It’s slow enough to be impractical. Always sample.</p>
+<p id="proc-21-3"><strong>Procedure 21.3 (Identify PII in a Dataset).</strong> <em>When to use:</em> data governance review before training or publishing a model.</p>
+<div id="lst-pii-scan" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pii-scan-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;21.3: Pattern-based PII column detection
+</figcaption>
+<div aria-describedby="lst-pii-scan-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">PII_PATTERNS <span class="op">=</span> [</span>
+<span id="cb3-2">    <span class="vs">r'name'</span>,</span>
+<span id="cb3-3">    <span class="vs">r'email'</span>,</span>
+<span id="cb3-4">    <span class="vs">r'phone'</span>,</span>
+<span id="cb3-5">    <span class="vs">r'address'</span>,</span>
+<span id="cb3-6">    <span class="vs">r'zip'</span>,</span>
+<span id="cb3-7">    <span class="vs">r'ssn'</span>,</span>
+<span id="cb3-8">    <span class="vs">r'dob'</span>,</span>
+<span id="cb3-9">    <span class="vs">r'race'</span>,</span>
+<span id="cb3-10">    <span class="vs">r'gender'</span>,</span>
+<span id="cb3-11">]</span>
+<span id="cb3-12"></span>
+<span id="cb3-13"><span class="kw">def</span> flag_pii_columns(df):</span>
+<span id="cb3-14">    <span class="cf">return</span> [</span>
+<span id="cb3-15">        (col, p)</span>
+<span id="cb3-16">        <span class="cf">for</span> col <span class="kw">in</span> df.columns</span>
+<span id="cb3-17">        <span class="cf">for</span> p <span class="kw">in</span> PII_PATTERNS</span>
+<span id="cb3-18">        <span class="cf">if</span> re.search(p, col.lower())</span>
+<span id="cb3-19">    ]</span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="21.5">
+<h2 data-number="21.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">21.5</span> Worked Example</h2>
+<p>A synthetic hiring dataset makes the proxy-variable problem concrete rather than abstract: 2,000 candidates, legitimate features (experience, test score, education) plus two proxy columns, first name and zip code, each correlated with a synthetic demographic group, and historical labels built with a deliberate 15-percentage-point hiring penalty for Group B.</p>
+<div id="lst-hiring-model" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-hiring-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;21.4: Training a hiring classifier including proxy features
+</figcaption>
+<div aria-describedby="lst-hiring-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">features <span class="op">=</span> [</span>
+<span id="cb4-2">    <span class="st">'experience_years'</span>,</span>
+<span id="cb4-3">    <span class="st">'test_score'</span>,</span>
+<span id="cb4-4">    <span class="st">'education_level'</span>,</span>
+<span id="cb4-5">    <span class="st">'zip_encoded'</span>,</span>
+<span id="cb4-6">    <span class="st">'name_encoded'</span>,</span>
+<span id="cb4-7">]</span>
+<span id="cb4-8">model <span class="op">=</span> RandomForestClassifier(</span>
+<span id="cb4-9">    n_estimators<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb4-10">    max_depth<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb4-11">    random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb4-12">)</span>
+<span id="cb4-13">model.fit(X_train[features], y_train)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Measured on held-out test data: Group A gets a selection rate of 0.828 versus Group B’s 0.147, a Disparate Impact Ratio of <strong>0.177</strong>, decisively failing the 4/5ths rule (0.8 threshold). The TPR gap is just as stark: 0.880 for Group A versus 0.183 for Group B. Qualified Group B candidates are being missed at nearly five times the rate of Group A’s. Checking feature importances shows exactly why. <code>zip_encoded</code> (0.209) and <code>name_encoded</code> (0.123) rank third and fourth of five features, ahead of <code>education_level</code>. The model is leaning on the two proxy variables almost as heavily as on legitimate signal.</p>
+<p>Retrain the identical model architecture, with <code>zip_encoded</code> and <code>name_encoded</code> removed from the feature list. Nothing else changes:</p>
+<div id="lst-hiring-no-proxies" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-hiring-no-proxies-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;21.5: Same model, proxy features removed
+</figcaption>
+<div aria-describedby="lst-hiring-no-proxies-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">features_clean <span class="op">=</span> [</span>
+<span id="cb5-2">    <span class="st">'experience_years'</span>,</span>
+<span id="cb5-3">    <span class="st">'test_score'</span>,</span>
+<span id="cb5-4">    <span class="st">'education_level'</span>,</span>
+<span id="cb5-5">]</span>
+<span id="cb5-6">model_clean <span class="op">=</span> RandomForestClassifier(</span>
+<span id="cb5-7">    n_estimators<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb5-8">    max_depth<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb5-9">    random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb5-10">)</span>
+<span id="cb5-11">model_clean.fit(X_train[features_clean], y_train)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>That pushes the Disparate Impact Ratio to <strong>0.982</strong>, a clean pass, with Group A and Group B selection rates landing at 0.577 and 0.588 respectively, nearly identical. This is the proxy-variable mechanism from the Exposition made directly visible. The demographic group column was never in either model’s feature list, yet the first model discriminated by nearly 5x anyway, purely through zip code and name acting as stand-ins for the attribute that was deliberately excluded. Removing the <em>proxies</em>, not the protected attribute (which was never there to remove), is what actually fixed it.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker <span class="im">import</span> clarify</span>
+<span id="cb6-2"></span>
+<span id="cb6-3">clarify_processor <span class="op">=</span> clarify.SageMakerClarifyProcessor(</span>
+<span id="cb6-4">    role<span class="op">=</span>role,</span>
+<span id="cb6-5">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb6-6">    instance_type<span class="op">=</span><span class="st">'ml.m5.xlarge'</span>,</span>
+<span id="cb6-7">)</span>
+<span id="cb6-8">bias_config <span class="op">=</span> clarify.BiasConfig(</span>
+<span id="cb6-9">    label_values_or_threshold<span class="op">=</span>[<span class="dv">1</span>],</span>
+<span id="cb6-10">    facet_name<span class="op">=</span><span class="st">'demographic_group'</span>,</span>
+<span id="cb6-11">    facet_values_or_threshold<span class="op">=</span>[<span class="dv">1</span>],</span>
+<span id="cb6-12">)</span>
+<span id="cb6-13">clarify_processor.run_pre_training_bias(</span>
+<span id="cb6-14">    data_config<span class="op">=</span>clarify.DataConfig(</span>
+<span id="cb6-15">        s3_data_input_path<span class="op">=</span><span class="st">'s3://bucket/data.csv'</span>,</span>
+<span id="cb6-16">        s3_output_path<span class="op">=</span><span class="st">'s3://bucket/clarify-output/'</span>,</span>
+<span id="cb6-17">        label<span class="op">=</span><span class="st">'hired'</span>,</span>
+<span id="cb6-18">        headers<span class="op">=</span>df.columns.tolist(),</span>
+<span id="cb6-19">    ),</span>
+<span id="cb6-20">    bias_config<span class="op">=</span>bias_config,</span>
+<span id="cb6-21">)</span></code></pre></div>
+<p><strong>When to prefer SageMaker Clarify:</strong> running bias detection at scale (millions of rows), or when audit-trail artifacts are needed for compliance. Clarify produces a structured report with DI, DPPL, and related metrics automatically, rather than a hand-written audit function like Procedure 21.1’s.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="21.6">
+<h2 data-number="21.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">21.6</span> History and Further Reading</h2>
+<p>Barocas, Hardt, and Narayanan’s <em>Fairness and Machine Learning</em> (free online) is the definitive reference on fairness in ML <span class="citation" data-cites="barocas2023fairness">(<a href="#ref-barocas2023fairness" role="doc-biblioref">Barocas et al. 2023</a>)</span>. Mitchell et al.’s “Model Cards for Model Reporting” gives the documentation framework this chapter’s Quick Reference template is based on <span class="citation" data-cites="mitchell2019modelcards">(<a href="#ref-mitchell2019modelcards" role="doc-biblioref">Mitchell et al. 2019</a>)</span>. Rudin’s “Stop Explaining Black Box Machine Learning Models for High Stakes Decisions and Use Interpretable Models Instead” is the fullest argument for the interpretability-over-explainability position in the callout above <span class="citation" data-cites="rudin2019stop">(<a href="#ref-rudin2019stop" role="doc-biblioref">Rudin 2019</a>)</span>, and Bell et al.’s “It’s Just Not That Simple” is the empirical study behind this chapter’s caveat that the accuracy trade-off is smaller and less automatic than assumed <span class="citation" data-cites="bell2022justnotsimple">(<a href="#ref-bell2022justnotsimple" role="doc-biblioref">Bell et al. 2022</a>)</span>. Duke and Giudici’s <em>Responsible AI in Practice</em> turns this chapter’s risk dimensions into a scored, auditable framework (SAFE-HAI): accuracy, robustness, explainability, fairness, privacy, and sustainability each get their own measurement approach and scoring rubric, worked through end to end on a real case study, a practical companion for turning this chapter’s concepts into an actual audit process <span class="citation" data-cites="duke2025responsibleai">(<a href="#ref-duke2025responsibleai" role="doc-biblioref">Duke and Giudici 2025</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="21.7">
+<h2 data-number="21.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">21.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 16’s model evaluation (fairness metrics are a form of evaluation) and Chapter 14’s feature engineering (understanding which features are proxies requires understanding what features actually encode). It enables Chapter 26’s SageMaker Clarify coverage, AWS’s built-in fairness and explainability tooling. It’s often confused with a strict accuracy-versus-fairness trade-off, real in some cases, but frequently overstated. This chapter’s Worked Example removed two proxy features and <em>lost none</em> of the model’s ability to use genuinely predictive signal, since experience, test score, and education were doing the real work all along.</p>
+</section>
+<section id="exercises" class="level2" data-number="21.8">
+<h2 data-number="21.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">21.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-21-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in your own words why a model can discriminate by demographic group even when the demographic group column itself is never included as a feature.</p></li>
+<li id="ex-21-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the fairness metric most appropriate for: (a) a loan-approval system where missing a qualified applicant is the primary harm; (b) a system where both false approvals and false denials carry real, comparable costs.</p></li>
+<li id="ex-21-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-hiring-model" class="quarto-xref">Listing&nbsp;<span>21.4</span></a> and <a href="#lst-hiring-no-proxies" class="quarto-xref">Listing&nbsp;<span>21.5</span></a>’s measured Disparate Impact Ratios (0.177 with proxies, 0.982 without), compute the absolute percentage-point gap in Group A vs.&nbsp;Group B selection rates in both cases, and state which changed more: the gap, or the overall selection rate level.</p></li>
+<li id="ex-21-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-fairness-audit" class="quarto-xref">Listing&nbsp;<span>21.1</span></a>’s pattern, explain what a TPR gap of 0.880 vs.&nbsp;0.183 (this chapter’s proxy-included model) means in plain language for a qualified Group B candidate’s actual chances, compared to an equally qualified Group A candidate.</p></li>
+<li id="ex-21-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer says “we don’t collect race or gender, so our model can’t be biased.” Using this chapter’s Worked Example, write the two or three sentences you’d say back.</p></li>
+<li id="ex-21-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team wants to remove all proxy features to guarantee fairness, including features with genuine predictive value like zip code (which might legitimately correlate with commute time for a logistics model). Using this chapter’s Trade-offs section, write the case for checking each candidate proxy individually rather than removing all of them by rule.</p></li>
+<li id="ex-21-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Barocas, Hardt, and Narayanan chapter on the impossibility of simultaneously satisfying multiple fairness definitions. Identify the specific condition under which demographic parity and equalised odds become mutually exclusive, and relate it to this chapter’s hiring example.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="21.9">
+<h2 data-number="21.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">21.9</span> Mental Model</h2>
+<p>A model learns what you measure. If “performance” is measured as one aggregate accuracy number, the model will be accurate on average, and possibly wildly inaccurate for a subgroup that number quietly averages away. Fairness is breaking that aggregate apart and looking at the pieces. Interpretability is asking what the model actually learned. Robustness is asking how hard it is to break on purpose. Sustainability is asking what it costs to build and run at all. Governance is asking who is accountable when any of the above goes wrong. These are engineering concerns, not ethics add-ons. Wire them into the build process the same way tests are wired in, not bolted on after the fact.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-barocas2023fairness" class="csl-entry" role="listitem">
+Barocas, Solon, Moritz Hardt, and Arvind Narayanan. 2023. <em>Fairness and Machine Learning: Limitations and Opportunities</em>. MIT Press.
+</div>
+<div id="ref-bell2022justnotsimple" class="csl-entry" role="listitem">
+Bell, Andrew, Ian Réné Solano-Kamaiko, Oded Nov, and Julia Stoyanovich. 2022. <span>“It’s Just Not That Simple: An Empirical Study of the Accuracy-Explainability Trade-Off in Machine Learning for Public Policy.”</span> <em>Proceedings of the 2022 ACM Conference on Fairness, Accountability, and Transparency</em> (Seoul, South Korea).
+</div>
+<div id="ref-duke2025responsibleai" class="csl-entry" role="listitem">
+Duke, Toju, and Paolo Giudici. 2025. <em>Responsible AI in Practice: A Practical Guide to Safe and Human AI</em>. Apress.
+</div>
+<div id="ref-mitchell2019modelcards" class="csl-entry" role="listitem">
+Mitchell, Margaret, Simone Wu, Andrew Zaldivar, et al. 2019. <span>“Model Cards for Model Reporting.”</span> <em>Proceedings of the Conference on Fairness, Accountability, and Transparency</em> (Atlanta, GA), 220–29.
+</div>
+<div id="ref-rudin2019stop" class="csl-entry" role="listitem">
+Rudin, Cynthia. 2019. <span>“Stop Explaining Black Box Machine Learning Models for High Stakes Decisions and Use Interpretable Models Instead.”</span> <em>Nature Machine Intelligence</em> 1 (5): 206–15.
+</div>
+</div>
+</section>

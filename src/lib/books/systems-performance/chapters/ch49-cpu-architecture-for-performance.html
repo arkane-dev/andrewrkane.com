@@ -1,0 +1,328 @@
+<p>Chapter 48 established that you must measure before you optimize. This chapter gives the mental model for <em>what is being measured against</em>: a modern CPU core is not a uniform, instruction-at-a-time machine. It has a multi-tier memory hierarchy with wildly different costs per tier, a branch predictor that can make identical code fast or slow depending purely on data order, and a pipelined, multi-issue execution core that can only run instructions in parallel if they don’t depend on each other. Two pieces of code with identical algorithmic complexity, same Big-O, same instruction count, can differ in wall-clock time by 5-50x purely because of how they interact with these three mechanisms. Without this model, “why is this twice as slow” is unanswerable. With it, it’s usually a two-minute diagnosis.</p>
+<section id="motivation" class="level2" data-number="49.1">
+<h2 data-number="49.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">49.1</span> Motivation</h2>
+<p>Three hardware mechanisms anchor this chapter, each with a measurable signature. The <strong>cache hierarchy</strong> trades capacity for latency in discrete steps: L1, L2, L3, DRAM. An access pattern’s cost depends on which tier its <em>working set</em> fits in, not on how much total data exists but on how much is touched repeatedly within a short window. The <strong>branch predictor</strong> learns patterns in conditional branches and speculatively executes past them. A misprediction costs a full pipeline flush. This only matters for code with real, un-vectorized conditional branches. Modern optimizing compilers frequently remove the branch entirely for simple predicate patterns. <strong>Instruction-level parallelism (ILP)</strong> lets a core execute several independent instructions per cycle, but a loop-carried <em>dependency chain</em>, where each iteration needs the previous iteration’s result, serializes execution regardless of how many idle execution ports the core has.</p>
+</section>
+<section id="exposition" class="level2" data-number="49.2">
+<h2 data-number="49.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">49.2</span> Exposition</h2>
+<p>This chapter’s measured numbers<span class="ref-rig-mark">†</span> come from this book’s reference rig (see the preface): specifically its AMD Ryzen 9 5950X, 16C/32T, with 32KB L1d and 512KB L2 per core, and 32MB L3 per CCD (64MB total across both CCDs; a single core reaches its own CCD’s 32MB directly).</p>
+<section id="cache-hierarchy-latency-is-a-step-function-of-working-set-size" class="level3" data-number="49.2.1">
+<h3 data-number="49.2.1" class="anchored" data-anchor-id="cache-hierarchy-latency-is-a-step-function-of-working-set-size"><span class="header-section-number">49.2.1</span> Cache Hierarchy: Latency Is a Step Function of Working-Set Size</h3>
+<p>A pointer-chasing benchmark, each access’s address depends on the value just read, defeating the hardware prefetcher, unlike a sequential scan which the prefetcher makes nearly free, compiled with Numba (<code>njit</code>) so the loop runs as native machine code, measured across fifteen working-set sizes:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Working set</th>
+<th>Measured latency</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>8-32KB (fits L1d)</td>
+<td>1.4-1.5 ns/access</td>
+</tr>
+<tr class="even">
+<td>48KB-256KB (fits L2)</td>
+<td>2.1-2.9 ns/access</td>
+</tr>
+<tr class="odd">
+<td>512KB-16MB (fits L3)</td>
+<td>4.9-14.0 ns/access</td>
+</tr>
+<tr class="even">
+<td>32MB+ (exceeds L3, DRAM)</td>
+<td>35.3-82.6 ns/access<span class="ref-rig-mark">†</span></td>
+</tr>
+</tbody>
+</table>
+<p>The jump from L1 to DRAM is roughly 25-60x. This single table explains an enormous fraction of “identical algorithm, different speed” reports: a hash map, a linked list, or a dataframe column that fits in L2 versus one that doesn’t behaves like different hardware, with no code change at all.</p>
+<p><strong>Why pure Python can’t show this directly.</strong> A Python interpreter loop costs roughly 60ns/iteration just in bytecode dispatch, larger than the <em>entire</em> L1-through-L3 latency range above. Measuring this benchmark in pure Python produces a flat ~57-66ns/access regardless of array size, until DRAM’s own ~80ns latency finally becomes visible on top, hiding the cache hierarchy completely. This is why the Numba-compiled version is necessary: removing interpreter overhead is a prerequisite for seeing hardware effects at nanosecond scale, not just a performance nicety. It previews Chapter 52 (vectorization) and Chapter 50 (profiling): reasoning about hardware-level costs frequently requires getting Python’s own overhead out of the way first.</p>
+</section>
+<section id="branch-prediction-real-but-compiler-dependent" class="level3" data-number="49.2.2">
+<h3 data-number="49.2.2" class="anchored" data-anchor-id="branch-prediction-real-but-compiler-dependent"><span class="header-section-number">49.2.2</span> Branch Prediction: Real, But Compiler-Dependent</h3>
+<p>The classic demonstration sums “count elements above a threshold” over a sorted versus an unsorted array with identical values. In theory: sorted data gives the branch predictor long, learnable runs. Unsorted data is close to a coin flip per element, and each misprediction flushes the pipeline (15-20 cycles on modern x86). Measured two different ways:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Implementation</th>
+<th>Sorted</th>
+<th>Unsorted</th>
+<th>Branch-misses (sorted → unsorted)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Numba <code>@njit</code> compiled loop</td>
+<td>4.978 ms/rep</td>
+<td>4.798 ms/rep (no real difference)</td>
+<td>13.9M → 13.2M (no real difference)</td>
+</tr>
+<tr class="even">
+<td>Pure CPython interpreted loop</td>
+<td>12.81 ms/rep</td>
+<td>16.04 ms/rep (~25% slower)</td>
+<td>8.9M → 18.3M (~2x)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The Numba result is the genuinely interesting one.</strong> LLVM (Numba’s compiler backend) auto-vectorizes this simple, predictable <code>if...total += 1</code> pattern into branchless SIMD comparison-and-reduce code. There is no per-element conditional branch left in the compiled machine code, so sort order becomes irrelevant, and <code>perf</code>’s branch-miss counters confirm it directly (near-identical, low miss rates in both cases). Only the pure CPython version, which has no vectorizing compiler in its path, shows the classic effect cleanly, with roughly double the branch-misses on the unsorted array and a matching ~25% wall-clock slowdown.</p>
+<p>The practical lesson is not “branch prediction doesn’t matter.” It’s that the classic textbook demonstration applies specifically to code paths that stay branchy in the actually-compiled output: hand-written interpreted loops, complex or irregular conditionals, and code a compiler’s vectorizer declines to touch. Well-optimized numerical code, Numba, NumPy’s C loops, most performance libraries, increasingly falls into the “already branchless” category for simple predicates, and which category a given piece of code is in should be verified with a benchmark like this one, rather than assumed.</p>
+</section>
+<section id="instruction-level-parallelism-dependency-chains-cap-throughput" class="level3" data-number="49.2.3">
+<h3 data-number="49.2.3" class="anchored" data-anchor-id="instruction-level-parallelism-dependency-chains-cap-throughput"><span class="header-section-number">49.2.3</span> Instruction-Level Parallelism: Dependency Chains Cap Throughput</h3>
+<p>Floating-point addition has a real latency of several cycles on this hardware. Summing into a single accumulator (<code>total += arr[i]</code>) creates a loop-carried dependency chain: iteration N+1 cannot start its addition until iteration N’s result is available, so the core is limited to one addition every few cycles even though it has multiple free arithmetic ports sitting idle. Breaking the sum into 4 independent accumulators, combined only at the very end, removes this dependency. The 4 chains execute concurrently, filling the pipeline instead of stalling it. Measured at three working-set sizes:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Working set</th>
+<th>Single chain</th>
+<th>Four chains</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>400KB (fits L2)</td>
+<td>0.625 ns/elem</td>
+<td>0.167 ns/elem</td>
+<td>3.74x</td>
+</tr>
+<tr class="even">
+<td>16MB (fits L3)</td>
+<td>0.607 ns/elem</td>
+<td>0.158 ns/elem</td>
+<td>3.84x</td>
+</tr>
+<tr class="odd">
+<td>400MB (exceeds L3, DRAM-resident)</td>
+<td>0.642 ns/elem</td>
+<td>0.279 ns/elem</td>
+<td>2.30x</td>
+</tr>
+</tbody>
+</table>
+<p>While the data fits in cache, the speedup is close to the theoretical 4x from four independent chains. Once the array exceeds the last-level cache, the speedup shrinks to 2.30x. DRAM bandwidth becomes a second, co-limiting bottleneck that constrains both versions almost equally, and no amount of instruction-level parallelism can out-run the memory system delivering the data in the first place. A single tight loop, with no change to its arithmetic, flips from compute-bound to memory-bound purely as a function of its input size, the same compute-bound/memory-bound distinction that recurs at every scale in this curriculum, from a single CPU loop here to LLM capacity planning in Chapters 23, 29, and 33.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="49.3">
+<h2 data-number="49.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">49.3</span> Trade-offs and Limits</h2>
+<p>Reasoning from cache, branch, and pipeline effects is worth the effort when two implementations with identical Big-O complexity show a large, unexplained wall-clock gap; when choosing a data layout or algorithm that will run on data sizes spanning cache tiers; and before assuming a “well-known” hardware effect (like branch misprediction) applies to a specific, possibly-already-optimized code path. It’s the wrong tool for genuinely algorithmic problems. An <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><msup><mi>n</mi><mn>2</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n^2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span> versus <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mi>log</mi><mo>⁡</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n \log n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> gap won’t be explained by cache or branch effects, that’s Chapter 51’s territory, and it’s not a substitute for profiling (Chapter 50): this chapter explains <em>why</em> a hot loop might be slow, while profiling finds <em>which</em> loop is hot in the first place.</p>
+</section>
+<section id="procedures" class="level2" data-number="49.4">
+<h2 data-number="49.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">49.4</span> Procedures</h2>
+<p id="proc-49-1"><strong>Procedure 49.1 (Measure Cache-Hierarchy Latency With a Pointer Chase).</strong> <em>When to use:</em> determining whether a data structure of a given size will behave like an L1/L2/L3/DRAM-speed access pattern before building it.</p>
+<div id="lst-pointer-chase" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pointer-chase-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;49.1: A Numba-compiled pointer chase, defeating the hardware prefetcher to reveal cache-tier latency
+</figcaption>
+<div aria-describedby="lst-pointer-chase-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"><span class="im">import</span> time</span>
+<span id="cb1-3"><span class="im">from</span> numba <span class="im">import</span> njit</span>
+<span id="cb1-4"></span>
+<span id="cb1-5"><span class="at">@njit</span>(cache<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-6"><span class="kw">def</span> chase(nxt, steps):</span>
+<span id="cb1-7">    p <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb1-8">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(steps):</span>
+<span id="cb1-9">        p <span class="op">=</span> nxt[p]</span>
+<span id="cb1-10">    <span class="cf">return</span> p</span>
+<span id="cb1-11"></span>
+<span id="cb1-12"><span class="kw">def</span> build_pointer_chase(n_elements, rng):</span>
+<span id="cb1-13">    idx <span class="op">=</span> np.arange(n_elements, dtype<span class="op">=</span>np.int64)</span>
+<span id="cb1-14">    rng.shuffle(idx)</span>
+<span id="cb1-15">    nxt <span class="op">=</span> np.zeros(n_elements, dtype<span class="op">=</span>np.int64)</span>
+<span id="cb1-16">    <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(n_elements):</span>
+<span id="cb1-17">        nxt[idx[i]] <span class="op">=</span> idx[(i <span class="op">+</span> <span class="dv">1</span>) <span class="op">%</span> n_elements]</span>
+<span id="cb1-18">    <span class="cf">return</span> nxt</span>
+<span id="cb1-19"></span>
+<span id="cb1-20">rng <span class="op">=</span> np.random.default_rng(<span class="dv">42</span>)</span>
+<span id="cb1-21"><span class="co"># 512KB of int64 -&gt; L2-resident on this hardware</span></span>
+<span id="cb1-22">nxt <span class="op">=</span> build_pointer_chase(n_elements<span class="op">=</span><span class="dv">65536</span>, rng<span class="op">=</span>rng)</span>
+<span id="cb1-23"><span class="co"># warm up (compiles + primes the cache)</span></span>
+<span id="cb1-24">chase(nxt, <span class="dv">100_000</span>)</span>
+<span id="cb1-25">t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb1-26">chase(nxt, <span class="dv">20_000_000</span>)</span>
+<span id="cb1-27">ns_per_access <span class="op">=</span> (time.perf_counter() <span class="op">-</span> t0) <span class="op">/</span> <span class="dv">20_000_000</span> <span class="op">*</span> <span class="fl">1e9</span></span>
+<span id="cb1-28"><span class="bu">print</span>(<span class="ss">f'</span><span class="sc">{</span>ns_per_access<span class="sc">:.2f}</span><span class="ss"> ns/access'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>A sequential scan is exactly what the hardware prefetcher is designed to make fast regardless of where the data lives. It reveals nothing about cache-tier latency. Chasing a random permutation defeats prefetching, since the next address genuinely cannot be predicted until the current one is read. <strong>Common mistake:</strong> running this in pure Python without Numba (or Cython/C). Python’s own per-iteration interpreter overhead (~60ns) is larger than the entire L1-L3 latency range being measured. The result is a flat line, and a wrong conclusion that cache tier doesn’t matter.</p>
+<p id="proc-49-2"><strong>Procedure 49.2 (Check Whether Compiled/JIT’d Code Still Has a Real Branch).</strong> <em>When to use:</em> before assuming the classic “sort your data for a free speedup” trick applies to specific numerical code.</p>
+<div id="lst-branch-check" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-branch-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;49.2: Comparing sorted vs.&nbsp;unsorted performance under perf to detect whether a branch survived compilation
+</figcaption>
+<div aria-describedby="lst-branch-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> subprocess, sys</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="cf">for</span> label, data_path <span class="kw">in</span> [</span>
+<span id="cb2-4">    (<span class="st">'sorted'</span>, <span class="st">'sorted_script.py'</span>),</span>
+<span id="cb2-5">    (<span class="st">'unsorted'</span>, <span class="st">'unsorted_script.py'</span>),</span>
+<span id="cb2-6">]:</span>
+<span id="cb2-7">    out <span class="op">=</span> subprocess.run(</span>
+<span id="cb2-8">        [</span>
+<span id="cb2-9">            <span class="st">'perf'</span>,</span>
+<span id="cb2-10">            <span class="st">'stat'</span>,</span>
+<span id="cb2-11">            <span class="st">'-e'</span>,</span>
+<span id="cb2-12">            <span class="st">'branches,branch-misses,cycles,instructions'</span>,</span>
+<span id="cb2-13">            sys.executable,</span>
+<span id="cb2-14">            data_path,</span>
+<span id="cb2-15">        ],</span>
+<span id="cb2-16">        capture_output<span class="op">=</span><span class="va">True</span>, text<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb2-17">    )</span>
+<span id="cb2-18">    <span class="bu">print</span>(label, out.stderr)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Read the <code>branches</code> count itself, not just <code>branch-misses</code>: if it’s roughly one branch per element processed, the code kept a real per-element conditional. If it’s far fewer than the element count, the compiler likely vectorized the branch into a branchless SIMD comparison-and-select. Check the <code>branch-misses</code> rate in both cases. If it’s low and similar for sorted and unsorted data, sort order genuinely doesn’t matter for this code. <strong>Common mistake:</strong> concluding “branch prediction doesn’t matter” from a single compiled/JIT’d benchmark that happens to have been auto-vectorized. Re-test with an interpreted, non-JIT’d version of the same logic before generalizing.</p>
+<p id="proc-49-3"><strong>Procedure 49.3 (Break a Loop-Carried Dependency Chain for More ILP).</strong> <em>When to use:</em> a tight numerical reduction loop (sum, dot product, min/max) is slower than expected even though the array fits comfortably in cache.</p>
+<div id="lst-break-chain" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-break-chain-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;49.3: Four independent accumulators instead of one, removing the loop-carried dependency
+</figcaption>
+<div aria-describedby="lst-break-chain-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> numba <span class="im">import</span> njit</span>
+<span id="cb3-2"></span>
+<span id="cb3-3"><span class="at">@njit</span>(cache<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-4"><span class="kw">def</span> sum_four_chains(arr):</span>
+<span id="cb3-5">    t0 <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span> t1 <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span> t2 <span class="op">=</span> <span class="fl">0.0</span><span class="op">;</span> t3 <span class="op">=</span> <span class="fl">0.0</span></span>
+<span id="cb3-6">    n <span class="op">=</span> arr.shape[<span class="dv">0</span>]</span>
+<span id="cb3-7">    i <span class="op">=</span> <span class="dv">0</span></span>
+<span id="cb3-8">    <span class="cf">while</span> i <span class="op">+</span> <span class="dv">4</span> <span class="op">&lt;=</span> n:</span>
+<span id="cb3-9">        t0 <span class="op">+=</span> arr[i]<span class="op">;</span> t1 <span class="op">+=</span> arr[i<span class="op">+</span><span class="dv">1</span>]</span>
+<span id="cb3-10">        t2 <span class="op">+=</span> arr[i<span class="op">+</span><span class="dv">2</span>]<span class="op">;</span> t3 <span class="op">+=</span> arr[i<span class="op">+</span><span class="dv">3</span>]</span>
+<span id="cb3-11">        i <span class="op">+=</span> <span class="dv">4</span></span>
+<span id="cb3-12">    <span class="co"># handle any remainder elements (n not a multiple of 4)</span></span>
+<span id="cb3-13">    <span class="co"># separately</span></span>
+<span id="cb3-14">    <span class="cf">return</span> t0 <span class="op">+</span> t1 <span class="op">+</span> t2 <span class="op">+</span> t3</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming this trick always pays off. It only helps while the CPU’s execution ports, not memory bandwidth, are the bottleneck. Check the working-set size first (Procedure 49.1): if it’s DRAM-resident, expect a much smaller win (this chapter’s own measurement: ~3.8x speedup cache-resident, shrinking to ~2.3x once the array exceeds the last-level cache), since breaking the dependency chain does nothing to speed up the memory system delivering the data.</p>
+<p id="proc-49-4"><strong>Procedure 49.4 (Confirm <code>perf</code> Works Before Designing a Demo Around It).</strong> <em>When to use:</em> before writing a diagnostic that depends on <code>perf stat</code> hardware counters. Some containers and cloud VMs restrict this.</p>
+<div id="lst-perf-check" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-perf-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;49.4: Checking perf availability and the ptrace_scope-adjacent perf_event_paranoid setting
+</figcaption>
+<div aria-describedby="lst-perf-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb4-1"><span class="ex">perf</span> stat <span class="at">-e</span> cache-misses,branch-misses true</span>
+<span id="cb4-2"><span class="fu">cat</span> /proc/sys/kernel/perf_event_paranoid</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>If this errors with a permissions message, <code>perf_event_paranoid</code> (a value of 2+ commonly restricts unprivileged counter access in containers) is the usual cause. If counters aren’t available, fall back to wall-clock timing comparisons (Chapter 48’s methodology). The <em>mechanism</em> explanation is lost, but the <em>effect</em> can still be observed via timing alone.</p>
+</section>
+<section id="worked-example" class="level2" data-number="49.5">
+<h2 data-number="49.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">49.5</span> Worked Example</h2>
+<p>The companion notebook reproduces all three measured effects above directly on this book’s reference rig, and the numbers reported through this chapter are exactly what it produces. The cache-hierarchy section sweeps fifteen working-set sizes from 8KB to 128MB:</p>
+<div id="lst-cache-sweep" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cache-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;49.5: Sweeping pointer-chase working-set size from 8KB to 128MB to trace the full cache-latency curve
+</figcaption>
+<div aria-describedby="lst-cache-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">sizes_kb <span class="op">=</span> [</span>
+<span id="cb5-2">    <span class="dv">8</span>,</span>
+<span id="cb5-3">    <span class="dv">16</span>,</span>
+<span id="cb5-4">    <span class="dv">32</span>,</span>
+<span id="cb5-5">    <span class="dv">48</span>,</span>
+<span id="cb5-6">    <span class="dv">64</span>,</span>
+<span id="cb5-7">    <span class="dv">128</span>,</span>
+<span id="cb5-8">    <span class="dv">256</span>,</span>
+<span id="cb5-9">    <span class="dv">512</span>,</span>
+<span id="cb5-10">    <span class="dv">1024</span>,</span>
+<span id="cb5-11">    <span class="dv">4096</span>,</span>
+<span id="cb5-12">    <span class="dv">8192</span>,</span>
+<span id="cb5-13">    <span class="dv">16384</span>,</span>
+<span id="cb5-14">    <span class="dv">32768</span>,</span>
+<span id="cb5-15">    <span class="dv">65536</span>,</span>
+<span id="cb5-16">    <span class="dv">131072</span>,</span>
+<span id="cb5-17">]</span>
+<span id="cb5-18">steps <span class="op">=</span> <span class="dv">20_000_000</span></span>
+<span id="cb5-19">results <span class="op">=</span> []</span>
+<span id="cb5-20"><span class="cf">for</span> kb <span class="kw">in</span> sizes_kb:</span>
+<span id="cb5-21">    n <span class="op">=</span> <span class="bu">max</span>(<span class="dv">2</span>, (kb <span class="op">*</span> <span class="dv">1024</span>) <span class="op">//</span> <span class="dv">8</span>)</span>
+<span id="cb5-22">    nxt <span class="op">=</span> build_pointer_chase(n, rng)</span>
+<span id="cb5-23">    <span class="co"># warm up</span></span>
+<span id="cb5-24">    chase(nxt, <span class="dv">100_000</span>)</span>
+<span id="cb5-25">    t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb5-26">    chase(nxt, steps)</span>
+<span id="cb5-27">    ns_per_access <span class="op">=</span> (time.perf_counter() <span class="op">-</span> t0) <span class="op">/</span> steps <span class="op">*</span> <span class="fl">1e9</span></span>
+<span id="cb5-28">    results.append((kb, n, ns_per_access))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>At <code>kb=8</code> this produces 1.424 ns/access; at <code>kb=32768</code> (32MB, just past this CCD’s L3 boundary) it jumps to 35.304 ns/access, and by <code>kb=65536</code> (64MB) it reaches 82.561 ns/access: the sharp final jump reported above, 20-50x the L1 cost.</p>
+<p>The branch-prediction section writes two near-identical scripts differing only in whether the input array is pre-sorted, then runs each under <code>perf stat</code>, first as a Numba <code>@njit</code> loop, then as pure CPython:</p>
+<div id="lst-branch-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-branch-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;49.6: Running the same count-above-threshold loop under perf, Numba-compiled and pure CPython, sorted and unsorted
+</figcaption>
+<div aria-describedby="lst-branch-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">script_tpl <span class="op">=</span> <span class="st">'''</span></span>
+<span id="cb6-2"><span class="st">@njit(cache=True)</span></span>
+<span id="cb6-3"><span class="st">def count_above(arr, threshold):</span></span>
+<span id="cb6-4"><span class="st">    total = 0</span></span>
+<span id="cb6-5"><span class="st">    for i in range(arr.shape[0]):</span></span>
+<span id="cb6-6"><span class="st">        if arr[i] &gt; threshold:</span></span>
+<span id="cb6-7"><span class="st">            total += 1</span></span>
+<span id="cb6-8"><span class="st">    return total</span></span>
+<span id="cb6-9"><span class="st">'''</span></span>
+<span id="cb6-10"><span class="co"># run under: perf stat -e branches,branch-misses,cycles,instructions</span></span>
+<span id="cb6-11"><span class="co"># -- python3 script.py</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The Numba version reports 1,508,413,241 branches and 13,933,460 branch-misses sorted, versus 1,485,000,585 branches and 13,225,406 branch-misses unsorted: a negligible difference, confirming the loop was compiled branchless. The pure CPython version reports 2,397,408,406 branches and 8,926,984 branch-misses sorted, versus 2,253,453,646 branches and 18,263,988 branch-misses unsorted: roughly double the misses, with a matching 12.81ms to 16.04ms wall-clock slowdown.</p>
+<p>The ILP section runs the single-accumulator and four-accumulator sum functions from <a href="#lst-break-chain" class="quarto-xref">Listing&nbsp;<span>49.3</span></a> across three array sizes (50,000, 2,000,000, and 50,000,000 float64 elements, corresponding to the 400KB/16MB/400MB rows above), taking the minimum of 15 repetitions at each size. At <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>50,000</mn></mrow><annotation encoding="application/x-tex">n=50{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">50</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span> this produces <code>single=0.625ns/elem</code>, <code>four=0.167ns/elem</code>, a 3.74x speedup, reproduced here exactly as measured, and narrowing to 2.30x at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>50,000,000</mn></mrow><annotation encoding="application/x-tex">n=50{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">50</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span> once the array no longer fits in any cache.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="49.6">
+<h2 data-number="49.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">49.6</span> History and Further Reading</h2>
+<p>Drepper’s “What Every Programmer Should Know About Memory” <span class="citation" data-cites="drepper2007memory">(<a href="#ref-drepper2007memory" role="doc-biblioref">Drepper 2007</a>)</span> remains the canonical deep-dive on cache hierarchy and memory latency, still accurate in its fundamentals and worth reading in full once this chapter’s measured latency curve has been felt directly rather than just read about. Fog’s ongoing “The Microarchitecture of Intel, AMD, and VIA CPUs” is the reference for cycle-level detail on pipelining, execution ports, and instruction latencies for readers who want to go a level deeper than this chapter does. The classic Stack Overflow question “Why is processing a sorted array faster than an unsorted array?” (Q9997246) is the original viral version of this chapter’s branch-prediction demonstration, and worth reading for its own detailed community discussion. Chapter 40’s treatment of GPU memory hierarchy (global, shared, local memory, and register files, plus coalescing) is the same latency-tiers story one level up in parallelism.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="49.7">
+<h2 data-number="49.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">49.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 48’s benchmarking discipline. Every number here used warm-up, repetition, and robust statistics. It enables Chapter 51’s data-layout material (cache-friendly layouts are a direct application of the memory-hierarchy story here), Chapter 52’s vectorization chapter (which removes both interpreter overhead and, often, branches, extending this chapter’s Numba results to NumPy/BLAS), and Chapter 54’s memory and I/O chapter, which extends the DRAM-tier story to disk and network. It is often confused with “just use more cores” (Chapter 53’s parallelism, a different lever entirely). This chapter is about how fast a <em>single</em> core runs code, before any parallelism is applied at all.</p>
+</section>
+<section id="exercises" class="level2" data-number="49.8">
+<h2 data-number="49.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">49.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-49-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Using this chapter’s cache-hierarchy table, explain why a hash map that fits in L2 and one that doesn’t can differ in per-access cost by 5-10x with identical code and identical algorithmic complexity.</p></li>
+<li id="ex-49-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A colleague says “branch prediction doesn’t matter for numerical code anymore, compilers handle it.” Using this chapter’s Numba-vs-CPython branch result, write two or three sentences correcting this claim precisely.</p></li>
+<li id="ex-49-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-pointer-chase" class="quarto-xref">Listing&nbsp;<span>49.1</span></a> as a starting point, estimate which cache tier a 2 million-element <code>int64</code> array (16MB) would fall into on this book’s reference rig, and predict its approximate per-access latency from the measured table.</p></li>
+<li id="ex-49-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 49.3, rewrite a single-accumulator dot-product loop (<code>total += a[i] * b[i]</code>) to use two independent accumulator pairs instead of four, and predict whether the speedup would be closer to 2x or 4x for a cache-resident array, justifying the answer from this chapter’s measured results.</p></li>
+<li id="ex-49-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The ILP speedup shrinks from 3.84x at 16MB (L3-resident) to 2.30x at 400MB (DRAM-resident). Propose a hardware-level explanation for why breaking a dependency chain still helps at all once the workload is memory-bound, rather than providing zero benefit.</p></li>
+<li id="ex-49-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate wants to “prove” branch prediction matters in their production Python service by writing a Numba-compiled microbenchmark like this chapter’s <code>count_above</code>. Using this chapter’s finding that LLVM auto-vectorizes this exact pattern, explain why their microbenchmark risks showing no effect even if the underlying hardware phenomenon is real.</p></li>
+<li id="ex-49-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read enough of Drepper’s paper to find its treatment of TLB (translation lookaside buffer) misses. Explain, at a level a colleague without a systems background could follow, how a TLB miss differs from the cache misses this chapter measures, and why it isn’t visible in this chapter’s pointer-chase results as a separate step.</p></li>
+<li id="ex-49-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the top-voted answer to the Stack Overflow question this chapter cites (Q9997246). Identify one detail in that answer’s C++ demonstration that differs from this chapter’s Python/Numba version, and explain whether that difference would make the misprediction effect larger or smaller.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="49.9">
+<h2 data-number="49.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">49.9</span> Mental Model</h2>
+<p>Picture three nested rooms of shrinking size and speed: a desk drawer (L1, instant), a filing cabinet across the room (L2, a short walk), a warehouse across town (L3, a real trip), and a records office in another city (DRAM, a genuine expedition). The cost of “get me that piece of paper” depends entirely on which room it’s currently sitting in, not on how important the paper is. The branch predictor is a fortune-teller who’s excellent at predicting a repeating pattern and useless against a coin flip, and gets fired, the query goes to a slower path, the moment it’s wrong. Pipelining is an assembly line: it only speeds things up if the next widget doesn’t require the previous widget to be finished first.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-drepper2007memory" class="csl-entry" role="listitem">
+Drepper, Ulrich. 2007. <em>What Every Programmer Should Know about Memory</em>. Red Hat, Inc.
+</div>
+</div>
+</section>

@@ -1,0 +1,293 @@
+<p>A model that exists only in a Jupyter notebook is a science project. Its predictions are available only to whoever runs that notebook, on that machine, by hand. For a model to create value it needs to be reachable by other systems: an application, a pipeline, a customer. On demand, at scale, reliably. Deployment moves a model from an experiment environment into a production one. Serving answers prediction requests from that environment usefully. Solutions Architects are often the people who design this layer. Understanding the trade-offs between deployment patterns is one of the most immediately practical skills in this book.</p>
+<section id="motivation" class="level2" data-number="23.1">
+<h2 data-number="23.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">23.1</span> Motivation</h2>
+<p>A deployed model is a function that takes inputs and returns outputs, the same thing it did in training, now reachable via a network call, a file system, or a queue. The deployment pattern determines <em>how</em> that function gets called. Real-time inference answers synchronously in milliseconds to seconds. Batch inference runs on a schedule over a large dataset and stores results for later. Streaming inference processes events continuously as they arrive. Async inference queues a request and returns the result separately once ready. Choosing the wrong pattern for a use case is a common, expensive mistake. It’s one an SA who understands the trade-offs can save a customer real money on.</p>
+</section>
+<section id="exposition" class="level2" data-number="23.2">
+<h2 data-number="23.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">23.2</span> Exposition</h2>
+<section id="deployment-patterns" class="level3" data-number="23.2.1">
+<h3 data-number="23.2.1" class="anchored" data-anchor-id="deployment-patterns"><span class="header-section-number">23.2.1</span> Deployment Patterns</h3>
+<p>Real-time inference wraps the model in an HTTP endpoint. Applications POST feature values and get predictions back in the response. Latency matters directly. A checkout recommendation needs to answer in under 100ms, or the moment is lost. The endpoint has to stay running 24/7 even during quiet periods, which is expensive for low-traffic models. Batch inference runs a scheduled job over millions of rows at once with no live endpoint at all. It’s appropriate whenever hours-old predictions are acceptable (nightly churn scoring, daily email personalisation). It’s dramatically cheaper, since compute only runs while the job runs. Streaming inference processes events from Kafka or Kinesis one at a time or in micro-batches, combining real-time freshness with batch-like throughput. IoT anomaly detection and clickstream scoring are typical cases. Async inference queues a request, processes it when capacity allows, and lets the caller poll or receive a callback. It’s well suited to long-running inference like document processing or LLM generation over long text. SageMaker’s async inference scales to zero when idle.</p>
+</section>
+<section id="model-serialisation" class="level3" data-number="23.2.2">
+<h3 data-number="23.2.2" class="anchored" data-anchor-id="model-serialisation"><span class="header-section-number">23.2.2</span> Model Serialisation</h3>
+<p>Before a model can be served, it has to be saved in a form another process can load. For tabular sklearn/XGBoost models staying in Python, <code>joblib</code> is the default. For cross-language serving (Java, C++, Rust, edge devices), ONNX is framework-independent. For neural network weights, <code>safetensors</code> is the modern standard, safe to load from untrusted sources unlike pickle. Whichever format, the <em>full pipeline</em>, preprocessing and model together, needs saving, not the estimator alone. Saving the model without its scaler or encoder forces that logic to be reimplemented by hand at serving time: a classic source of train/serve skew.</p>
+</section>
+<section id="serving-frameworks" class="level3" data-number="23.2.3">
+<h3 data-number="23.2.3" class="anchored" data-anchor-id="serving-frameworks"><span class="header-section-number">23.2.3</span> Serving Frameworks</h3>
+<p>FastAPI is the current standard for building ML APIs in Python: async, fast, with automatic OpenAPI docs and pydantic request validation, though the team owns the server and scaling. <code>mlflow models serve</code> spins up a FastAPI server directly from a registered model with zero code, good for internal tools. BentoML adds packaging and containerisation on top, for teams wanting a fuller managed serving layer without hand-writing Kubernetes configs. SageMaker Endpoints are the managed option. A model artefact goes in, and SageMaker handles the server, load balancing, auto-scaling, and monitoring: the recommended default for most AWS production deployments.</p>
+</section>
+<section id="estimating-capacity-for-transformerllm-inference" class="level3" data-number="23.2.4">
+<h3 data-number="23.2.4" class="anchored" data-anchor-id="estimating-capacity-for-transformerllm-inference"><span class="header-section-number">23.2.4</span> Estimating Capacity for Transformer/LLM Inference</h3>
+<p>Everything above applies to any model type, but transformer/LLM inference has a fairly precise capacity answer, built on the parameter-count formula from Chapter 29 (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi><mo>≈</mo><mn>12</mn><mo>⋅</mo><msub><mi>n</mi><mrow><mi>l</mi><mi>a</mi><mi>y</mi><mi>e</mi><mi>r</mi><mi>s</mi></mrow></msub><mo>⋅</mo><msubsup><mi>d</mi><mrow><mi>m</mi><mi>o</mi><mi>d</mi><mi>e</mi><mi>l</mi></mrow><mn>2</mn></msubsup></mrow><annotation encoding="application/x-tex">N \approx 12 \cdot n_{layers} \cdot d_{model}^2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">12</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7306em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">y</span><span class="mord mathnormal mtight" style="margin-right:0.0278em;">er</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0972em;vertical-align:-0.2831em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-2.4169em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight">o</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span></span></span></span><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2831em;"><span></span></span></span></span></span></span></span></span></span>). Generation has two phases with opposite bottlenecks. Prefill (processing the prompt) processes all prompt tokens in parallel in one forward pass. It’s compute-bound, costing roughly <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mi>N</mi></mrow><annotation encoding="application/x-tex">2N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord">2</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span> FLOPs per prompt token. Decode (generating each new token) produces tokens one at a time. Each step must read the <em>entire</em> model’s weights from GPU memory: memory-bandwidth-bound, not compute-bound. That’s why autoregressive generation feels slow even on GPUs with enormous FLOPs budgets. A full weight-read is paid for every single token. The time per token at batch size 1 is approximately <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>2</mn><mo>×</mo><mi>N</mi><mo>×</mo><mtext>bytes_per_param</mtext><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mtext>memory_bandwidth</mtext></mrow><annotation encoding="application/x-tex">(2 \times N \times \text{bytes\_per\_param}) / \text{memory\_bandwidth}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.06em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">bytes_per_param</span></span><span class="mclose">)</span><span class="mord">/</span><span class="mord text"><span class="mord">memory_bandwidth</span></span></span></span></span>. Batching amortises that same weight-read across more tokens simultaneously, moving decode from memory-bound toward compute-bound as batch size grows. That’s why LLM-serving frameworks (vLLM, TGI, TensorRT-LLM) exist largely to batch efficiently, rather than to speed up any single request.</p>
+<p>The KV cache, cached Key/Value vectors for every token already seen, avoids recomputing attention over the whole prompt at each step. It grows <em>linearly</em> with both context length and batch size: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mtext>kv_cache_bytes</mtext><mo>≈</mo><mn>2</mn><mo>×</mo><msub><mi>n</mi><mrow><mi>l</mi><mi>a</mi><mi>y</mi><mi>e</mi><mi>r</mi><mi>s</mi></mrow></msub><mo>×</mo><msub><mi>d</mi><mrow><mi>m</mi><mi>o</mi><mi>d</mi><mi>e</mi><mi>l</mi></mrow></msub><mo>×</mo><mtext>seq_len</mtext><mo>×</mo><mtext>batch_size</mtext><mo>×</mo><mtext>bytes_per_param</mtext></mrow><annotation encoding="application/x-tex">\text{kv\_cache\_bytes} \approx 2 \times n_{layers} \times d_{model} \times \text{seq\_len} \times \text{batch\_size} \times \text{bytes\_per\_param}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">kv_cache_bytes</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8694em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span><span class="mord mathnormal mtight">a</span><span class="mord mathnormal mtight" style="margin-right:0.0359em;">y</span><span class="mord mathnormal mtight" style="margin-right:0.0278em;">er</span><span class="mord mathnormal mtight">s</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight">o</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">seq_len</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">batch_size</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0044em;vertical-align:-0.31em;"></span><span class="mord text"><span class="mord">bytes_per_param</span></span></span></span></span>. Unlike the fixed model weights, the KV cache can dwarf them at long context or high concurrency. It’s usually the KV cache term, not the weights, that caps the maximum batch size or context length a given GPU can actually serve.</p>
+</section>
+<section id="shrinking-the-model-distillation-quantisation-pruning" class="level3" data-number="23.2.5">
+<h3 data-number="23.2.5" class="anchored" data-anchor-id="shrinking-the-model-distillation-quantisation-pruning"><span class="header-section-number">23.2.5</span> Shrinking the Model: Distillation, Quantisation, Pruning</h3>
+<p>Every number in the capacity formulas above scales with <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span>, the parameter count, and with bytes-per-parameter. Three standard techniques attack one or the other directly, instead of accepting the capacity a model ships with.</p>
+<p><strong>Quantisation</strong> reduces bytes-per-parameter: storing weights in 8-bit or 4-bit integers instead of 16- or 32-bit floats. Since decode is memory-bandwidth-bound, halving bytes-per-parameter roughly halves decode time at batch size 1, on top of halving the memory the weights occupy. Quality loss is usually small at 8-bit and noticeable but often acceptable at 4-bit. Post-training quantisation (no retraining needed) is the cheapest capacity win available for a model that’s already trained.</p>
+<p><strong>Pruning</strong> removes weights (or whole attention heads, or whole layers) that contribute little to the model’s output, shrinking <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>N</mi></mrow><annotation encoding="application/x-tex">N</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.109em;">N</span></span></span></span> directly. Unstructured pruning (zeroing individual weights) needs specialised sparse kernels to realise a real speedup. Structured pruning (removing whole heads or layers) loses more accuracy per parameter removed, but runs fast on ordinary hardware, since the resulting model is smaller, not sparse.</p>
+<p><strong>Distillation</strong> trains an entirely smaller “student” model to mimic a larger “teacher” model’s outputs, rather than editing the teacher directly. The student learns from the teacher’s full output distribution (soft labels), not just the teacher’s final answer. That carries more signal per training example than training the student from scratch on the original labels would. A well-distilled student can retain most of a much larger teacher’s task performance at a fraction of the parameter count. That’s why distilled models are common as the default choice when serving cost matters more than squeezing out the last point of accuracy.</p>
+<p>None of the three are mutually exclusive. A distilled student can be quantised and pruned again, stacking capacity savings. The formulas above show why. Parameter count and bytes-per-parameter are two independent multipliers on decode time and memory, so cutting either compounds with cutting the other.</p>
+</section>
+<section id="containers-and-reproducibility" class="level3" data-number="23.2.6">
+<h3 data-number="23.2.6" class="anchored" data-anchor-id="containers-and-reproducibility"><span class="header-section-number">23.2.6</span> Containers and Reproducibility</h3>
+<p>A Docker container packages a model, its dependencies, and its runtime into a portable unit that runs identically anywhere. Without containers, “it works on my machine” is the most common deployment failure. Every SageMaker endpoint runs inside a container, either a built-in AWS-provided one or a custom Dockerfile.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="23.3">
+<h2 data-number="23.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">23.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Pattern</th>
+<th>Latency</th>
+<th>Cost</th>
+<th>Best use case</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Real-time endpoint</td>
+<td>Milliseconds</td>
+<td>High (always-on)</td>
+<td>Interactive apps, fraud checks, chatbots</td>
+</tr>
+<tr class="even">
+<td>Batch Transform</td>
+<td>Hours</td>
+<td>Low (pay-per-run)</td>
+<td>Nightly scoring, reports</td>
+</tr>
+<tr class="odd">
+<td>Async Inference</td>
+<td>Seconds-minutes</td>
+<td>Low (scale-to-zero)</td>
+<td>Long-running inference, LLM/document processing</td>
+</tr>
+<tr class="even">
+<td>Streaming</td>
+<td>Milliseconds-seconds</td>
+<td>Medium</td>
+<td>Continuous event scoring</td>
+</tr>
+</tbody>
+</table>
+<p>The most common mistake is building a real-time endpoint for a use case that’s actually batch. If predictions are consumed in a daily report, a 24/7 endpoint is pure waste. Batch Transform typically costs 10-100x less for the identical workload.</p>
+</section>
+<section id="procedures" class="level2" data-number="23.4">
+<h2 data-number="23.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">23.4</span> Procedures</h2>
+<p id="proc-23-1"><strong>Procedure 23.1 (Serialise a Model Safely).</strong> <em>When to use:</em> immediately after training, before any serving code is written.</p>
+<div id="lst-serialize-model" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-serialize-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;23.1: Serialising the full pipeline, plus metadata
+</figcaption>
+<div aria-describedby="lst-serialize-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> joblib, json</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="co"># full pipeline, not just the estimator</span></span>
+<span id="cb1-4">joblib.dump(pipeline, <span class="st">"model_artefacts/pipeline.joblib"</span>)</span>
+<span id="cb1-5">metadata <span class="op">=</span> {</span>
+<span id="cb1-6">    <span class="st">"feature_names"</span>: FEATURE_NAMES,</span>
+<span id="cb1-7">    <span class="st">"sklearn_version"</span>: sklearn.__version__,</span>
+<span id="cb1-8">}</span>
+<span id="cb1-9">json.dump(</span>
+<span id="cb1-10">    metadata,</span>
+<span id="cb1-11">    <span class="bu">open</span>(<span class="st">"model_artefacts/metadata.json"</span>, <span class="st">"w"</span>),</span>
+<span id="cb1-12">    indent<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb1-13">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> saving with <code>pickle.dump</code> and loading in a different Python minor version. Pickle and joblib serialise a reference to the class definition, not a self-contained copy, so a version mismatch can load silently and produce different predictions, or fail outright.</p>
+<p id="proc-23-2"><strong>Procedure 23.2 (Build a Minimal FastAPI Inference Endpoint).</strong> <em>When to use:</em> a real-time endpoint is needed and there’s no managed serving layer yet.</p>
+<div id="lst-fastapi-endpoint" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-fastapi-endpoint-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;23.2: A minimal, production-shaped FastAPI serving app
+</figcaption>
+<div aria-describedby="lst-fastapi-endpoint-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> fastapi <span class="im">import</span> FastAPI</span>
+<span id="cb2-2"><span class="im">from</span> pydantic <span class="im">import</span> BaseModel</span>
+<span id="cb2-3"><span class="im">from</span> typing <span class="im">import</span> List</span>
+<span id="cb2-4"><span class="im">import</span> joblib, numpy <span class="im">as</span> np</span>
+<span id="cb2-5"></span>
+<span id="cb2-6"><span class="co"># load ONCE, at module scope</span></span>
+<span id="cb2-7">pipeline <span class="op">=</span> joblib.load(<span class="st">"model_artefacts/pipeline.joblib"</span>)</span>
+<span id="cb2-8">app <span class="op">=</span> FastAPI(title<span class="op">=</span><span class="st">"Model Serving API"</span>, version<span class="op">=</span><span class="st">"1.0.0"</span>)</span>
+<span id="cb2-9"></span>
+<span id="cb2-10"><span class="kw">class</span> PredictRequest(BaseModel):</span>
+<span id="cb2-11">    features: List[<span class="bu">float</span>]</span>
+<span id="cb2-12"></span>
+<span id="cb2-13"><span class="kw">class</span> PredictResponse(BaseModel):</span>
+<span id="cb2-14">    prediction: <span class="bu">int</span></span>
+<span id="cb2-15">    probability: <span class="bu">float</span></span>
+<span id="cb2-16"></span>
+<span id="cb2-17"><span class="at">@app.post</span>(<span class="st">"/predict"</span>, response_model<span class="op">=</span>PredictResponse)</span>
+<span id="cb2-18"><span class="kw">def</span> predict(req: PredictRequest):</span>
+<span id="cb2-19">    X <span class="op">=</span> np.array(req.features).reshape(<span class="dv">1</span>, <span class="op">-</span><span class="dv">1</span>)</span>
+<span id="cb2-20">    <span class="cf">return</span> PredictResponse(</span>
+<span id="cb2-21">        prediction<span class="op">=</span><span class="bu">int</span>(pipeline.predict(X)[<span class="dv">0</span>]),</span>
+<span id="cb2-22">        probability<span class="op">=</span><span class="bu">float</span>(pipeline.predict_proba(X)[<span class="dv">0</span>, <span class="dv">1</span>]),</span>
+<span id="cb2-23">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> loading the model <em>inside</em> the <code>predict</code> function instead of at module load time. This re-reads the file from disk on every request, adding tens of milliseconds and hammering the filesystem under load.</p>
+<p id="proc-23-3"><strong>Procedure 23.3 (Choose Between Real-Time and Batch).</strong> <em>When to use:</em> at design time, before building anything.</p>
+<div id="lst-pattern-choice" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pattern-choice-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;23.3: A simple decision function for deployment pattern
+</figcaption>
+<div aria-describedby="lst-pattern-choice-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">def</span> recommend_pattern(</span>
+<span id="cb3-2">    max_latency_s,</span>
+<span id="cb3-3">    requests_per_day,</span>
+<span id="cb3-4">    needs_immediate,</span>
+<span id="cb3-5">):</span>
+<span id="cb3-6">    <span class="cf">if</span> needs_immediate <span class="kw">and</span> max_latency_s <span class="op">&lt;</span> <span class="dv">5</span>:</span>
+<span id="cb3-7">        <span class="cf">return</span> <span class="st">"Real-time endpoint"</span></span>
+<span id="cb3-8">    <span class="cf">if</span> requests_per_day <span class="op">&gt;</span> <span class="dv">100_000</span> <span class="kw">and</span> <span class="kw">not</span> needs_immediate:</span>
+<span id="cb3-9">        <span class="cf">return</span> <span class="st">"Batch Transform"</span></span>
+<span id="cb3-10">    <span class="cf">if</span> <span class="kw">not</span> needs_immediate:</span>
+<span id="cb3-11">        <span class="cf">return</span> <span class="st">"Async inference"</span></span>
+<span id="cb3-12">    <span class="cf">return</span> <span class="st">"Real-time endpoint (with caching if traffic is spiky)"</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-23-4"><strong>Procedure 23.4 (Estimate LLM Serving Capacity).</strong> <em>When to use:</em> before picking an instance type for an LLM endpoint. Sizing off “the model file is 14GB, a 24GB GPU is fine” ignores the KV cache and will OOM under real concurrent traffic.</p>
+<div id="lst-llm-capacity" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-llm-capacity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;23.4: Weight memory + KV cache + decode latency, from first principles
+</figcaption>
+<div aria-describedby="lst-llm-capacity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="kw">def</span> estimate_inference_capacity(</span>
+<span id="cb4-2">    n_layers,</span>
+<span id="cb4-3">    d_model,</span>
+<span id="cb4-4">    n_params,</span>
+<span id="cb4-5">    seq_len,</span>
+<span id="cb4-6">    batch_size,</span>
+<span id="cb4-7">    bytes_per_param<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb4-8">    gpu_memory_gb<span class="op">=</span><span class="dv">80</span>,</span>
+<span id="cb4-9">    gpu_bandwidth_gbps<span class="op">=</span><span class="dv">2000</span>,</span>
+<span id="cb4-10">):</span>
+<span id="cb4-11">    weight_bytes <span class="op">=</span> bytes_per_param <span class="op">*</span> n_params</span>
+<span id="cb4-12">    kv_cache_bytes <span class="op">=</span> (</span>
+<span id="cb4-13">        <span class="dv">2</span> <span class="op">*</span> n_layers <span class="op">*</span> d_model <span class="op">*</span> seq_len</span>
+<span id="cb4-14">        <span class="op">*</span> batch_size <span class="op">*</span> bytes_per_param</span>
+<span id="cb4-15">    )</span>
+<span id="cb4-16">    total_gb <span class="op">=</span> (weight_bytes <span class="op">+</span> kv_cache_bytes) <span class="op">/</span> <span class="fl">1e9</span></span>
+<span id="cb4-17">    ms_per_token <span class="op">=</span> (</span>
+<span id="cb4-18">        (<span class="dv">2</span> <span class="op">*</span> n_params <span class="op">*</span> bytes_per_param)</span>
+<span id="cb4-19">        <span class="op">/</span> (gpu_bandwidth_gbps <span class="op">*</span> <span class="fl">1e9</span>) <span class="op">*</span> <span class="dv">1000</span></span>
+<span id="cb4-20">    )</span>
+<span id="cb4-21">    <span class="cf">return</span> {</span>
+<span id="cb4-22">        <span class="st">'total_gb'</span>: total_gb,</span>
+<span id="cb4-23">        <span class="st">'fits'</span>: total_gb <span class="op">&lt;=</span> gpu_memory_gb,</span>
+<span id="cb4-24">        <span class="st">'ms_per_token'</span>: ms_per_token,</span>
+<span id="cb4-25">    }</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> raising batch size to increase throughput without checking the KV cache still fits. This is the most common cause of an endpoint that works fine in testing (batch size 1) and OOMs under real concurrent load, since KV cache memory scales linearly with batch size while weight memory stays fixed.</p>
+</section>
+<section id="worked-example" class="level2" data-number="23.5">
+<h2 data-number="23.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">23.5</span> Worked Example</h2>
+<p>Serialising and serving a real logistic-regression pipeline (Breast Cancer Wisconsin dataset, 30 features) behind a genuine FastAPI endpoint, then load-testing it with 200 requests at concurrency 20 using Procedure 23.2’s exact serving code:</p>
+<div id="lst-load-test-run" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-load-test-run-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;23.5: Load-testing a live local FastAPI endpoint
+</figcaption>
+<div aria-describedby="lst-load-test-run-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="kw">def</span> load_test(url, payload, n_requests<span class="op">=</span><span class="dv">200</span>, concurrency<span class="op">=</span><span class="dv">20</span>):</span>
+<span id="cb5-2">    executor <span class="op">=</span> concurrent.futures.ThreadPoolExecutor</span>
+<span id="cb5-3">    <span class="cf">with</span> executor(max_workers<span class="op">=</span>concurrency) <span class="im">as</span> pool:</span>
+<span id="cb5-4">        futures <span class="op">=</span> [</span>
+<span id="cb5-5">            pool.submit(send_request, url, payload)</span>
+<span id="cb5-6">            <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n_requests)</span>
+<span id="cb5-7">        ]</span>
+<span id="cb5-8">        done <span class="op">=</span> concurrent.futures.as_completed(futures)</span>
+<span id="cb5-9">        latencies <span class="op">=</span> [f.result()[<span class="dv">0</span>] <span class="cf">for</span> f <span class="kw">in</span> done]</span>
+<span id="cb5-10">    <span class="cf">return</span> np.percentile(latencies, [<span class="dv">50</span>, <span class="dv">95</span>, <span class="dv">99</span>]) <span class="op">*</span> <span class="dv">1000</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Measured against a locally running instance of exactly the endpoint code in <a href="#lst-fastapi-endpoint" class="quarto-xref">Listing&nbsp;<span>23.2</span></a>: 100% success rate across 200 requests, p50 latency 23.1ms, p95 29.6ms, p99 31.8ms. This is a single-machine, no-network-hop measurement. Real production latency over the internet would add real network time on top. But it isolates the endpoint’s own overhead cleanly. A simple logistic regression pipeline answers in low tens of milliseconds even under 20-way concurrent load, comfortably inside the sub-100ms budget this chapter’s Motivation named for a checkout recommendation.</p>
+<p>Turning to LLM-serving capacity with <a href="#lst-llm-capacity" class="quarto-xref">Listing&nbsp;<span>23.4</span></a>: size a 7B-parameter model (fp16, 32 layers, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>d</mi><mrow><mi>m</mi><mi>o</mi><mi>d</mi><mi>e</mi><mi>l</mi></mrow></msub><mo>=</mo><mn>4096</mn></mrow><annotation encoding="application/x-tex">d_{model}=4096</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8444em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal">d</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">m</span><span class="mord mathnormal mtight">o</span><span class="mord mathnormal mtight">d</span><span class="mord mathnormal mtight">e</span><span class="mord mathnormal mtight" style="margin-right:0.0197em;">l</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">4096</span></span></span></span>) at batch size 8 and 2048-token context. Weight memory <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>=</mo><mn>2</mn><mo>×</mo><mn>7</mn><mo>×</mo><msup><mn>10</mn><mn>9</mn></msup><mo>=</mo><mn>14</mn></mrow><annotation encoding="application/x-tex">= 2 \times 7\times10^9 = 14</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.3669em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">7</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">9</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">14</span></span></span></span>GB. KV cache <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>=</mo><mn>2</mn><mo>×</mo><mn>32</mn><mo>×</mo><mn>4096</mn><mo>×</mo><mn>2048</mn><mo>×</mo><mn>8</mn><mo>×</mo><mn>2</mn><mo>≈</mo><mn>8.6</mn></mrow><annotation encoding="application/x-tex">= 2 \times 32 \times 4096 \times 2048 \times 8 \times 2 \approx 8.6</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.3669em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">32</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">4096</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2048</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">8</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">8.6</span></span></span></span>GB. Total <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo><mn>22.6</mn></mrow><annotation encoding="application/x-tex">\approx 22.6</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">22.6</span></span></span></span>GB: comfortably inside a single 24GB or 80GB GPU. Decode latency works out to <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>2</mn><mo>×</mo><mn>7</mn><mo>×</mo><msup><mn>10</mn><mn>9</mn></msup><mo>×</mo><mn>2</mn><mo stretchy="false">)</mo><mi mathvariant="normal">/</mi><mo stretchy="false">(</mo><mn>2</mn><mo>×</mo><msup><mn>10</mn><mn>12</mn></msup><mo stretchy="false">)</mo><mo>×</mo><mn>1000</mn><mo>≈</mo><mn>14</mn></mrow><annotation encoding="application/x-tex">(2 \times 7\times10^9 \times 2)/(2\times10^{12}) \times 1000 \approx 14</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">7</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8974em;vertical-align:-0.0833em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">9</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">2</span><span class="mclose">)</span><span class="mord">/</span><span class="mopen">(</span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mord"><span class="mord">0</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">12</span></span></span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1000</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">14</span></span></span></span>ms/token, roughly 70 tokens/second single-stream on an A100. Pushing the <em>same</em> model to a 32,768-token context at the same batch size scales the KV cache term by <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>32768</mn><mi mathvariant="normal">/</mi><mn>2048</mn><mo>=</mo><mn>16</mn><mo>×</mo></mrow><annotation encoding="application/x-tex">32768/2048 = 16\times</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">32768/2048</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">16</span><span class="mord">×</span></span></span></span>, to roughly 137GB. That no longer fits even an 80GB GPU, while the weight memory hasn’t moved at all. This is the concrete arithmetic behind “long-context serving is expensive.” It’s a KV-cache-memory problem, not a weights problem. The two scale completely differently with context length.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker.sklearn.model <span class="im">import</span> SKLearnModel</span>
+<span id="cb6-2"></span>
+<span id="cb6-3">sm_model <span class="op">=</span> SKLearnModel(</span>
+<span id="cb6-4">    model_data<span class="op">=</span><span class="st">"s3://bucket/model.tar.gz"</span>,</span>
+<span id="cb6-5">    role<span class="op">=</span>role,</span>
+<span id="cb6-6">    entry_point<span class="op">=</span><span class="st">"inference.py"</span>,</span>
+<span id="cb6-7">    framework_version<span class="op">=</span><span class="st">"1.2-1"</span>,</span>
+<span id="cb6-8">)</span>
+<span id="cb6-9"></span>
+<span id="cb6-10">predictor <span class="op">=</span> sm_model.deploy(</span>
+<span id="cb6-11">    initial_instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb6-12">    instance_type<span class="op">=</span><span class="st">"ml.t2.medium"</span>,</span>
+<span id="cb6-13">)</span>
+<span id="cb6-14">result <span class="op">=</span> predictor.predict({<span class="st">"features"</span>: [<span class="fl">0.0</span>] <span class="op">*</span> <span class="dv">30</span>})</span>
+<span id="cb6-15"></span>
+<span id="cb6-16"><span class="co"># Batch Transform: no persistent endpoint at all</span></span>
+<span id="cb6-17">transformer <span class="op">=</span> sm_model.transformer(</span>
+<span id="cb6-18">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb6-19">    instance_type<span class="op">=</span><span class="st">"ml.m5.large"</span>,</span>
+<span id="cb6-20">    output_path<span class="op">=</span><span class="st">"s3://bucket/batch-output/"</span>,</span>
+<span id="cb6-21">)</span>
+<span id="cb6-22">transformer.transform(</span>
+<span id="cb6-23">    data<span class="op">=</span><span class="st">"s3://bucket/batch-input.csv"</span>,</span>
+<span id="cb6-24">    content_type<span class="op">=</span><span class="st">"text/csv"</span>,</span>
+<span id="cb6-25">)</span></code></pre></div>
+<p><strong>When to prefer SageMaker:</strong> managed auto-scaling and built-in monitoring, or already operating inside AWS without wanting to own the FastAPI/Docker/orchestration stack directly. For a single low-traffic internal tool, this chapter’s hand-rolled FastAPI container (the one actually load-tested above) is often simpler and cheaper.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="23.6">
+<h2 data-number="23.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">23.6</span> History and Further Reading</h2>
+<p>Thakur, Ch. 10, covers practical Python for saving and loading models <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. FastAPI’s own documentation is the definitive guide to building async Python APIs. Huyen’s <em>Designing ML Systems</em>, Ch. 7, covers deployment patterns in depth <span class="citation" data-cites="huyen2022designingml">(<a href="#ref-huyen2022designingml" role="doc-biblioref">Huyen 2022</a>)</span>. Kipply’s “Transformer Inference Arithmetic” (kipply.github.io) is the source for the memory-bandwidth-bound decode and KV cache formulas used above. Tunstall, von Werra, and Wolf’s <em>Natural Language Processing with Transformers</em>, Ch. 8, works through knowledge distillation, quantisation, pruning, and ONNX graph optimisation as complementary techniques for shrinking a model’s latency and memory footprint, the natural next step once this chapter’s serving infrastructure is in place <span class="citation" data-cites="tunstall2022nlptransformers">(<a href="#ref-tunstall2022nlptransformers" role="doc-biblioref">Tunstall et al. 2022</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="23.7">
+<h2 data-number="23.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">23.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 22’s experiment tracking. Deployment happens from the model registry, not from an arbitrary notebook state. It enables Chapter 24’s MLOps, where deployment is one automated step in a CI/CD pipeline, and Chapter 25’s monitoring, which can only observe a model that’s actually deployed. It’s often confused with training itself. Training produces the model, serving uses it. The two are entirely separate systems with different uptime requirements and scaling profiles. A training job failing overnight and an inference endpoint going down at 2pm are different emergencies with different on-call implications.</p>
+</section>
+<section id="exercises" class="level2" data-number="23.8">
+<h2 data-number="23.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">23.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-23-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the deployment pattern best suited to: (a) a fraud check that must respond before checkout completes; (b) a nightly report scoring 2 million customer records.</p></li>
+<li id="ex-23-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in one sentence why saving only the fitted estimator (not the full pipeline including the scaler) is a common source of train/serve skew.</p></li>
+<li id="ex-23-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-load-test-run" class="quarto-xref">Listing&nbsp;<span>23.5</span></a>’s measured p50/p95/p99 (23.1/29.6/31.8ms), compute the ratio of p99 to p50, and explain what a ratio this close to 1.0 (versus, say, 5.0) suggests about the endpoint’s latency consistency under load.</p></li>
+<li id="ex-23-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-llm-capacity" class="quarto-xref">Listing&nbsp;<span>23.4</span></a>’s formula, compute the KV cache size for the same 7B model at batch size 32 (instead of 8) and 2048-token context, and state whether it still fits on an 80GB GPU alongside the 14GB of weights.</p></li>
+<li id="ex-23-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team wants a 24/7 real-time endpoint for a model whose predictions are only ever read in a report generated once per day at 6am. Using this chapter’s Trade-offs section, write the two or three sentences you’d say to them.</p></li>
+<li id="ex-23-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer reports their LLM endpoint “worked fine in testing but crashes under real traffic.” Using Procedure 23.4’s common mistake, name the most likely cause and the one number you’d ask them to check first.</p></li>
+<li id="ex-23-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Kipply’s “Transformer Inference Arithmetic” section on the “critical batch size.” Explain in your own words what happens to decode latency once batch size grows past that point, and how it differs from the memory-bandwidth-bound regime this chapter’s formulas describe.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="23.9">
+<h2 data-number="23.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">23.9</span> Mental Model</h2>
+<p>A deployed model is a microservice. It has a contract (input schema, output schema), an SLA (latency, uptime), and operational requirements (logging, health checks, version management). Treat it like infrastructure, not like a notebook cell that happens to be running somewhere. The same questions asked about any API apply here without exception: what happens when it goes down, how does it scale, who owns it.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-huyen2022designingml" class="csl-entry" role="listitem">
+Huyen, Chip. 2022. <em>Designing Machine Learning Systems: An Iterative Process for Production-Ready Applications</em>. O’Reilly Media.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+<div id="ref-tunstall2022nlptransformers" class="csl-entry" role="listitem">
+Tunstall, Lewis, Leandro von Werra, and Thomas Wolf. 2022. <em>Natural Language Processing with Transformers: Building Language Applications with Hugging Face</em>. O’Reilly Media.
+</div>
+</div>
+</section>

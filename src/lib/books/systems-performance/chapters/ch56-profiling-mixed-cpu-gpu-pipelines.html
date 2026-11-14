@@ -1,0 +1,259 @@
+<p><a href="/books/systems-performance/ch55-knowing-when-to-move-to-gpu" class="quarto-xref"><span>Chapter 55</span></a> decided, for a single isolated operation, whether CPU or GPU was the right home. Real pipelines are rarely a single operation. They interleave CPU-side work (data loading, preprocessing, control flow) with GPU-side compute, and the question “which side is the bottleneck” can only be answered by measuring the whole pipeline together, not either side in isolation. This chapter uses Nsight Systems (<code>nsys</code>), a real system-level profiler that records both CPU and GPU activity on a shared timeline, to answer that question with evidence rather than assumption.</p>
+<section id="motivation" class="level2" data-number="56.1">
+<h2 data-number="56.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">56.1</span> Motivation</h2>
+<p>Two lessons compound in this chapter: naive whole-process timing can be dominated by one-time fixed costs (here, <code>import torch</code> and CUDA context initialisation) that have nothing to do with the pipeline logic actually being measured. This is <a href="/books/systems-performance/ch48-performance-engineering-mindset" class="quarto-xref"><span>Chapter 48</span></a>’s “isolate the region you care about” discipline, resurfacing at the process level. And GPU utilisation, the fraction of wall-clock time the GPU is actually busy, is the real, measurable answer to “is the GPU the bottleneck,” and <code>nsys</code> gives it directly from real kernel and memory-copy records, rather than requiring it to be inferred indirectly from timing differences alone. Worked Example 56 below measures both effects on the same small CPU-preprocess-then-GPU-matmul pipeline.</p>
+</section>
+<section id="exposition" class="level2" data-number="56.2">
+<h2 data-number="56.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">56.2</span> Exposition</h2>
+<section id="the-naive-comparison-lies-about-the-size-of-the-fix" class="level3" data-number="56.2.1">
+<h3 data-number="56.2.1" class="anchored" data-anchor-id="the-naive-comparison-lies-about-the-size-of-the-fix"><span class="header-section-number">56.2.1</span> The Naive Comparison Lies About the Size of the Fix</h3>
+<p>Comparing two versions of a small pipeline, identical except one preprocessing step is a slow Python loop, the other a vectorized expression, by timing the whole process end to end gives an unimpressive apparent speedup, because <code>import torch</code> alone takes several hundred milliseconds and CUDA context initialisation adds more, as fixed, one-time costs present in <em>both</em> versions that swamp whatever the actual loop is doing. This is exactly the single-naive-measurement trap from <a href="/books/systems-performance/ch48-performance-engineering-mindset" class="quarto-xref"><span>Chapter 48</span></a>, recurring at the scale of an entire process invocation rather than a single function call.</p>
+</section>
+<section id="isolating-the-loop-reveals-the-real-effect" class="level3" data-number="56.2.2">
+<h3 data-number="56.2.2" class="anchored" data-anchor-id="isolating-the-loop-reveals-the-real-effect"><span class="header-section-number">56.2.2</span> Isolating the Loop Reveals the Real Effect</h3>
+<p>Instrumenting the script to report <code>import</code> time, CUDA-init time, and loop time separately reveals the genuine per-iteration effect, hidden entirely by whole-process timing. The lesson isn’t new. <a href="/books/systems-performance/ch48-performance-engineering-mindset" class="quarto-xref"><span>Chapter 48</span></a> established it. But the failure mode recurs at every scale, here at the level of comparing two entire program runs rather than two function calls.</p>
+</section>
+<section id="nsys-measures-gpu-busy-time-directly-not-by-inference" class="level3" data-number="56.2.3">
+<h3 data-number="56.2.3" class="anchored" data-anchor-id="nsys-measures-gpu-busy-time-directly-not-by-inference"><span class="header-section-number">56.2.3</span> <code>nsys</code> Measures GPU Busy Time Directly, Not by Inference</h3>
+<p>Profiling both versions with <code>nsys profile</code> and summarising with <code>nsys stats --report cuda_gpu_kern_sum --report cuda_gpu_mem_time_sum</code> gives exact, measured totals for every CUDA kernel launch and every host-device memory copy across the whole run, the direct, measured confirmation of what timing numbers alone can only imply indirectly.</p>
+</section>
+<section id="nvtx-ranges-labelling-which-phase-the-time-belongs-to" class="level3" data-number="56.2.4">
+<h3 data-number="56.2.4" class="anchored" data-anchor-id="nvtx-ranges-labelling-which-phase-the-time-belongs-to"><span class="header-section-number">56.2.4</span> NVTX Ranges: Labelling <em>Which Phase</em> the Time Belongs To</h3>
+<p>The previous section’s <code>nsys</code> totals answer “how much GPU work happened,” summed across the whole run. They don’t say which part of the per-batch loop each nanosecond belongs to. <strong>NVTX ranges</strong> close that gap: <code>torch.cuda.nvtx.range_push('label')</code> and <code>range_pop()</code>, wrapped around a specific region of code, tag every kernel launch and CPU-side interval inside that region with the label. <code>nsys stats --report nvtx_sum</code> then reports total and per-instance time <em>per label</em>, directly, rather than requiring the two-pipeline-comparison trick this chapter has used so far to infer where time went. This turns “the CPU-side fix helped” (inferred from comparing two whole runs) into “the <code>preprocess</code> range took <em>this many milliseconds</em>, the <code>matmul</code> range took <em>this many</em>” (measured directly, from one run).</p>
+</section>
+<section id="gpu-utilisation-the-real-bottleneck-quantified" class="level3" data-number="56.2.5">
+<h3 data-number="56.2.5" class="anchored" data-anchor-id="gpu-utilisation-the-real-bottleneck-quantified"><span class="header-section-number">56.2.5</span> GPU Utilisation: The Real Bottleneck, Quantified</h3>
+<p>Dividing GPU-busy time by isolated loop wall-clock time gives real GPU utilisation. A low number for a small-batch toy pipeline is an honest, important finding, not a flaw in the method: a single small matmul per batch is simply too small a GPU task to keep even a modest GPU consistently busy. The comparison between two pipeline versions is the useful result. Vectorizing CPU preprocessing can roughly double the fraction of time the GPU spends doing anything at all, by shrinking the CPU-side wait it was starved behind. Real production pipelines address low GPU utilisation specifically by using much larger batch sizes. A single large batch keeps the GPU busy for a proportionally larger slice of each iteration’s wall-clock time, the same “amortise fixed cost across more useful work” principle recurring throughout this book (pool reuse, chunk sizing, transfer-overhead amortisation).</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="56.3">
+<h2 data-number="56.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">56.3</span> Trade-offs and Limits</h2>
+<p>Profile the whole pipeline with <code>nsys</code>, not just isolated operations, when CPU and GPU work is interleaved and it’s unclear which side actually limits throughput, or when a wall-clock speedup from a CPU-side or GPU-side fix seems smaller than expected. One-time process overhead may be masking the real per-iteration effect. Isolate the code region of interest from process-level fixed costs whenever comparing two script versions by running each as a whole process. <code>import</code> and initialisation time can dominate short workloads and hide real per-iteration differences. Increase batch size, or otherwise give the GPU more work per CPU-GPU round trip, when <code>nsys</code> reveals low GPU utilisation and the workload’s arithmetic intensity (<a href="/books/systems-performance/ch55-knowing-when-to-move-to-gpu" class="quarto-xref"><span>Chapter 55</span></a>) suggests GPU offload should be worthwhile in principle. The gap is often that each individual GPU call is too small, not that GPU offload was the wrong call in the first place.</p>
+</section>
+<section id="procedures" class="level2" data-number="56.4">
+<h2 data-number="56.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">56.4</span> Procedures</h2>
+<p id="proc-56-1"><strong>Procedure 56.1 (Profile a Mixed CPU/GPU Script with Nsight Systems).</strong> <em>When to use:</em> any script using the GPU where CPU and GPU activity need to be seen together on one timeline.</p>
+<div id="lst-mixed-nsys-profile" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mixed-nsys-profile-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;56.1: Profile, then summarise as text
+</figcaption>
+<div aria-describedby="lst-mixed-nsys-profile-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><span class="ex">nsys</span> profile <span class="at">-o</span> my_profile <span class="at">--force-overwrite</span> true <span class="dt">\</span></span>
+<span id="cb1-2">    <span class="at">--</span> python my_script.py</span>
+<span id="cb1-3"><span class="ex">nsys</span> stats <span class="at">--report</span> cuda_gpu_kern_sum <span class="dt">\</span></span>
+<span id="cb1-4">    <span class="at">--report</span> cuda_gpu_mem_time_sum my_profile.nsys-rep</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> profiling only a single iteration or a very short run. <code>nsys</code> needs enough activity for a statistically meaningful picture; profile a representative number of iterations, not just one.</p>
+<p id="proc-56-2"><strong>Procedure 56.2 (Avoid the Whole-Process Timing Trap).</strong> <em>When to use:</em> comparing two script versions as separate process runs and getting a suspiciously small difference.</p>
+<div id="lst-mixed-isolate-timing" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mixed-isolate-timing-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;56.2: Instrumenting import, init, and loop time separately
+</figcaption>
+<div aria-describedby="lst-mixed-isolate-timing-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">t_import_start <span class="op">=</span> time.perf_counter()</span>
+<span id="cb2-2"><span class="im">import</span> torch</span>
+<span id="cb2-3">t_import_done <span class="op">=</span> time.perf_counter()</span>
+<span id="cb2-4"><span class="co"># ... CUDA init, model loading: timed separately too</span></span>
+<span id="cb2-5"><span class="co"># ...</span></span>
+<span id="cb2-6">t0 <span class="op">=</span> time.perf_counter()</span>
+<span id="cb2-7"><span class="co"># the actual loop/logic being measured</span></span>
+<span id="cb2-8">t_loop <span class="op">=</span> time.perf_counter() <span class="op">-</span> t0</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> timing two script variants with a shell <code>time</code> command or a wrapper <code>subprocess</code> call and comparing those numbers directly. Always instrument the script to report the specific region of interest separately from one-time startup costs.</p>
+<p id="proc-56-3"><strong>Procedure 56.3 (Compute GPU Utilisation from <code>nsys</code> Output).</strong> <em>When to use:</em> deciding whether a pipeline’s bottleneck is really the GPU, or the GPU is sitting idle waiting on something else.</p>
+<div id="lst-mixed-gpu-util" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mixed-gpu-util-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;56.3: GPU-busy time over wall-clock time, from real nsys records
+</figcaption>
+<div aria-describedby="lst-mixed-gpu-util-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># summed from cuda_gpu_kern_sum + mem_time_sum</span></span>
+<span id="cb3-2">gpu_busy_ns <span class="op">=</span> total_gpu_busy_ns(nsys_stats_output)</span>
+<span id="cb3-3">utilisation_pct <span class="op">=</span> (</span>
+<span id="cb3-4">    gpu_busy_ns <span class="op">/</span> (wall_clock_seconds <span class="op">*</span> <span class="fl">1e9</span>) <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb3-5">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming a slow pipeline with GPU code in it is “GPU-bound” without checking utilisation. Low GPU utilisation is a clear, actionable signal to look at the CPU side (or increase batch size), rather than optimising GPU kernels that are barely running.</p>
+<p id="proc-56-4"><strong>Procedure 56.4 (Fix Low GPU Utilisation).</strong> <em>When to use:</em> <code>nsys</code> confirms the GPU is mostly idle.</p>
+<div id="lst-mixed-fix-util" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mixed-fix-util-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;56.4: Three fixes, in order of how much complexity to reach for
+</figcaption>
+<div aria-describedby="lst-mixed-fix-util-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>1. Vectorize/optimise the CPU-side preprocessing so it
+   stops making the GPU wait.
+2. Increase batch size, so each CPU-GPU round trip
+   carries more work.
+3. Overlap CPU and GPU work with async transfers and
+   multiple CUDA streams (a more advanced technique,
+   once the simpler fixes are exhausted).</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> jumping straight to multi-stream overlap before trying the simpler fixes. Check the cheaper options first, the same “measure before you architect a complex solution” discipline running throughout this book.</p>
+<p id="proc-56-5"><strong>Procedure 56.5 (Label Pipeline Phases With NVTX Ranges).</strong> <em>When to use:</em> a pipeline has more than one distinct phase per iteration and it’s unclear which phase, specifically, dominates. The direct alternative to inferring this by comparing two whole-pipeline runs.</p>
+<div id="lst-mixed-nvtx" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mixed-nvtx-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;56.5: Tagging each phase of the per-batch loop with an NVTX range
+</figcaption>
+<div aria-describedby="lst-mixed-nvtx-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">import</span> torch.cuda.nvtx <span class="im">as</span> nvtx</span>
+<span id="cb5-2"></span>
+<span id="cb5-3"><span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(n_batches):</span>
+<span id="cb5-4">    batch <span class="op">=</span> torch.randn(batch_size, dim)</span>
+<span id="cb5-5"></span>
+<span id="cb5-6">    nvtx.range_push(<span class="st">'preprocess'</span>)</span>
+<span id="cb5-7">    pre <span class="op">=</span> preprocess_fn(batch)</span>
+<span id="cb5-8">    nvtx.range_pop()</span>
+<span id="cb5-9"></span>
+<span id="cb5-10">    nvtx.range_push(<span class="st">'matmul'</span>)</span>
+<span id="cb5-11">    x_gpu <span class="op">=</span> pre.to(<span class="st">'cuda'</span>)</span>
+<span id="cb5-12">    y <span class="op">=</span> gpu_step(x_gpu, w)</span>
+<span id="cb5-13">    torch.cuda.synchronize()</span>
+<span id="cb5-14">    result <span class="op">=</span> y.to(<span class="st">'cpu'</span>)</span>
+<span id="cb5-15">    nvtx.range_pop()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<div id="lst-mixed-nvtx-report" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mixed-nvtx-report-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;56.6: Profiling with NVTX tracing enabled, then reporting per-label time
+</figcaption>
+<div aria-describedby="lst-mixed-nvtx-report-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb6-1"><span class="ex">nsys</span> profile <span class="at">-o</span> my_profile <span class="at">--force-overwrite</span> true <span class="dt">\</span></span>
+<span id="cb6-2">    <span class="at">--trace</span><span class="op">=</span>cuda,nvtx <span class="at">--</span> python my_script.py</span>
+<span id="cb6-3"><span class="ex">nsys</span> stats <span class="at">--report</span> nvtx_sum my_profile.nsys-rep</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> profiling without <code>--trace=cuda,nvtx</code> explicitly. Some <code>nsys</code> invocations trace CUDA activity by default but not NVTX ranges, and a script with <code>range_push</code>/<code>range_pop</code> calls that were never captured produces an empty or misleading <code>nvtx_sum</code> report with no indication anything was skipped.</p>
+</section>
+<section id="worked-example" class="level2" data-number="56.5">
+<h2 data-number="56.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">56.5</span> Worked Example</h2>
+<p>Two versions of a 20-batch CPU-preprocess-then-GPU-matmul pipeline, identical except one preprocessing step is a slow Python loop, the other a vectorized expression, measured on this book’s reference rig<span class="ref-rig-mark">†</span>, three separate ways.</p>
+<p><strong>Whole-process timing (the naive, misleading comparison):</strong> slow pipeline 1,599.1ms<span class="ref-rig-mark">†</span> versus fast pipeline 1,432.8ms<span class="ref-rig-mark">†</span>, an unimpressive apparent <strong>1.12x</strong> speedup for what should be a much larger fix.</p>
+<p><strong>Isolated-loop timing (Procedure 56.2, excluding <code>import torch</code>’s ~780ms<span class="ref-rig-mark">†</span> and CUDA init’s ~185ms<span class="ref-rig-mark">†</span>, identical fixed costs in both versions):</strong></p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Pipeline</th>
+<th>20-batch loop time</th>
+<th>Per-batch time</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Slow (Python-loop preprocessing)</td>
+<td>239.9ms<span class="ref-rig-mark">†</span></td>
+<td>12.00ms/batch</td>
+</tr>
+<tr class="even">
+<td>Fast (vectorized preprocessing)</td>
+<td>97.9ms<span class="ref-rig-mark">†</span></td>
+<td>4.90ms/batch</td>
+</tr>
+</tbody>
+</table>
+<p>A genuine <strong>2.45x</strong> speedup, more than double what the naive whole-process comparison suggested, entirely attributable to the one changed line of code. This is Exposition’s claim measured directly: over 1,100ms of shared fixed cost, invisible to the loop logic, was masking most of the real effect.</p>
+<p><strong><code>nsys</code>-measured GPU busy time (Procedure 56.1, confirming the fix was CPU-side, not GPU-side):</strong></p>
+<div id="lst-mixed-worked-nsys" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mixed-worked-nsys-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;56.7: Summed cuda_gpu_kern_sum + cuda_gpu_mem_time_sum across the whole run
+</figcaption>
+<div aria-describedby="lst-mixed-worked-nsys-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb7-1"><span class="ex">nsys</span> stats <span class="at">--report</span> cuda_gpu_kern_sum <span class="dt">\</span></span>
+<span id="cb7-2">    <span class="at">--report</span> cuda_gpu_mem_time_sum slow_profile.nsys-rep</span>
+<span id="cb7-3"><span class="ex">nsys</span> stats <span class="at">--report</span> cuda_gpu_kern_sum <span class="dt">\</span></span>
+<span id="cb7-4">    <span class="at">--report</span> cuda_gpu_mem_time_sum fast_profile.nsys-rep</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Slow pipeline’s total GPU-side work: <strong>0.851ms</strong><span class="ref-rig-mark">†</span>. Fast pipeline’s total GPU-side work: <strong>0.849ms</strong><span class="ref-rig-mark">†</span>, essentially identical, exactly as expected, since only the CPU-side preprocessing code changed between versions. This is the direct, measured confirmation of what the timing numbers already implied indirectly: the GPU did almost exactly the same amount of real work in both cases.</p>
+<p><strong>GPU utilisation (Procedure 56.3, dividing GPU-busy time by isolated loop time):</strong></p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Pipeline</th>
+<th>GPU busy / loop time</th>
+<th>Utilisation</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Slow</td>
+<td>0.851ms / 239.9ms</td>
+<td><strong>~0.35%</strong><span class="ref-rig-mark">†</span></td>
+</tr>
+<tr class="even">
+<td>Fast</td>
+<td>0.849ms / 97.9ms</td>
+<td><strong>~0.87%</strong><span class="ref-rig-mark">†</span></td>
+</tr>
+</tbody>
+</table>
+<p><strong>NVTX-labelled per-phase breakdown (Procedure 56.5, direct attribution rather than inferred from comparing two runs):</strong></p>
+<pre class="text"><code>Slow pipeline, nsys stats --report nvtx_sum:
+  preprocess:  70.1% of ranged time, median 6.855ms/batch
+  matmul:      29.9% of ranged time, median 0.222ms/batch
+
+Fast pipeline, nsys stats --report nvtx_sum:
+  matmul:      95.7% of ranged time, median 0.149ms/batch
+  preprocess:   4.3% of ranged time, median 0.081ms/batch</code></pre>
+<p>This is the same conclusion the isolated-loop timing and the GPU-utilisation calculation above both already pointed to, now measured directly rather than inferred: in the slow pipeline, <code>preprocess</code> consumes more than two-thirds of every batch’s time, dwarfing <code>matmul</code>; in the fast pipeline, the relationship flips, and <code>matmul</code> dominates instead, exactly as expected once the CPU-side bottleneck is removed. (The reported <code>nsys stats --report nvtx_sum</code> output also includes a mean and standard deviation per range, both dominated by a single first-iteration outlier, CUDA’s lazy kernel-cache warm-up on the very first launch, which is why the median, not the mean, is the number to trust here; a real, common profiling nuance worth knowing before it causes confusion on a real run.) Where the earlier GPU-utilisation numbers required running the pipeline twice and comparing, NVTX ranges answer “which phase dominates” from a single profiled run, with the phase boundaries drawn exactly where the code says they are.</p>
+<p>Both numbers are low, and that’s an honest, important finding, not a flaw in the method: this toy pipeline’s single 256×256 matmul per batch is too small a GPU task to keep even a modest GPU consistently busy, let alone the reference rig’s RTX 5090. The comparison between the two versions is the useful result. Vectorizing the CPU preprocessing roughly <strong>doubled</strong> the fraction of time the GPU spent doing anything at all (0.35% → 0.87%), by shrinking the CPU-side wait it was starved behind, not by changing GPU work at all (confirmed above: 0.851ms vs.&nbsp;0.849ms, essentially unchanged). Per Procedure 56.4, the next lever beyond this fix would be increasing batch size, giving the GPU proportionally more work per round trip.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<p>This chapter’s whole-process-timing trap has a direct SageMaker analogue: comparing two SageMaker Training Job configurations by their reported total job duration can be similarly misled by fixed container-startup and model-loading overhead that has nothing to do with the per-epoch training loop being optimised. CloudWatch’s per-step or per-epoch custom metrics (logged from inside the training script, the same way Procedure 56.2 instruments <code>import</code>/loop time separately) avoid this trap the same way this chapter’s isolated-loop timing does. Always compare the specific region of interest, not total job wall-clock time, when evaluating a training-loop optimisation on SageMaker.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="56.6">
+<h2 data-number="56.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">56.6</span> History and Further Reading</h2>
+<p>NVIDIA’s “Nsight Systems User Guide” is the authoritative reference for the <code>nsys profile</code>/<code>nsys stats</code> options and report types used in this chapter. NVIDIA’s developer blog post “Nsight Systems for Deep Learning Performance Analysis” applies this chapter’s exact technique to real training-pipeline profiling scenarios. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 13, covers the same <code>nsys</code>-driven CPU/GPU timeline correlation and NVTX-range labelling applied to a full PyTorch training pipeline, at production scale with regions such as “forward” and “backward” labelled across a much larger model, the same Procedure 56.5 technique this chapter applies to a two-phase toy pipeline, worth reading once this chapter’s own NVTX breakdown and GPU-utilisation calculation have both been done by hand. Cautaerts and Ghorbanfekr’s <em>GPU-Accelerated Computing with Python 3 and CUDA</em> <span class="citation" data-cites="cautaerts2026gpuaccelerated">(<a href="#ref-cautaerts2026gpuaccelerated" role="doc-biblioref">Cautaerts and Ghorbanfekr 2026</a>)</span>, Chapter 6, covers CUDA streams and asynchronous transfer/compute overlap from Numba-CUDA, the same mechanism this chapter’s mixed CPU/GPU timeline depends on to hide one phase’s latency behind another’s.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="56.7">
+<h2 data-number="56.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">56.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/systems-performance/ch48-performance-engineering-mindset" class="quarto-xref"><span>Chapter 48</span></a>’s benchmarking discipline (isolating the region actually being measured) applied at whole-process scale, and on <a href="/books/systems-performance/ch55-knowing-when-to-move-to-gpu" class="quarto-xref"><span>Chapter 55</span></a>’s arithmetic-intensity framework, which this chapter’s low-utilisation finding directly explains the practical consequence of. It enables Chapter 57’s capstone, which profiles and progressively optimises a full pipeline. This chapter’s <code>nsys</code> technique is exactly how that capstone identifies whether a given stage is CPU-bound, GPU-bound, or GPU-starved. It’s often confused with “the GPU is slow” whenever GPU utilisation is low. This chapter’s own measurement shows the GPU did nearly identical, fast work in both pipeline versions. The wall-clock difference came entirely from the CPU side, a distinction <code>nsys</code>’s kernel-level data makes unambiguous rather than a matter of guesswork.</p>
+</section>
+<section id="exercises" class="level2" data-number="56.8">
+<h2 data-number="56.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">56.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-56-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the two fixed, one-time costs that dominated the naive whole-process timing comparison in this chapter’s Worked Example, and state their approximate measured durations.</p></li>
+<li id="ex-56-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Write the GPU utilisation formula from Procedure 56.3 and state what its two inputs are measured from.</p></li>
+<li id="ex-56-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s two timing methods (naive whole-process: 1.12x; isolated-loop: 2.45x), explain specifically what the ~965ms of combined <code>import</code>+CUDA-init overhead did to the naive comparison’s apparent speedup, arithmetically.</p></li>
+<li id="ex-56-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s measured GPU-busy times (0.851ms slow vs.&nbsp;0.849ms fast, a difference of only 0.002ms) alongside the measured utilisation change (0.35% to 0.87%), explain why these two facts together prove the fix’s benefit came entirely from the CPU side, not from any change in GPU work.</p></li>
+<li id="ex-56-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team reports “we optimised our GPU training pipeline and cut total runtime by only 8%, so further GPU kernel optimisation probably isn’t worth it.” Using this chapter’s Worked Example, write the two or three sentences you’d say about what to check before accepting that conclusion.</p></li>
+<li id="ex-56-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 56.4 lists three fixes for low GPU utilisation in order (vectorize CPU code, increase batch size, overlap with streams) and warns against jumping straight to step 3. Using this chapter’s measured results, explain what evidence would justify skipping to step 3 rather than trying step 1 or 2 first.</p></li>
+<li id="ex-56-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about CUDA streams and asynchronous memory transfers (<code>cudaMemcpyAsync</code>). Explain in your own words how overlapping CPU preprocessing of batch N+1 with GPU computation of batch N could improve on this chapter’s Worked Example’s fast pipeline (0.87% utilisation) without requiring any larger batch size.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="56.9">
+<h2 data-number="56.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">56.9</span> Mental Model</h2>
+<p>A wall-clock stopwatch on the whole kitchen says dinner took an hour. It doesn’t say the oven (the GPU) was only actually cooking for two minutes of that hour, with the rest spent waiting on someone chopping vegetables by hand (the CPU preprocessing). <code>nsys</code> is a timer on the oven itself, alongside the kitchen’s overall clock. Only with both is it clear whether a faster oven would help at all, or whether the chopping is the real thing to fix. This chapter’s Worked Example measured exactly that distinction: nearly identical GPU work (0.851ms vs.&nbsp;0.849ms) in both pipeline versions, with the entire real speedup (2.45x) coming from the chopping, not the oven.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-cautaerts2026gpuaccelerated" class="csl-entry" role="listitem">
+Cautaerts, Niels, and Hossein Ghorbanfekr. 2026. <em>GPU-Accelerated Computing with Python 3 and CUDA: From Low-Level Kernels to Real-World Applications in Scientific Computing and Machine Learning</em>. Packt Publishing.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+</div>
+</section>

@@ -1,0 +1,247 @@
+<p>Chapter 38 sketched the GPU memory hierarchy as a diagram: registers, shared memory, L2, global memory, fastest to slowest. Chapter 39’s vector-add pipeline showed that moving data can dominate total time even when compute is nearly free. This chapter answers the natural next question. Given that memory access is usually the bottleneck, what actually makes one memory access <em>pattern</em> faster than another, when the <em>amount</em> of data moved is identical? The answer, proven here with real measured numbers rather than asserted, is that how a warp’s 32 threads address memory matters as much as how much data they touch.</p>
+<section id="motivation" class="level2" data-number="40.1">
+<h2 data-number="40.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">40.1</span> Motivation</h2>
+<p>DRAM, the technology behind a GPU’s global memory (HBM), is fast at reading large contiguous chunks and comparatively slow at reading many small scattered ones. Physically, a memory controller fetches data in fixed-size bursts (a cache line, commonly 128 bytes). If a request only needs 4 bytes out of that burst, the other 124 bytes were fetched for nothing. A warp issues memory requests for all 32 of its threads at once, so whether those 32 requests land in one burst or scatter across 32 is one of the single biggest levers on a memory-bound kernel’s real-world speed, bigger, often, than any change to the arithmetic itself.</p>
+</section>
+<section id="exposition" class="level2" data-number="40.2">
+<h2 data-number="40.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">40.2</span> Exposition</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface.</p>
+<section id="coalescing-one-truck-not-thirty-two" class="level3" data-number="40.2.1">
+<h3 data-number="40.2.1" class="anchored" data-anchor-id="coalescing-one-truck-not-thirty-two"><span class="header-section-number">40.2.1</span> Coalescing: One Truck, Not Thirty-Two</h3>
+<p>If a warp’s 32 threads access 32 <em>consecutive</em> 4-byte floats, 128 bytes total, exactly one burst, the hardware satisfies the entire warp with a single memory transaction. This is a <strong>coalesced</strong> access. If instead those 32 threads access addresses scattered far apart, the hardware may need up to 32 separate transactions to satisfy the same warp, for the identical amount of <em>useful</em> data: dramatically more total memory traffic for no more actual work done.</p>
+<p>The general rule that produces coalescing: have consecutive threads (by <code>threadIdx.x</code>) read or write consecutive memory addresses. This falls out naturally for simple elementwise kernels, as in Chapters 39 and 41, but requires deliberate design for anything involving a transpose, a stride, or a non-trivial 2D data layout. It also falls out naturally for the wrong reason whenever data arrives pre-laid-out as an array-of-structs (AoS) and a kernel only needs one field: each thread’s read of that one field is separated from its neighbour’s by the size of the whole struct, not the size of the field, a partial coalescing loss that the Worked Example measures directly below.</p>
+</section>
+<section id="shared-memory-banks-and-bank-conflicts" class="level3" data-number="40.2.2">
+<h3 data-number="40.2.2" class="anchored" data-anchor-id="shared-memory-banks-and-bank-conflicts"><span class="header-section-number">40.2.2</span> Shared Memory Banks and Bank Conflicts</h3>
+<p>Shared memory has an analogous, smaller-scale version of this problem. It is physically organised into 32 equal-width <strong>banks</strong>, one per warp lane, so that ideally all 32 threads in a warp can access shared memory in a single cycle, each hitting a different bank. If two or more threads in a warp instead land on the <em>same</em> bank with <em>different</em> addresses, those accesses <strong>serialise</strong>: a <strong>bank conflict</strong>. A tiled matrix transpose is the classic case. Loading a <code>TILE x TILE</code> block into shared memory and writing it back transposed causes every thread in a warp to read from the same bank on the transposed step, if the tile is declared <code>tile[32][32]</code>. The fix is a single line: declare the tile as <code>tile[32][33]</code> instead. One extra column of padding shifts each row’s starting bank by one, so the same transposed access pattern that previously collided onto one bank now spreads naturally across all 32.</p>
+</section>
+<section id="vectorized-loads-and-__restrict__-when-the-bottleneck-is-already-bandwidth" class="level3" data-number="40.2.3">
+<h3 data-number="40.2.3" class="anchored" data-anchor-id="vectorized-loads-and-__restrict__-when-the-bottleneck-is-already-bandwidth"><span class="header-section-number">40.2.3</span> Vectorized Loads and <code>__restrict__</code>: When the Bottleneck Is Already Bandwidth</h3>
+<p>Two more techniques are commonly recommended alongside coalescing: <strong>vectorized loads</strong>, where each thread moves 4 floats (16 bytes) in one <code>float4</code> instruction instead of one float in four separate instructions, and the <strong><code>__restrict__</code></strong> qualifier, which tells the compiler that two pointer arguments never alias, unlocking more aggressive instruction scheduling and the read-only data cache path. Both are real techniques, and both matter in the right circumstances. Neither helps this chapter’s own coalesced-copy kernel, and the Worked Example measures that directly rather than assuming it.</p>
+<p>The reason is the same access pattern that made coalescing work in the first place. <code>copyCoalesced</code> already issues one 128-byte transaction per warp. The hardware is already moving the maximum useful data per memory request. <code>float4</code> changes how many instructions a thread issues to request the same bytes, not how many bytes a warp’s request already covers. It has room to help only when the scalar version was leaving transaction width on the table, which a properly coalesced kernel is not doing. <code>__restrict__</code> similarly has room to help only when pointer-aliasing uncertainty was forcing the compiler into conservative reloads. This kernel’s <code>in</code> and <code>out</code> pointers are already used in the simplest possible way, one read and one write per thread, with nothing for the compiler to be conservative about.</p>
+</section>
+<section id="registers-the-fastest-tier-and-its-limit" class="level3" data-number="40.2.4">
+<h3 data-number="40.2.4" class="anchored" data-anchor-id="registers-the-fastest-tier-and-its-limit"><span class="header-section-number">40.2.4</span> Registers: The Fastest Tier, and Its Limit</h3>
+<p>Every local variable in a kernel that the compiler can keep in a register lives in the fastest possible storage, effectively free to access. But registers are a strictly limited, per-SM resource shared across every thread resident on that SM. Use too many registers per thread, and fewer threads or blocks fit on the SM simultaneously, reducing occupancy (Chapter 43). This is why aggressively “optimising” a kernel by unrolling loops or introducing many temporary variables can sometimes make it <em>slower</em>. Occupancy is traded for per-thread speed, and more is lost than gained. <code>nvcc --ptxas-options=-v</code> reports register usage per kernel, making this trade-off visible directly.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="40.3">
+<h2 data-number="40.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">40.3</span> Trade-offs and Limits</h2>
+<p>Optimising for coalescing and conflict-free shared-memory access wins at any memory-bound kernel, which, per this book’s roofline framing (Chapter 43), is most simple elementwise and data-movement kernels, and at cases where the access pattern can be restructured without changing the algorithm’s result, as in the padding fix above. It’s not worth obsessing over when the kernel is compute-bound (Chapter 43), since memory access pattern matters far less when arithmetic, not data movement, is the bottleneck, or when the data volume is small enough that even a “bad” access pattern completes in negligible time relative to everything else in the pipeline. A common confusion is expecting L2/L1 caching to automatically fix bad access patterns. Caching helps with <em>reuse</em> of the same data, but does not turn a scattered single-use access pattern into a coalesced one. The hardware still has to service the original scattered request from somewhere. <code>float4</code> and <code>__restrict__</code> are worth trying on a kernel whose access is already coalesced, but expect them to do nothing once the warp is already issuing full 128-byte transactions, as the Worked Example measures directly. They only have room to help when the scalar version was leaving transaction width or compiler aliasing-safety on the table.</p>
+</section>
+<section id="procedures" class="level2" data-number="40.4">
+<h2 data-number="40.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">40.4</span> Procedures</h2>
+<p id="proc-40-1"><strong>Procedure 40.1 (Write a Coalesced-Access Kernel).</strong> <em>When to use:</em> any kernel touching global memory. This should be the default indexing pattern unless there is a specific reason to deviate.</p>
+<div id="lst-memhier-coalesce" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-memhier-coalesce-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;40.1: Coalesced vs.&nbsp;strided global memory access: identical useful data, very different address pattern
+</figcaption>
+<div aria-describedby="lst-memhier-coalesce-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>// COALESCED: consecutive threads -&gt; consecutive addresses
+__global__ void copyCoalesced(const float* in, float* out, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i &lt; n) out[i] = in[i];
+}
+
+// NOT coalesced: consecutive threads -&gt; addresses
+// `stride` elements apart
+__global__ void copyStrided(
+    const float* in,
+    float* out,
+    int n,
+    int stride
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int idx = i * stride;
+    if (idx &lt; n * stride) out[idx] = in[idx];
+}</code></pre>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Pattern</th>
+<th>Address seen by thread <code>i</code></th>
+<th>Coalesced?</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>data[i]</code></td>
+<td><code>base + i * sizeof(T)</code></td>
+<td>Yes: the default, correct pattern</td>
+</tr>
+<tr class="even">
+<td><code>data[i * stride]</code></td>
+<td><code>base + i * stride * sizeof(T)</code></td>
+<td>No, for <code>stride &gt; 1</code></td>
+</tr>
+<tr class="odd">
+<td><code>data[row * width + threadIdx.x]</code> (2D, <code>threadIdx.x</code> on columns)</td>
+<td>Consecutive across the warp</td>
+<td>Yes</td>
+</tr>
+<tr class="even">
+<td><code>data[threadIdx.x * width + col]</code> (2D, <code>threadIdx.x</code> on rows)</td>
+<td><code>width</code> elements apart across the warp</td>
+<td>No</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Common mistake:</strong> transposing a 2D array’s indexing “to make the math read naturally,” for instance putting <code>threadIdx.x</code> on the row instead of the column because that is how the loop would be written on a CPU, without checking whether it broke coalescing. CPU loop order and GPU coalescing order are not the same consideration. Verify explicitly.</p>
+<div id="lst-memhier-vec4" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-memhier-vec4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;40.2: Vectorized load/store and <strong>restrict</strong> variants of the same coalesced copy
+</figcaption>
+<div aria-describedby="lst-memhier-vec4-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>// Scalar, with __restrict__: tells the compiler in/out never alias
+__global__ void copyScalarRestrict(
+    const float* __restrict__ in,
+    float* __restrict__ out,
+    int n
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i &lt; n) out[i] = in[i];
+}
+
+// Vectorized: each thread moves 4 floats (16 bytes) in one instruction
+__global__ void copyVec4(
+    const float4* __restrict__ in,
+    float4* __restrict__ out,
+    int n4
+) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i &lt; n4) out[i] = in[i];
+}</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming <code>float4</code>/<code>__restrict__</code> are free wins to apply everywhere. Both change how a thread requests bytes it was already free to request efficiently. Neither changes how many bytes a warp’s request covers when the access was already coalesced. The Worked Example below measures this directly, on this kernel, rather than assuming a textbook result carries over unchanged.</p>
+<p id="proc-40-2"><strong>Procedure 40.2 (Avoid Shared Memory Bank Conflicts With Padding).</strong> <em>When to use:</em> any kernel using a 2D shared-memory tile accessed along both dimensions: transposes, tiled matrix operations, 2D stencils.</p>
+<div id="lst-memhier-padding" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-memhier-padding-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;40.3: One line of padding removes a 32-way shared-memory bank conflict
+</figcaption>
+<div aria-describedby="lst-memhier-padding-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>#define TILE 32
+
+// Before: tile[32][32]. Transposed access causes
+// 32-way bank conflicts
+__shared__ float tile[TILE][TILE];
+
+// After: tile[32][33]. One column of padding, same
+// logic, no conflicts
+__shared__ float tile[TILE][TILE + 1];</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> padding “just in case” on every shared-memory array, including ones never accessed with a transposed or strided pattern. Padding costs a small amount of shared memory, itself a limited, occupancy-affecting resource (Chapter 43). Apply it where the access pattern actually causes conflicts, not everywhere reflexively.</p>
+<p id="proc-40-3"><strong>Procedure 40.3 (Benchmark Access Patterns on Your Own Hardware).</strong> <em>When to use:</em> verifying the coalescing/bank-conflict effect on hardware other than this book’s reference rig, since the <em>magnitude</em> of both effects varies meaningfully by GPU generation and memory technology.</p>
+<div id="lst-memhier-benchmark" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-memhier-benchmark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;40.4: Reusable compile-and-run harness for comparing CUDA source variants
+</figcaption>
+<div aria-describedby="lst-memhier-benchmark-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> subprocess, tempfile, os, torch</span>
+<span id="cb4-2"></span>
+<span id="cb4-3">major, minor <span class="op">=</span> torch.cuda.get_device_capability(<span class="dv">0</span>)</span>
+<span id="cb4-4">ARCH <span class="op">=</span> <span class="ss">f'sm_</span><span class="sc">{</span>major<span class="sc">}{</span>minor<span class="sc">}</span><span class="ss">'</span></span>
+<span id="cb4-5">build_dir <span class="op">=</span> tempfile.mkdtemp()</span>
+<span id="cb4-6"></span>
+<span id="cb4-7"><span class="kw">def</span> compile_and_run(source, name):</span>
+<span id="cb4-8">    src <span class="op">=</span> os.path.join(build_dir, <span class="ss">f'</span><span class="sc">{</span>name<span class="sc">}</span><span class="ss">.cu'</span>)</span>
+<span id="cb4-9">    bin_ <span class="op">=</span> os.path.join(build_dir, name)</span>
+<span id="cb4-10">    <span class="bu">open</span>(src, <span class="st">'w'</span>).write(source)</span>
+<span id="cb4-11">    subprocess.run(</span>
+<span id="cb4-12">        [<span class="st">'nvcc'</span>, <span class="ss">f'-arch=</span><span class="sc">{</span>ARCH<span class="sc">}</span><span class="ss">'</span>, <span class="st">'-O3'</span>, src, <span class="st">'-o'</span>, bin_],</span>
+<span id="cb4-13">        check<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb4-14">    )</span>
+<span id="cb4-15">    result <span class="op">=</span> subprocess.run(</span>
+<span id="cb4-16">        [bin_],</span>
+<span id="cb4-17">        capture_output<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb4-18">        text<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb4-19">        cwd<span class="op">=</span>build_dir,</span>
+<span id="cb4-20">    )</span>
+<span id="cb4-21">    <span class="bu">print</span>(result.stdout)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> benchmarking without a warm-up kernel launch first. The first CUDA kernel launch in a process pays for context initialisation, which makes <em>both</em> variants look artificially slow and can mask the real difference between them. See Chapter 39’s Procedure 39.4 for the correct warm-up-then-events discipline.</p>
+</section>
+<section id="worked-example" class="level2" data-number="40.5">
+<h2 data-number="40.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">40.5</span> Worked Example</h2>
+<p>The companion notebook runs two experiments back to back on this book’s reference rig, using Procedure 40.3’s compile-and-run harness.</p>
+<p><strong>Coalescing.</strong> Both <code>copyCoalesced</code> and <code>copyStrided</code> (Procedure 40.1) copy the identical number of useful float elements, 16.7 million (<code>n = 1 &lt;&lt; 24</code>), with <code>copyStrided</code> using <code>stride = 32</code>, placing consecutive threads’ addresses exactly 128 bytes apart, one full cache line. Timed as the mean of 20 runs with CUDA events after a warm-up launch:</p>
+<pre class="text"><code>Coalesced copy (stride=1):   0.0715 ms, 1876 GB/s effective
+Strided copy (stride=32):    2.3911 ms, 56 GB/s effective
+Slowdown from striding: 33.4x</code></pre>
+<p>The coalesced version reaches 1876 GB/s<span class="ref-rig-mark">†</span>, close to this card’s peak HBM bandwidth. The strided version, moving the exact same 16.7 million useful floats, manages only 56 GB/s<span class="ref-rig-mark">†</span>: a 33.4x<span class="ref-rig-mark">†</span> slowdown. Nothing about the <em>arithmetic</em> changed between these two kernels. The only difference is the address pattern each warp generates. This is the single highest-leverage lesson in this chapter: access pattern, not data volume, is often the dominant factor in memory-bound kernel performance.</p>
+<p><strong>Vectorized loads and <code>__restrict__</code> on the already-coalesced kernel.</strong> The same 16.7-million-element copy, now compared three ways, scalar (Procedure 40.1’s baseline), scalar with <code>__restrict__</code>, and vectorized <code>float4</code> (Procedure 40.1’s second listing), mean of 20 runs after warm-up:</p>
+<pre class="text"><code>Scalar (no restrict):    0.0705 ms, 1904 GB/s effective
+Scalar (__restrict__):   0.0744 ms, 1803 GB/s effective
+Vectorized (float4):     0.0732 ms, 1833 GB/s effective
+float4 vs. scalar: 0.96x</code></pre>
+<p>All three land within about 5%<span class="ref-rig-mark">†</span> of each other, run to run: no measurable, repeatable win from either technique on this kernel. This is a genuine null result, not a failed experiment. <code>copyCoalesced</code> was already issuing one 128-byte transaction per warp, the maximum useful bytes per request, so there was no transaction-width headroom for <code>float4</code> to claim, and no aliasing ambiguity for <code>__restrict__</code> to resolve. Both techniques are real and both matter elsewhere. A kernel with a more complex indexing expression, where the compiler cannot prove non-aliasing on its own, or a kernel issuing many small sub-word loads, is a different story. On this specific, already-coalesced kernel, the honest result is that the access pattern was already the whole story.</p>
+<p><strong>Array-of-structs vs.&nbsp;struct-of-arrays.</strong> Coalescing loss doesn’t only come from a deliberately strided access. It shows up naturally whenever data is laid out as an array-of-structs (AoS) and a kernel only needs one field. Summing one <code>float</code> field across 16.7 million 16-byte <code>Record{x,y,z,w}</code> structs, versus summing the identical field stored in its own contiguous array (struct-of-arrays, SoA), mean of 20 runs:</p>
+<pre class="text"><code>N = 16777216 Records (16 bytes each), reducing one field (.x) only
+AoS (Record[4 floats], read 1 of 4 fields): 0.1641 ms, 409 GB/s useful-field bandwidth
+SoA (dedicated float array for that field):  0.0643 ms, 1044 GB/s
+Speedup (AoS/SoA): 2.55x</code></pre>
+<p>AoS costs 2.55x<span class="ref-rig-mark">†</span> SoA here, a real but smaller effect than the stride-32 case above. Each thread’s AoS read is only 16 bytes from the next thread’s, not 128 bytes, so a warp’s request is only partially split, not scattered across separate transactions entirely. This is the exact mechanism Chapter 51 measures on CPU (163.1x at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>=</mo><mn>1,000,000</mn></mrow><annotation encoding="application/x-tex">n=1{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span>, a bigger number because CPU cache lines and GPU memory transactions have different granularities and cost structures), applied here to the GPU side of the identical layout decision Chapter 51 argues for: reach for SoA whenever a kernel or a hot loop reduces or scans over one field at a time.</p>
+<p><strong>Bank conflicts.</strong> The tiled transpose experiment (Procedure 40.2) runs on an 8192x8192 float matrix (268.4 MB), comparing an unpadded <code>tile[32][32]</code> against a padded <code>tile[32][33]</code>, mean of 20 runs:</p>
+<pre class="text"><code>Matrix: 8192x8192 floats (268.4 MB)
+WITHOUT padding (bank conflicts): 0.4940 ms, 1087 GB/s
+WITH padding (conflict-free):     0.4294 ms, 1250 GB/s
+Speedup from padding: 1.15x</code></pre>
+<p>Padding gives a real, reproducible 1.15x<span class="ref-rig-mark">†</span> speedup (1087 to 1250 GB/s) from a single added column. This is a much smaller effect than coalescing produced, and smaller than some older documentation suggests for pre-Ampere hardware. That’s a real, honest finding, not a weaker result to distrust. Bank-conflict severity depends on the specific access pattern and how much other work already dominates the kernel. The right habit is measuring on the actual target hardware and workload, not assuming a fixed textbook multiplier.</p>
+<p>A separate correctness run, on a small 256x256 matrix where every output element can be checked by hand against its expected transposed value, confirms <code>out[y][x] == in[x][y]</code> for every element with the padded kernel. The padding optimisation changes only where the wall-clock time goes, never the result.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="40.6">
+<h2 data-number="40.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">40.6</span> History and Further Reading</h2>
+<p>The NVIDIA CUDA C++ Best Practices Guide’s “Memory Optimizations” chapter is the authoritative treatment of coalescing and shared-memory bank conflicts. “How to Access Global Memory Efficiently,” on the NVIDIA Developer Blog, works through examples very close to this chapter’s coalescing experiment. “Using Shared Memory in CUDA C/C++,” also on the NVIDIA Developer Blog, is the canonical tiled-transpose-with-padding example this chapter’s second experiment is based on. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 7, covers the same coalescing and bank-conflict material in much greater depth, including the identical 32x33-padding fix for a tiled transpose and warp-shuffle intrinsics as a further alternative to shared memory altogether, worth reading once this chapter’s own padding fix has been measured directly. Cautaerts and Ghorbanfekr’s <em>GPU-Accelerated Computing with Python 3 and CUDA</em> <span class="citation" data-cites="cautaerts2026gpuaccelerated">(<a href="#ref-cautaerts2026gpuaccelerated" role="doc-biblioref">Cautaerts and Ghorbanfekr 2026</a>)</span>, Chapter 5, covers the same memory hierarchy, coalescing, and shared-memory material from Numba-CUDA kernels. Farber’s <em>CUDA Application Design and Development</em> <span class="citation" data-cites="farber2011cudaapplication">(<a href="#ref-farber2011cudaapplication" role="doc-biblioref">Farber 2011</a>)</span>, Chapters 5-6, is an older but still-accurate treatment of the same global-versus-shared-memory trade-off, predating Volta-class hardware but not the underlying mechanism; its Chapter 6 names the same AoS-versus-SoA coalescing loss this chapter now measures directly above, citing a roughly 5x speedup from NVIDIA’s own thrust teaching example. That figure is larger than this chapter’s measured 2.55x, but the two aren’t directly comparable: Farber’s benchmark sorts an 8-byte, 2-field struct across multiple passes, this chapter’s reduces a 16-byte, 4-field struct in one pass, and the underlying hardware is a decade and a half apart, with modern GPUs’ larger caches generally absorbing some of the coalescing penalty older architectures paid in full. The direction agrees on both; the magnitude was never expected to.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="40.7">
+<h2 data-number="40.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">40.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 38’s memory hierarchy diagram and Chapter 39’s host-device transfer costs. This chapter is about <em>on-GPU</em> memory costs, the next link in the same chain. It shares a mechanism with Chapter 51’s CPU-side AoS-versus-SoA measurement: both chapters show the identical layout choice mattering for the identical reason, useful data diluted by unneeded data sharing the same transaction or cache line, just at different absolute magnitudes because CPU cache lines and GPU memory transactions are sized and cost differently. It enables Chapter 42 (parallel patterns like reduction and stencil rely heavily on shared memory, and are only fast when this chapter’s lessons are applied) and Chapter 43 (occupancy and the roofline model build directly on the register and memory-bandwidth trade-offs introduced here). It is often confused with the idea that L2/L1 caching automatically fixes bad access patterns. Caching helps with reuse of the same data, but does not turn a scattered single-use access pattern into a coalesced one.</p>
+</section>
+<section id="exercises" class="level2" data-number="40.8">
+<h2 data-number="40.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">40.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-40-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In one or two sentences, explain what makes a global memory access “coalesced,” using the cache-line/burst idea from this chapter.</p></li>
+<li id="ex-40-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define a shared-memory bank conflict, and state the one-line fix this chapter uses to remove it in a tiled transpose.</p></li>
+<li id="ex-40-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-memhier-coalesce" class="quarto-xref">Listing&nbsp;<span>40.1</span></a>’s table, classify each of the following as coalesced or not, and justify each in one sentence: (a) <code>data[threadIdx.x]</code>; (b) <code>data[threadIdx.x * 4]</code>; (c) <code>data[row * width + threadIdx.x]</code> with <code>threadIdx.x</code> indexing columns.</p></li>
+<li id="ex-40-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter measured 1876 GB/s coalesced vs.&nbsp;56 GB/s strided for the identical 16.7 million useful elements. Compute how many total bytes each version actually moved across the memory bus, assuming the strided version’s scattered accesses each triggered a full 128-byte transaction for only 4 useful bytes.</p></li>
+<li id="ex-40-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-memhier-padding" class="quarto-xref">Listing&nbsp;<span>40.3</span></a>, explain in your own words why changing <code>tile[32][32]</code> to <code>tile[32][33]</code> removes the bank conflict, referring to how bank index is computed from a shared-memory address.</p></li>
+<li id="ex-40-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague claims “bank conflicts are basically as bad as uncoalesced global memory access, so always pad every shared-memory tile.” Using this chapter’s measured 33.4x vs.&nbsp;1.15x results, write the two or three sentences you’d say back.</p></li>
+<li id="ex-40-7"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> This chapter measured a 2.55x AoS-versus-SoA slowdown for a 16-byte, 4-field struct, versus 33.4x for the stride-32 case. Using the “consecutive threads’ addresses N bytes apart” framing from this chapter, explain why the two numbers differ so much even though both are coalescing losses.</p></li>
+<li id="ex-40-8"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Propose a kernel design (in a sentence or two, no code required) where fixing an uncoalesced access pattern would <em>not</em> meaningfully improve performance, and explain why, using this chapter’s Trade-offs section.</p></li>
+<li id="ex-40-9"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the NVIDIA Developer Blog post “Using Shared Memory in CUDA C/C++.” Summarise, in a few sentences, how its tiled-transpose example compares to this chapter’s, and note any difference in the measured padding speedup it reports versus this chapter’s 1.15x.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="40.9">
+<h2 data-number="40.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">40.9</span> Mental Model</h2>
+<p>Global memory coalescing is a delivery truck, not a fleet of couriers. If a warp’s 32 threads ask for 32 consecutive parcels, one truck picks up the whole street’s mail in one pass. If they ask for 32 parcels scattered across 32 different postcodes, up to 32 separate trips are needed: same total mail, vastly more trips. Shared-memory banking is the same idea at a smaller scale: 32 parallel counters at a post office, one per customer, fast only if no two customers queue at the same counter at once.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-cautaerts2026gpuaccelerated" class="csl-entry" role="listitem">
+Cautaerts, Niels, and Hossein Ghorbanfekr. 2026. <em>GPU-Accelerated Computing with Python 3 and CUDA: From Low-Level Kernels to Real-World Applications in Scientific Computing and Machine Learning</em>. Packt Publishing.
+</div>
+<div id="ref-farber2011cudaapplication" class="csl-entry" role="listitem">
+Farber, Rob. 2011. <em>CUDA Application Design and Development</em>. Morgan Kaufmann.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+</div>
+</section>

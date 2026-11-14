@@ -1,0 +1,249 @@
+<p>A model gets deployed and works. Six weeks later, someone retrains it with a small data fix, tests it manually on their laptop, and pushes the new version straight to production. It quietly performs worse than the old one, because nobody wrote a test that would have caught the regression. A month after that, a different engineer can’t figure out which data, code, and hyperparameters actually produced the model currently serving customers. None of this is a deployment problem. Chapter 23 solved <em>how</em> to serve a model. This is a process problem. How does every change to a model get tested, reviewed, versioned, and made reversible before it reaches production, automatically, every time, without depending on someone remembering to be careful?</p>
+<section id="motivation" class="level2" data-number="24.1">
+<h2 data-number="24.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">24.1</span> Motivation</h2>
+<p>Regular CI/CD asks one question at each gate: does the code still work? ML CI/CD has to ask three. Does the code still work? Is the data still valid: no schema drift, no unexpected nulls, sane value ranges? Is the model still good enough, measured against a held-out set, and critically, compared against the model currently in production, not just an absolute bar? A pipeline checking only code correctness will happily ship a model trained on corrupted data, or one that’s technically deployable but meaningfully worse than what’s already live. MLOps pipelines gate on all three, because ML systems have three things that change: code, data, and model parameters. Traditional software only has one.</p>
+</section>
+<section id="exposition" class="level2" data-number="24.2">
+<h2 data-number="24.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">24.2</span> Exposition</h2>
+<section id="the-model-registry-as-the-central-object" class="level3" data-number="24.2.1">
+<h3 data-number="24.2.1" class="anchored" data-anchor-id="the-model-registry-as-the-central-object"><span class="header-section-number">24.2.1</span> The Model Registry as the Central Object</h3>
+<p>The model registry (introduced in Chapter 22) is what MLOps is built around. Every trained version is registered with the metrics it achieved, the code commit and data version that produced it, and a stage: <code>Staging → Production → Archived</code>. The registry turns “which model is live?” from a question someone has to remember into a query. It’s the gate itself. Nothing reaches <code>Production</code> without being registered, and in a well-built pipeline, nothing is promoted without passing automated checks first.</p>
+</section>
+<section id="ci-for-ml-what-gets-tested" class="level3" data-number="24.2.2">
+<h3 data-number="24.2.2" class="anchored" data-anchor-id="ci-for-ml-what-gets-tested"><span class="header-section-number">24.2.2</span> CI for ML: What Gets Tested</h3>
+<p>Data validation tests assert incoming data matches expectations: required columns present, dtypes correct, value ranges sane, no unexpected null-rate spike. They catch upstream pipeline breakages before they silently degrade a retrained model. Model performance regression tests evaluate a candidate on a fixed, versioned test set and assert its metric clears both a fixed minimum <em>and</em> the metric of the model currently in production. The second comparison is what prevents silent regressions, since a model can clear an absolute threshold and still be worse than what it’s replacing. Integration tests for the serving pipeline check the code path itself, separate from model quality. Does the serialized model load? Does the API return the expected schema? Does it survive a malformed request without crashing? Training-serving skew is a specific, common bug where feature engineering differs even slightly between the training and inference code paths. The model looks great in evaluation and performs badly in production, because live data was transformed differently than training data was. The fix is a single shared, versioned feature-engineering pipeline (Chapter 14’s <code>sklearn.Pipeline</code> pattern) used by both training and serving, never two separate reimplementations.</p>
+</section>
+<section id="cd-for-ml-deployment-strategies" class="level3" data-number="24.2.3">
+<h3 data-number="24.2.3" class="anchored" data-anchor-id="cd-for-ml-deployment-strategies"><span class="header-section-number">24.2.3</span> CD for ML: Deployment Strategies</h3>
+<p>Once a model passes CI, CD decides how it reaches production traffic. Blue-green deploys the new model fully alongside the old one and switches all traffic at once: fast rollback, but no gradual signal before the switch. Canary sends a small percentage of live traffic to the new model, ramping up gradually if metrics hold: slower, but catches problems before they affect everyone. Shadow (dark launch) sends the new model a copy of live traffic and logs its predictions without ever serving them to users: zero production risk, but validates prediction quality only, not real-world business impact. Rolling updates instances one at a time, a middle ground common in Kubernetes deployments. The right strategy scales with how expensive a bad prediction is. A recommendation engine can tolerate canary. A fraud or medical-triage model often needs shadow validation first.</p>
+</section>
+<section id="the-training-pipeline-as-versioned-code" class="level3" data-number="24.2.4">
+<h3 data-number="24.2.4" class="anchored" data-anchor-id="the-training-pipeline-as-versioned-code"><span class="header-section-number">24.2.4</span> The Training Pipeline as Versioned Code</h3>
+<p>A notebook is fine for <em>developing</em> a model. It’s a bad place to <em>run</em> production training, since notebooks execute cells out of order, hide state, and aren’t easily invoked by a scheduler or CI system. MLOps moves training logic out of the notebook into versioned, tested code: a CLI script with <code>load_data()</code>, <code>build_pipeline()</code>, <code>train()</code>, <code>evaluate()</code>, <code>main()</code>. It’s runnable identically by a human, a CI job, or a scheduler, unit-testable, and reviewable in a pull request like any other code change.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="24.3">
+<h2 data-number="24.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">24.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Approach</th>
+<th>Effort</th>
+<th>Catches</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>No pipeline, manual retrain/deploy</td>
+<td>None</td>
+<td>Nothing automatically</td>
+<td>Prototypes, single-person projects</td>
+</tr>
+<tr class="even">
+<td>CI tests only (code + data)</td>
+<td>Low-medium</td>
+<td>Code bugs, data schema breaks</td>
+<td>Early-stage teams</td>
+</tr>
+<tr class="odd">
+<td>CI + model performance gate</td>
+<td>Medium</td>
+<td>The above + silent quality regressions</td>
+<td>Most production teams</td>
+</tr>
+<tr class="even">
+<td>Full CI/CD + canary/shadow deploy</td>
+<td>High</td>
+<td>The above + real-world impact before full rollout</td>
+<td>High-stakes or high-traffic models</td>
+</tr>
+</tbody>
+</table>
+<p>Building the full pipeline has real cost: infrastructure, maintenance, slower time-to-ship for small changes. The right investment level scales with how expensive a bad model in production actually is, not with team size alone.</p>
+</section>
+<section id="procedures" class="level2" data-number="24.4">
+<h2 data-number="24.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">24.4</span> Procedures</h2>
+<p id="proc-24-1"><strong>Procedure 24.1 (Set Up a Real MLflow Model Registry).</strong> <em>When to use:</em> moving past a local/prototype registry to a real shared tracking server.</p>
+<div id="lst-mlflow-registry-setup" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mlflow-registry-setup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;24.1: Registering and promoting a model version
+</figcaption>
+<div aria-describedby="lst-mlflow-registry-setup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="cf">with</span> mlflow.start_run() <span class="im">as</span> run:</span>
+<span id="cb1-2">    mlflow.log_metric(<span class="st">"f1"</span>, <span class="fl">0.76</span>)</span>
+<span id="cb1-3">    mlflow.sklearn.log_model(</span>
+<span id="cb1-4">        model,</span>
+<span id="cb1-5">        artifact_path<span class="op">=</span><span class="st">"model"</span>,</span>
+<span id="cb1-6">        registered_model_name<span class="op">=</span><span class="st">"churn-classifier"</span>,</span>
+<span id="cb1-7">    )</span>
+<span id="cb1-8"></span>
+<span id="cb1-9">client.transition_model_version_stage(</span>
+<span id="cb1-10">    name<span class="op">=</span><span class="st">"churn-classifier"</span>,</span>
+<span id="cb1-11">    version<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb1-12">    stage<span class="op">=</span><span class="st">"Production"</span>,</span>
+<span id="cb1-13">    <span class="co"># auto-archives the old Production version</span></span>
+<span id="cb1-14">    archive_existing_versions<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb1-15">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting <code>archive_existing_versions=True</code>. Without it, two versions can end up simultaneously marked <code>Production</code>, defeating the registry’s core purpose of having exactly one answer to “what’s live?”</p>
+<p id="proc-24-2"><strong>Procedure 24.2 (Write a Data Validation Test).</strong> <em>When to use:</em> the first stage of any training pipeline, before a single row is used to fit anything.</p>
+<div id="lst-data-validation" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-data-validation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;24.2: Schema, label, and null-rate checks before training
+</figcaption>
+<div aria-describedby="lst-data-validation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> validate_data(</span>
+<span id="cb2-2">    df,</span>
+<span id="cb2-3">    expected_columns,</span>
+<span id="cb2-4">    label_col,</span>
+<span id="cb2-5">    valid_labels,</span>
+<span id="cb2-6">    max_null_rate<span class="op">=</span><span class="fl">0.01</span>,</span>
+<span id="cb2-7">):</span>
+<span id="cb2-8">    errors <span class="op">=</span> []</span>
+<span id="cb2-9">    <span class="cf">if</span> <span class="bu">set</span>(expected_columns) <span class="op">-</span> <span class="bu">set</span>(df.columns):</span>
+<span id="cb2-10">        errors.append(<span class="st">"Missing columns"</span>)</span>
+<span id="cb2-11">    <span class="cf">if</span> <span class="bu">set</span>(df[label_col].unique()) <span class="op">-</span> valid_labels:</span>
+<span id="cb2-12">        errors.append(<span class="st">"Unexpected labels"</span>)</span>
+<span id="cb2-13">    <span class="cf">if</span> df[expected_columns].isnull().mean().<span class="bu">max</span>() <span class="op">&gt;</span> max_null_rate:</span>
+<span id="cb2-14">        errors.append(<span class="st">"Null rate exceeds threshold"</span>)</span>
+<span id="cb2-15">    <span class="cf">return</span> <span class="bu">len</span>(errors) <span class="op">==</span> <span class="dv">0</span>, errors</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-24-3"><strong>Procedure 24.3 (Write a Model Performance Gate).</strong> <em>When to use:</em> after training a candidate, before it’s allowed to register as <code>Production</code>.</p>
+<div id="lst-performance-gate" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-performance-gate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;24.3: Gating on BOTH an absolute bar and no regression vs.&nbsp;production
+</figcaption>
+<div aria-describedby="lst-performance-gate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">def</span> gate_candidate(</span>
+<span id="cb3-2">    candidate_f1,</span>
+<span id="cb3-3">    production_f1,</span>
+<span id="cb3-4">    min_f1<span class="op">=</span><span class="fl">0.5</span>,</span>
+<span id="cb3-5">    tolerance<span class="op">=</span><span class="fl">0.0</span>,</span>
+<span id="cb3-6">):</span>
+<span id="cb3-7">    reasons <span class="op">=</span> []</span>
+<span id="cb3-8">    <span class="cf">if</span> candidate_f1 <span class="op">&lt;</span> min_f1:</span>
+<span id="cb3-9">        reasons.append(</span>
+<span id="cb3-10">            <span class="ss">f"Below absolute minimum: </span><span class="sc">{</span>candidate_f1<span class="sc">:.4f}</span><span class="ss"> "</span></span>
+<span id="cb3-11">            <span class="ss">f"&lt; </span><span class="sc">{</span>min_f1<span class="sc">}</span><span class="ss">"</span></span>
+<span id="cb3-12">        )</span>
+<span id="cb3-13">    regressed <span class="op">=</span> (</span>
+<span id="cb3-14">        production_f1 <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span>
+<span id="cb3-15">        <span class="kw">and</span> candidate_f1 <span class="op">&lt;</span> production_f1 <span class="op">-</span> tolerance</span>
+<span id="cb3-16">    )</span>
+<span id="cb3-17">    <span class="cf">if</span> regressed:</span>
+<span id="cb3-18">        reasons.append(</span>
+<span id="cb3-19">            <span class="ss">f"Regression vs production: </span><span class="sc">{</span>candidate_f1<span class="sc">:.4f}</span><span class="ss"> "</span></span>
+<span id="cb3-20">            <span class="ss">f"&lt; </span><span class="sc">{</span>production_f1<span class="sc">:.4f}</span><span class="ss">"</span></span>
+<span id="cb3-21">        )</span>
+<span id="cb3-22">    <span class="cf">return</span> <span class="bu">len</span>(reasons) <span class="op">==</span> <span class="dv">0</span>, reasons</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> gating only on an absolute threshold. A model can clear <code>F1 &gt; 0.5</code> and still be considerably worse than what’s already serving traffic. Always compare against the current production metric too.</p>
+</section>
+<section id="worked-example" class="level2" data-number="24.5">
+<h2 data-number="24.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">24.5</span> Worked Example</h2>
+<p>Register the Breast Cancer Wisconsin dataset’s strongest simple model, a logistic regression pipeline, as the “production” baseline. Then run three increasingly sophisticated candidates through Procedure 24.3’s gate:</p>
+<div id="lst-gate-sweep" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gate-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;24.4: Three candidates, one performance gate, one production baseline
+</figcaption>
+<div aria-describedby="lst-gate-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">prod_model <span class="op">=</span> LogisticRegression(</span>
+<span id="cb4-2">    max_iter<span class="op">=</span><span class="dv">1000</span>,</span>
+<span id="cb4-3">    random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb4-4">).fit(X_train, y_train)</span>
+<span id="cb4-5"><span class="co"># 0.9722</span></span>
+<span id="cb4-6">prod_f1 <span class="op">=</span> f1_score(y_test, prod_model.predict(X_test))</span>
+<span id="cb4-7"></span>
+<span id="cb4-8">candidates <span class="op">=</span> {</span>
+<span id="cb4-9">    <span class="st">'weak RF (10 trees, depth 2)'</span>:      RandomForestClassifier(</span>
+<span id="cb4-10">        n_estimators<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb4-11">        max_depth<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb4-12">        random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb4-13">    ),</span>
+<span id="cb4-14">    <span class="st">'tuned RF (200 trees, depth 6)'</span>:    RandomForestClassifier(</span>
+<span id="cb4-15">        n_estimators<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb4-16">        max_depth<span class="op">=</span><span class="dv">6</span>,</span>
+<span id="cb4-17">        random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb4-18">    ),</span>
+<span id="cb4-19">    <span class="st">'Gradient Boosting (200, lr=0.05)'</span>: GradientBoostingClassifier(</span>
+<span id="cb4-20">        n_estimators<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb4-21">        learning_rate<span class="op">=</span><span class="fl">0.05</span>,</span>
+<span id="cb4-22">        random_state<span class="op">=</span><span class="dv">42</span>,</span>
+<span id="cb4-23">    ),</span>
+<span id="cb4-24">}</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Measured: the production logistic regression reaches F1 = 0.9722, an unusually strong baseline on this dataset. All three candidates score respectably on their own terms (weak RF 0.9510, tuned RF 0.9583, Gradient Boosting 0.9660). But <strong>every one of them fails Procedure 24.3’s gate</strong>, because every one scores below the incumbent’s 0.9722. Each individually looks like a perfectly good model. F1 above 0.95 would pass most absolute thresholds without a second thought. The gate rejects all three anyway, exactly as designed. This is the “silent regression” failure mode from the Exposition made concrete. Without the production-comparison check, any one of these three could have shipped as an “improvement” that was actually a downgrade, since an absolute-threshold-only gate (Procedure 24.3 without its second condition) would have passed the Gradient Boosting candidate outright at F1=0.9660.</p>
+<p>Getting a model that actually clears this particular bar would need genuinely better tuning: Chapter 17’s hyperparameter search, or Chapter 12’s ensemble stacking, applied specifically against this dataset’s strong logistic-regression baseline. Not trying a fancier-sounding algorithm and assuming it wins. The gate doesn’t care which algorithm is more sophisticated. It cares whether the number went up.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">from</span> sagemaker.workflow.pipeline <span class="im">import</span> Pipeline</span>
+<span id="cb5-2"><span class="im">from</span> sagemaker.workflow.condition_step <span class="im">import</span> ConditionStep</span>
+<span id="cb5-3"></span>
+<span id="cb5-4"><span class="co"># Each pipeline stage becomes a typed Step:</span></span>
+<span id="cb5-5"><span class="co"># ProcessingStep (validate) -&gt; TrainingStep -&gt; ProcessingStep</span></span>
+<span id="cb5-6"><span class="co"># (evaluate) -&gt; ConditionStep (gate) -&gt; ModelStep (register)</span></span>
+<span id="cb5-7">pipeline <span class="op">=</span> Pipeline(name<span class="op">=</span><span class="st">"churn-classifier-pipeline"</span>,</span>
+<span id="cb5-8">    steps<span class="op">=</span>[</span>
+<span id="cb5-9">        validation_step,</span>
+<span id="cb5-10">        training_step,</span>
+<span id="cb5-11">        eval_step,</span>
+<span id="cb5-12">        condition_step,</span>
+<span id="cb5-13">    ])</span>
+<span id="cb5-14">pipeline.upsert(role_arn<span class="op">=</span>role)</span>
+<span id="cb5-15">pipeline.start()</span></code></pre></div>
+<p><strong>When to prefer SageMaker Pipelines:</strong> shared infrastructure, audit trails, and integration with SageMaker Model Registry’s built-in <code>Approved</code>/<code>PendingManualApproval</code> workflow, rather than owning pipeline orchestration and registry storage directly, as this chapter’s Worked Example does by hand.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="24.6">
+<h2 data-number="24.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">24.6</span> History and Further Reading</h2>
+<p>Sato, Wider, and Windheuser’s “Continuous Delivery for Machine Learning” (martinfowler.com) is the piece that named and defined the MLOps practice <span class="citation" data-cites="sato2019cd4ml">(<a href="#ref-sato2019cd4ml" role="doc-biblioref">Sato et al. 2019</a>)</span>. Huyen’s <em>Designing Machine Learning Systems</em>, Ch. 9-10, covers ML pipelines and deployment strategies in depth <span class="citation" data-cites="huyen2022designingml">(<a href="#ref-huyen2022designingml" role="doc-biblioref">Huyen 2022</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="24.7">
+<h2 data-number="24.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">24.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 22’s experiment tracking (the registry this chapter automates promotion through is the same one) and Chapter 23’s deployment (CD’s job is shipping models to that serving infrastructure). It enables Chapter 25’s monitoring, which decides <em>when</em> to pull the retraining trigger this chapter’s pipeline machinery responds to. It’s often confused with experiment tracking itself. Tracking is about logging runs for humans to compare. MLOps is about automating the promotion and deployment <em>decision</em> based on that logged data. Tracking is necessary but not sufficient for MLOps.</p>
+</section>
+<section id="exercises" class="level2" data-number="24.8">
+<h2 data-number="24.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">24.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-24-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in your own words why an ML CI pipeline needs to check three things (code, data, model quality) where a traditional software CI pipeline only needs to check one.</p></li>
+<li id="ex-24-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the deployment strategy best suited to a fraud model where a bad prediction is very costly and real-traffic validation is needed before any user is affected.</p></li>
+<li id="ex-24-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-gate-sweep" class="quarto-xref">Listing&nbsp;<span>24.4</span></a>’s measured results, explain specifically why the Gradient Boosting candidate (F1=0.9660) would have passed a gate that only checked <code>candidate_f1 &gt;= 0.5</code>, and why Procedure 24.3’s actual gate correctly rejected it anyway.</p></li>
+<li id="ex-24-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 24.3’s gate function, compute the result of <code>gate_candidate(0.9660, 0.9722, min_f1=0.5, tolerance=0.01)</code>. Does adding a 0.01 tolerance change the outcome for the Gradient Boosting candidate from this chapter’s Worked Example?</p></li>
+<li id="ex-24-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team’s gate always reports “candidate passed” even when a teammate can see in the logs that the new model’s F1 is clearly worse. Using this chapter’s Troubleshooting-style reasoning, name the most likely bug in how the gate is implemented.</p></li>
+<li id="ex-24-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer says “we already have MLflow tracking every run, so we have MLOps.” Using this chapter’s How This Connects section, write the two or three sentences you’d say back.</p></li>
+<li id="ex-24-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the Sculley et al.&nbsp;“Continuous Delivery for Machine Learning” piece’s discussion of shadow deployment. Identify the specific limitation it names for shadow mode, and relate it to why this chapter recommends canary as the more common default for most production ML services.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="24.9">
+<h2 data-number="24.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">24.9</span> Mental Model</h2>
+<p>Think of the model registry as <code>main</code> in Git, and every candidate model as a pull request. CI is the automated checks that must pass before merge: here, data validation and performance gates instead of tests and linting. CD is what happens after merge: deployment. The discipline is identical to modern software engineering. Only the specific checks differ, because a model can be syntactically perfect, deploy cleanly, and still be a worse model. That’s exactly what this chapter’s Worked Example demonstrated, with three candidates that all “worked” and all still failed the gate.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-huyen2022designingml" class="csl-entry" role="listitem">
+Huyen, Chip. 2022. <em>Designing Machine Learning Systems: An Iterative Process for Production-Ready Applications</em>. O’Reilly Media.
+</div>
+<div id="ref-sato2019cd4ml" class="csl-entry" role="listitem">
+Sato, Danilo, Arif Wider, and Christoph Windheuser. 2019. <em>Continuous Delivery for Machine Learning</em>.
+</div>
+</div>
+</section>

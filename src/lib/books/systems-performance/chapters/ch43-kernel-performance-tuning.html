@@ -1,0 +1,224 @@
+<p>Every experiment so far in this book’s kernel chapters has produced a number, a speedup, a bandwidth figure, an honest null result, without a unifying framework for <em>predicting</em> which kind of result to expect before measuring. This chapter supplies that framework: the <strong>roofline model</strong>, which tells you in advance whether a kernel’s ceiling is set by memory bandwidth or by compute throughput, and <strong>occupancy</strong>, which explains why a functionally identical kernel can run at wildly different speeds depending on launch configuration alone. Every prior chapter’s result, Chapter 40’s large coalescing effect and small bank-conflict effect, Chapter 42’s dramatic reduction speedup and its stencil null result, is an instance of the one curve this chapter makes explicit.</p>
+<section id="motivation" class="level2" data-number="43.1">
+<h2 data-number="43.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">43.1</span> Motivation</h2>
+<p>Every kernel has an <strong>arithmetic intensity</strong>: the ratio of floating-point operations performed to bytes of memory moved, in FLOPs/byte. A kernel with low intensity, little computation per byte, like the elementwise operations in Chapter 41, is <strong>memory-bound</strong>. Its runtime is set by how fast bytes can move, and doing more arithmetic per byte is nearly free until intensity gets high. A kernel with high intensity, lots of computation reusing the same bytes, like the reduction in Chapter 42, or dense matrix multiplication, is <strong>compute-bound</strong>. Its runtime is set by the GPU’s FLOPs throughput, and moving more bytes stops being the bottleneck. The roofline model plots achievable performance (GFLOP/s) against arithmetic intensity: a sloped line (the memory-bandwidth ceiling) at low intensity, a flat line (the compute-throughput ceiling) at high intensity, meeting at a <strong>knee</strong>: the intensity at which a kernel transitions from one regime to the other.</p>
+</section>
+<section id="exposition" class="level2" data-number="43.2">
+<h2 data-number="43.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">43.2</span> Exposition</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface.</p>
+<section id="the-roofline-measured-directly" class="level3" data-number="43.2.1">
+<h3 data-number="43.2.1" class="anchored" data-anchor-id="the-roofline-measured-directly"><span class="header-section-number">43.2.1</span> The Roofline, Measured Directly</h3>
+<p>A single kernel, read one element, apply <code>REPEAT</code> fused multiply-adds, write one element, sweeping <code>REPEAT</code> from 1 to 65,536 controls arithmetic intensity directly. More FMAs per element, the same two memory operations (one read, one write), so intensity scales linearly with <code>REPEAT</code>. The Worked Example below traces this curve almost exactly as the model predicts. At low <code>REPEAT</code>, achieved bandwidth stays flat near this card’s peak HBM bandwidth while GFLOP/s climbs: the memory-bound region, where adding more arithmetic is nearly free because the GPU is waiting on memory either way. Around <code>REPEAT</code> in the low hundreds, the curve bends: the knee, where compute time and memory time become comparable. At high <code>REPEAT</code>, achieved GFLOP/s plateaus regardless of further intensity increases: the compute-bound region, at a ceiling set by this GPU’s FP32 CUDA-core peak throughput, not by memory at all.</p>
+</section>
+<section id="occupancy-why-launch-configuration-alone-changes-performance" class="level3" data-number="43.2.2">
+<h3 data-number="43.2.2" class="anchored" data-anchor-id="occupancy-why-launch-configuration-alone-changes-performance"><span class="header-section-number">43.2.2</span> Occupancy: Why Launch Configuration Alone Changes Performance</h3>
+<p><strong>Occupancy</strong> is the ratio of actually-resident warps on an SM to the maximum the hardware could support. Low occupancy means an SM has fewer warps available to switch to when one stalls on a memory access (Chapter 38’s latency-hiding argument). The SM idles more often, waiting. Sweeping block size (32 to 1,024 threads) for an identical compute-heavy kernel, measuring both real wall-clock time and actual occupancy via <code>cudaOccupancyMaxActiveBlocksPerMultiprocessor</code> (a genuine CUDA runtime query, not a guess), traces out a clean U-shape. Very small blocks waste an architectural cap on resident <em>blocks</em> per SM. Very large blocks waste this GPU’s cap on resident <em>threads</em> per SM, because too few blocks fit simultaneously. A middle band satisfies both caps at once and wins. Both ends of this curve are real, measured architectural limits on this specific GPU, queried directly rather than estimated: a maximum of 1,536 threads per SM, and an implied cap of 24 resident blocks per SM. Register usage was checked and ruled out as the limiting factor. Only 8 registers/thread, nowhere near enough to explain the slowdown at the largest block size. The lesson: the same kernel, completely unchanged, can run meaningfully slower purely from a launch configuration that under- or over-commits the SM’s resident-thread budget.</p>
+</section>
+<section id="instruction-level-parallelism-a-third-independent-lever" class="level3" data-number="43.2.3">
+<h3 data-number="43.2.3" class="anchored" data-anchor-id="instruction-level-parallelism-a-third-independent-lever"><span class="header-section-number">43.2.3</span> Instruction-Level Parallelism: A Third, Independent Lever</h3>
+<p>Occupancy answers “does an SM have enough warps to switch to when one stalls?” A question about <em>thread-level</em> parallelism, hiding one warp’s stall behind another warp’s work. A separate question remains even at fixed, already-good occupancy. Does a single thread have enough <em>independent</em> work in flight that the SM’s execution units stay fed between one instruction issuing and its result being needed? This is <strong>instruction-level parallelism (ILP)</strong>, and it is the answer to a question ch43’s own occupancy sweep sets up but does not resolve. Block size 128 already hits full occupancy. What is left to tune once occupancy is fixed?</p>
+<p>A kernel with 200 sequential fused-multiply-adds, each depending on the previous FMA’s result (<code>acc = acc * a + b</code>, repeated), forces the hardware to wait for each FMA’s latency before issuing the next: a <strong>dependency chain</strong>. The identical total arithmetic, split across four independent accumulators with no dependency between them, lets the SM keep multiple FMAs in flight simultaneously. While one accumulator’s FMA is still completing, another accumulator’s FMA can already issue. Same FLOP count, same block size, same occupancy. The only difference is whether the compiler and hardware have independent work to overlap.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="43.3">
+<h2 data-number="43.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">43.3</span> Trade-offs and Limits</h2>
+<p>Optimising arithmetic intensity, moving a kernel rightward on the roofline, helps when a kernel is confirmed memory-bound and there is slack compute capacity to exploit, for instance by fusing multiple elementwise operations into one kernel (Chapter 47’s capstone) so several operations share one memory round trip. It is wasted effort when the kernel is already compute-bound. Chapter 42’s reduction result shows that adding a memory optimisation to an already-fast, compute-appropriate kernel yields nothing, because memory was never the bottleneck for that kernel. Tuning occupancy via block size helps whenever a kernel has enough independent work per thread that latency hiding matters, compute-heavy kernels, as tested here, and matters far less for kernels that are already deeply memory-bound and bandwidth-saturated at almost any reasonable block size, as Chapters 39-41’s elementwise kernels showed, running near-peak bandwidth even at a default 256-thread block. A common confusion this chapter directly corrects: “more threads is always better,” or “more shared memory is always better.” Both this chapter’s block-size sweep and Chapter 42’s stencil result are concrete counter-examples. Past a hardware-specific point, more of either resource <em>reduces</em> achievable parallelism rather than increasing it. Restructuring for ILP helps once occupancy is already at its sweet spot and a kernel still has a long sequential dependency chain per thread. It does nothing for a kernel that is already occupancy-limited or memory-bound, since neither of those bottlenecks is about how independent one thread’s own instructions are.</p>
+</section>
+<section id="procedures" class="level2" data-number="43.4">
+<h2 data-number="43.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">43.4</span> Procedures</h2>
+<p id="proc-43-1"><strong>Procedure 43.1 (Classify a Kernel as Memory-Bound or Compute-Bound).</strong> <em>When to use:</em> before choosing any optimisation strategy. The right fix is completely different depending on the answer.</p>
+<div id="lst-perftuning-classify" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-perftuning-classify-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;43.1: Roofline classification from a kernel’s FLOP and byte counts and the GPU’s peak numbers
+</figcaption>
+<div aria-describedby="lst-perftuning-classify-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> classify_kernel(</span>
+<span id="cb1-2">    total_flops,</span>
+<span id="cb1-3">    total_bytes_moved,</span>
+<span id="cb1-4">    gpu_peak_flops,</span>
+<span id="cb1-5">    gpu_peak_bandwidth,</span>
+<span id="cb1-6">):</span>
+<span id="cb1-7">    intensity <span class="op">=</span> total_flops <span class="op">/</span> total_bytes_moved</span>
+<span id="cb1-8">    <span class="co"># FLOPs/byte where the roofline bends</span></span>
+<span id="cb1-9">    ridge_point <span class="op">=</span> gpu_peak_flops <span class="op">/</span> gpu_peak_bandwidth</span>
+<span id="cb1-10">    <span class="cf">if</span> intensity <span class="op">&lt;</span> ridge_point:</span>
+<span id="cb1-11">        <span class="cf">return</span> (</span>
+<span id="cb1-12">            <span class="ss">f'Memory-bound (intensity=</span><span class="sc">{</span>intensity<span class="sc">:.1f}</span><span class="ss"> '</span></span>
+<span id="cb1-13">            <span class="ss">f'&lt; ridge=</span><span class="sc">{</span>ridge_point<span class="sc">:.1f}</span><span class="ss"> FLOPs/byte)'</span></span>
+<span id="cb1-14">        )</span>
+<span id="cb1-15">    <span class="cf">return</span> (</span>
+<span id="cb1-16">        <span class="ss">f'Compute-bound (intensity=</span><span class="sc">{</span>intensity<span class="sc">:.1f}</span><span class="ss"> '</span></span>
+<span id="cb1-17">        <span class="ss">f'&gt;= ridge=</span><span class="sc">{</span>ridge_point<span class="sc">:.1f}</span><span class="ss"> FLOPs/byte)'</span></span>
+<span id="cb1-18">    )</span>
+<span id="cb1-19"></span>
+<span id="cb1-20"><span class="co"># This book's reference rig: ~118,600 GFLOP/s peak,</span></span>
+<span id="cb1-21"><span class="co"># ~1,986 GB/s peak bandwidth -&gt; ridge ~ 60 FLOPs/byte</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> optimising memory access patterns (Chapter 40’s coalescing, tiling) on a kernel that is actually compute-bound. Chapter 42’s stencil result is the concrete proof this does not help. Always classify first.</p>
+<p id="proc-43-2"><strong>Procedure 43.2 (Sweep Block Size to Find the Occupancy Sweet Spot).</strong> <em>When to use:</em> tuning a new kernel’s launch configuration, rather than assuming the “obvious” choice (e.g.&nbsp;always 256) is right for a specific kernel and GPU.</p>
+<div id="lst-perftuning-occupancy-sweep" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-perftuning-occupancy-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;43.2: Querying real, hardware-limited occupancy for a specific kernel across block sizes
+</figcaption>
+<div aria-describedby="lst-perftuning-occupancy-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>int blockSizes[] = {32, 64, 128, 256, 512, 1024};
+for (int block : blockSizes) {
+    int maxActiveBlocks;
+    cudaOccupancyMaxActiveBlocksPerMultiprocessor(
+        &amp;maxActiveBlocks,
+        myKernel,
+        block,
+        0
+    );
+    int warpsPerSM = maxActiveBlocks * (block / 32);
+    // ... launch, time with CUDA events
+    // (Chapter 39, Procedure 39.4) ...
+    // ... print block, timing, and warpsPerSM ...
+}</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming higher occupancy always means faster. It is a necessary condition for hiding memory latency, not a sufficient one. A compute-bound kernel already saturating the SMs’ ALUs will not speed up further from more occupancy. Measure wall-clock time, not just occupancy, to confirm.</p>
+<p><strong>A second, sharper common mistake:</strong> trusting <code>cudaOccupancyMaxActiveBlocksPerMultiprocessor</code>’s number as what actually happened at runtime. It is a resource-based prediction from launch configuration alone, computed before the kernel ever runs. <code>ncu --section Occupancy ./yourprogram</code> reports <strong>Achieved Occupancy</strong> alongside <strong>Theoretical Occupancy</strong> for comparison, measured from the kernel’s real execution rather than calculated from its resource footprint. The Worked Example below measures both across the same six block sizes and finds achieved consistently below theoretical, sometimes by more than half.</p>
+<p id="proc-43-3"><strong>Procedure 43.3 (Check Register and Shared-Memory Usage Per Kernel).</strong> <em>When to use:</em> diagnosing why a kernel’s occupancy is lower than expected.</p>
+<div id="lst-perftuning-ptxas" class="cpp listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-perftuning-ptxas-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;43.3: Inspecting register and shared-memory usage with ptxas verbose output
+</figcaption>
+<div aria-describedby="lst-perftuning-ptxas-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode cpp code-with-copy"><code class="sourceCode cpp"><span id="cb3-1"><span class="co">// nvcc -arch=sm_XX --ptxas-options=-v yourfile.cu -o yourfile</span></span>
+<span id="cb3-2"><span class="co">// Look for output like:</span></span>
+<span id="cb3-3"><span class="co">//   ptxas info : Used 32 registers, used 0 barriers</span></span>
+<span id="cb3-4"><span class="co">//   ptxas info : 0 bytes stack frame, 0 bytes spill</span></span>
+<span id="cb3-5"><span class="co">//   stores, 0 bytes spill loads</span></span>
+<span id="cb3-6"></span>
+<span id="cb3-7"><span class="co">// Cap registers per thread to force higher occupancy</span></span>
+<span id="cb3-8"><span class="co">// (trade-off: may cause spilling):</span></span>
+<span id="cb3-9"><span class="co">// nvcc -arch=sm_XX -maxrregcount=32 yourfile.cu -o yourfile</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> seeing “spill stores/loads” in the <code>ptxas</code> output and ignoring it. Register spilling means the compiler ran out of fast register space and is using much slower local memory (physically global memory) instead. It is a correctness-neutral but performance-significant regression, easy to miss if only compile errors are checked.</p>
+<p id="proc-43-4"><strong>Procedure 43.4 (Break a Long Dependency Chain Into Independent Accumulators).</strong> <em>When to use:</em> a compute-heavy kernel is already at its occupancy sweet spot (Procedure 43.2) and still spends most of its time in one long sequential chain of dependent instructions per thread.</p>
+<div id="lst-perftuning-ilp" class="cuda listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-perftuning-ilp-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;43.4: Single dependency chain vs.&nbsp;four independent accumulators: same FLOP count, same occupancy
+</figcaption>
+<div aria-describedby="lst-perftuning-ilp-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="cuda"><code>// Low ILP: every FMA depends on the previous one's result
+__global__ void fmaSingleChain(const float* in, float* out, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i &gt;= n) return;
+    float acc = in[i];
+    for (int k = 0; k &lt; 200; k++)
+        acc = acc * 1.0000001f + 0.0000001f;
+    out[i] = acc;
+}
+
+// High ILP: same 200 total FMAs, four independent chains
+__global__ void fmaFourChains(const float* in, float* out, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i &gt;= n) return;
+    float x = in[i];
+    float acc0 = x, acc1 = x, acc2 = x, acc3 = x;
+    for (int k = 0; k &lt; 50; k++) {
+        acc0 = acc0 * 1.0000001f + 0.0000001f;
+        acc1 = acc1 * 1.0000001f + 0.0000001f;
+        acc2 = acc2 * 1.0000001f + 0.0000001f;
+        acc3 = acc3 * 1.0000001f + 0.0000001f;
+    }
+    out[i] = acc0 + acc1 + acc2 + acc3;
+}</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> adding more accumulators (or unrolling further) without checking register usage against Procedure 43.3. More independent state means more live registers; past some point, extra accumulators push a kernel into the same register-pressure-reduces-occupancy trap this chapter’s occupancy section warns about, trading one bottleneck for another instead of removing it.</p>
+</section>
+<section id="worked-example" class="level2" data-number="43.5">
+<h2 data-number="43.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">43.5</span> Worked Example</h2>
+<p>The companion notebook runs both sweeps on this book’s reference rig (170 SMs, 1,536 max threads/SM), using the same <code>nvcc</code>-compile-and-run harness as Chapters 40-42.</p>
+<p><strong>Roofline sweep</strong> (read one element, <code>REPEAT</code> FMAs, write one element, <code>n = 1 &lt;&lt; 24</code>):</p>
+<pre class="text"><code>REPEAT   time(ms)   GFLOP/s      GB/s  FLOPs/byte
+     1     0.0671     499.7    1998.9        0.25
+     4     0.0676    1984.7    1984.7        1.00
+    16     0.0850    6313.6    1578.4        4.00
+    64     0.0753   28537.5    1783.6       16.00
+   256     0.1009   85163.5    1330.7       64.00
+  1024     0.2985  115093.5     449.6      256.00
+  4096     1.1830  116174.7     113.5     1024.00
+ 16384     4.6439  118383.1      28.9     4096.00
+ 65536    18.3400  119903.0       7.3    16384.00</code></pre>
+<p>Read left to right, this table <em>is</em> the roofline model, measured rather than drawn. GB/s starts near this GPU’s peak memory bandwidth (1998.9 GB/s<span class="ref-rig-mark">†</span> at <code>REPEAT=1</code>) and stays roughly flat through <code>REPEAT=64</code> while GFLOP/s climbs: more computation “for free” out of the same memory traffic. Past the knee, around <code>REPEAT=256</code>, GFLOP/s plateaus near this GPU’s compute ceiling (119,903 GFLOP/s<span class="ref-rig-mark">†</span>, about 120 TFLOP/s, at <code>REPEAT=65536</code>) while GB/s falls. The arithmetic itself is now the bottleneck, and no amount of memory optimisation would help further. The theoretical ridge point, <code>118,600 GFLOP/s / 1,986 GB/s ≈ 60 FLOPs/byte</code>, lines up closely with the measured knee between <code>REPEAT=64</code> (16 FLOPs/byte, still memory-bound) and <code>REPEAT=256</code> (64 FLOPs/byte, just past the knee).</p>
+<p><strong>Occupancy sweep</strong> (compute-heavy kernel, 200 FMAs/element, six block sizes):</p>
+<pre class="text"><code>     block       time(ms)    max active blk/SM       warps/SM
+        32         0.2610                   24             24
+        64         0.1218                   24             48
+       128         0.0868                   12             48
+       256         0.0897                    6             48
+       512         0.0918                    3             48
+      1024         0.1209                    1             32</code></pre>
+<p>The U-shape is direct and measured. Block size 32 is slowest at 0.2610 ms, limited by an architectural cap of 24 resident blocks/SM before warp capacity (48 warps/SM) is reached. Block size 128 is fastest at 0.0868 ms<span class="ref-rig-mark">†</span>, where the thread-count cap (<code>1536/128 = 12</code> blocks) exactly saturates 48 warps/SM. Block size 1,024 slows back down to 0.1209 ms because this GPU’s 1,536-max-threads-per-SM limit allows only one block of 1,024 threads to be resident, wasting 512 threads of headroom. Querying this book’s reference rig directly confirms the mechanism: <code>max_threads_per_multi_processor = 1536</code>, so <code>1536 // 512 = 3</code> blocks/SM fit exactly at the sweet spot, while <code>1536 // 1024 = 1</code> block/SM fits at the worst-measured size, wasting <code>1536 % 1024 = 512</code> threads. A <code>--ptxas-options=-v</code> check confirms this kernel uses only 8 registers/thread with zero spill. Register pressure is ruled out as a cause, leaving the block/thread occupancy caps as the entire explanation for the roughly 40% swing between the fastest and slowest block sizes tested, on the exact same kernel logic.</p>
+<p><strong>Theoretical vs.&nbsp;achieved occupancy.</strong> Everything above comes from <code>cudaOccupancyMaxActiveBlocksPerMultiprocessor</code>, a resource-based calculation from launch configuration alone: a prediction, not a runtime measurement. <code>ncu --section Occupancy</code> measures what actually happened, on the identical kernel and identical six block sizes:</p>
+<pre class="text"><code>     block   theoretical %    achieved %
+        32              50         18.44
+        64             100         44.00
+       128             100         84.73
+       256             100         84.03
+       512             100         85.24
+      1024           66.67         61.80</code></pre>
+<p>Achieved occupancy is lower than theoretical at every single block size<span class="ref-rig-mark">†</span>, sometimes drastically: block 64 is predicted at a perfect 100% but only reaches 44.00%. This is real, not a rounding artefact: theoretical occupancy answers “how many warps <em>could</em> be resident, given this kernel’s resource footprint,” while achieved occupancy answers “how many warps actually <em>were</em> resident, on average, across the kernel’s real, imperfect launch and completion tail.” The two numbers also rank block sizes differently than expected. Block 64’s theoretical occupancy (100%) beats block 1024’s (66.67%), but block 64’s <em>achieved</em> occupancy (44.00%) is lower than block 1024’s (61.80%), and block 64’s measured wall-clock time (0.1218 ms) is in fact slightly slower than block 1024’s (0.1209 ms), the opposite of what theoretical occupancy alone would predict. Achieved occupancy is the better predictor of the two here, but still not a perfect one: block 512 has the single highest achieved occupancy of the six (85.24%), yet block 128, at 84.73%, is still the fastest kernel measured. Occupancy, of either kind, is one real, measured factor among several, not the entire story on its own, exactly Procedure 43.2’s original warning, now with the runtime-measured number to back it up rather than only the resource-calculated one.</p>
+<p><strong>ILP sweep</strong> (Procedure 43.4’s two kernels, both at block size 128, the occupancy sweet spot found above, held fixed):</p>
+<pre class="text"><code>block=128, 200 FMAs/thread, n=16777216
+Single dependency chain:   0.0873 ms, 76908.9 GFLOP/s
+Four independent chains:   0.0723 ms, 92784.1 GFLOP/s
+Speedup from ILP (4 chains vs 1): 1.21x</code></pre>
+<p>A real, repeatable 1.21x<span class="ref-rig-mark">†</span> speedup from restructuring the <em>same total arithmetic</em> into independent work, at <em>identical</em> occupancy: block size 128 for both kernels, both already at this GPU’s 48-warps/SM ceiling. <code>--ptxas-options=-v</code> confirms occupancy genuinely was held constant, not accidentally changed: the single-chain kernel uses 8 registers/thread, the four-chain kernel 10, both far below any register-count occupancy limit on this GPU. This isolates the effect Procedure 43.2’s sweep could not show on its own: occupancy determines whether an SM has other warps to switch to. ILP determines whether one warp’s own instruction stream keeps the SM’s execution units busy while any single instruction’s result is still in flight. Both matter, and they are independent levers, not the same lever measured two ways.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="43.6">
+<h2 data-number="43.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">43.6</span> History and Further Reading</h2>
+<p>Williams, Waterman, and Patterson’s “Roofline: An Insightful Visual Performance Model for Multicore Architectures” <span class="citation" data-cites="williams2009roofline">(<a href="#ref-williams2009roofline" role="doc-biblioref">Williams et al. 2009</a>)</span> is the original roofline model paper this chapter’s framing follows directly. The “Maximizing Utilization” chapter of the NVIDIA CUDA C++ Best Practices Guide is the authoritative occupancy treatment, including the occupancy calculator spreadsheet. The CUDA Runtime API documentation for <code>cudaOccupancyMaxActiveBlocksPerMultiprocessor</code> documents the exact function this chapter’s occupancy sweep uses to measure real, rather than estimated, occupancy. Book 2, Chapter 33 (Continuous Pretraining)’s capacity-estimation material applies the same compute-bound/memory-bound distinction to LLM training FLOPs and memory, at the system level rather than one kernel. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 8, covers occupancy tuning, warp-efficiency diagnosis, and instruction-level parallelism in much greater depth, including Nsight Compute’s own Roofline analysis view and its occupancy-limiter reporting, worth reading once this chapter’s own occupancy sweep has been run directly. Ernst, Hager, Thies, and Wellein’s “Performance Engineering for Real and Complex Tall &amp; Skinny Matrix Multiplication Kernels on GPUs” <span class="citation" data-cites="ernst2021tallskinny">(<a href="#ref-ernst2021tallskinny" role="doc-biblioref">Ernst et al. 2021</a>)</span> is a real-world case study of this exact methodology: the same roofline model, tile-size search, and occupancy trade-offs this chapter measures, applied to a harder problem (tall-and-skinny GEMM) on real V100 hardware, with a code generator swept across the full tile-size space rather than one worked example. Cautaerts and Ghorbanfekr’s <em>GPU-Accelerated Computing with Python 3 and CUDA</em> <span class="citation" data-cites="cautaerts2026gpuaccelerated">(<a href="#ref-cautaerts2026gpuaccelerated" role="doc-biblioref">Cautaerts and Ghorbanfekr 2026</a>)</span>, Chapter 5, covers occupancy maximisation, PTX inspection, and warp-divergence avoidance from Numba-CUDA, a Python-native companion to this chapter’s tuning levers.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="43.7">
+<h2 data-number="43.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">43.7</span> How This Connects</h2>
+<p>This chapter builds on every prior kernel chapter in this book. It is the unifying explanation for why Chapter 40’s coalescing effect was large and its bank-conflict effect was small, and why Chapter 42’s reduction speedup was dramatic while its stencil result was flat. It enables Chapter 44 (Triton’s <code>@triton.autotune</code> decorator automates exactly the block-size search this chapter performed by hand) and Chapter 47 (the capstone’s fused kernel is a direct application of “move a memory-bound operation rightward on the roofline by fusing more compute into one memory pass”). It is often confused with “more threads is always better” or “more shared memory is always better.” This chapter’s own block-size sweep is a concrete counter-example: past a hardware-specific point, more of either resource reduces achievable parallelism.</p>
+</section>
+<section id="exercises" class="level2" data-number="43.8">
+<h2 data-number="43.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">43.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-43-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define “arithmetic intensity” in your own words, and state which regime (memory-bound or compute-bound) a kernel with very low arithmetic intensity falls into.</p></li>
+<li id="ex-43-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define “occupancy,” and name the CUDA runtime function this chapter uses to measure it for a specific kernel rather than guessing.</p></li>
+<li id="ex-43-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-perftuning-classify" class="quarto-xref">Listing&nbsp;<span>43.1</span></a> and this chapter’s reference-rig peak numbers (~118,600 GFLOP/s, ~1,986 GB/s), classify a kernel that moves 4 bytes per element and performs 8 FLOPs per element as memory-bound or compute-bound, showing the intensity and ridge-point values used.</p></li>
+<li id="ex-43-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the roofline sweep table, explain in one or two sentences why GB/s falls steadily from <code>REPEAT=256</code> onward even though the kernel still reads and writes exactly the same two memory locations per element as at <code>REPEAT=1</code>.</p></li>
+<li id="ex-43-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the occupancy sweep table and this chapter’s reported <code>max_threads_per_multi_processor = 1536</code>, compute how many blocks per SM fit at block size 256, and state whether that matches the “max active blk/SM” column’s measured value of 6.</p></li>
+<li id="ex-43-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague proposes always launching kernels with block size 1024 “to maximise threads per block.” Using this chapter’s measured occupancy sweep, write the two or three sentences you’d say back.</p></li>
+<li id="ex-43-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A kernel is confirmed compute-bound by Procedure 43.1. Propose one optimisation from this chapter’s Trade-offs section that would plausibly help, and one from Chapter 40 that would not, explaining why in each case.</p></li>
+<li id="ex-43-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the original Williams, Waterman, and Patterson roofline paper’s introduction. Summarise, in a few sentences, how the paper’s “ridge point” concept compares to this chapter’s measured knee between <code>REPEAT=64</code> and <code>REPEAT=256</code>, and whether the paper’s framing anticipated GPU-specific caps like resident-blocks-per-SM.</p></li>
+<li id="ex-43-9"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using this chapter’s achieved-vs-theoretical occupancy table, identify the one block size where theoretical occupancy <em>understates</em> how fast the kernel actually runs relative to another block size with higher theoretical occupancy, and state which of the two occupancy numbers correctly predicts the measured wall-clock ordering.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="43.9">
+<h2 data-number="43.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">43.9</span> Mental Model</h2>
+<p>The roofline model is a speed limit sign with two different limits depending on the road. On the open highway, low arithmetic intensity, plenty of “road” (memory bandwidth) relative to how much “driving” (compute) is being done, speed is capped by how fast data can safely travel, the memory bandwidth ceiling. In a school zone, high arithmetic intensity, lots of compute crammed into every byte moved, speed is capped by the work itself, not the road, the compute ceiling. Occupancy is a separate question entirely: how many lanes of that highway are actually open. Close too many lanes (too few resident warps) and traffic backs up even below the speed limit. Try to cram too many oversized vehicles into too few lanes (blocks too large for the SM’s capacity) and the same result appears from the other direction.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-cautaerts2026gpuaccelerated" class="csl-entry" role="listitem">
+Cautaerts, Niels, and Hossein Ghorbanfekr. 2026. <em>GPU-Accelerated Computing with Python 3 and CUDA: From Low-Level Kernels to Real-World Applications in Scientific Computing and Machine Learning</em>. Packt Publishing.
+</div>
+<div id="ref-ernst2021tallskinny" class="csl-entry" role="listitem">
+Ernst, Dominik, Georg Hager, Jonas Thies, and Gerhard Wellein. 2021. <span>“Performance Engineering for Real and Complex Tall &amp; Skinny Matrix Multiplication Kernels on GPUs.”</span> <em>The International Journal of High Performance Computing Applications</em> 35 (1): 5–19. <a href="https://doi.org/10.1177/1094342020965661" rel="noopener">https://doi.org/10.1177/1094342020965661</a>.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+<div id="ref-williams2009roofline" class="csl-entry" role="listitem">
+Williams, Samuel, Andrew Waterman, and David Patterson. 2009. <span>“Roofline: An Insightful Visual Performance Model for Multicore Architectures.”</span> <em>Communications of the ACM</em> 52 (4): 65–76.
+</div>
+</div>
+</section>

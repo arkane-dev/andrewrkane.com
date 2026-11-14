@@ -1,0 +1,216 @@
+<p>A base language model trained on next-token prediction is a text continuation engine. Ask it “What is the capital of France?” and it continues that text in whatever direction its training data suggests, maybe more quiz questions, maybe a Wikipedia excerpt, maybe a crossword clue. It isn’t trying to answer. Instruction fine-tuning (IFT, also called supervised fine-tuning or SFT) solves this. It teaches a model to treat user messages as instructions to follow and produce useful, well-structured responses. This is the step that turns a base model into something deployable.</p>
+<section id="motivation" class="level2" data-number="34.1">
+<h2 data-number="34.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">34.1</span> Motivation</h2>
+<p>IFT is supervised learning on (instruction, response) pairs. The training objective stays next-token prediction, but the data distribution is fundamentally different. Where pretraining data is “the internet,” IFT data is a curated collection of examples of good behaviour. Every example has three parts: a system prompt, a user message, and an assistant response. At training time loss is computed only on the assistant response. The model isn’t penalised for its representation of the system prompt or user message, only for how well it produces the right response. Unlike pretraining or CPT (<a href="/books/modern-ai/ch33-continuous-pretraining" class="quarto-xref"><span>Chapter 33</span></a>), where quantity dominates, IFT quality dominates. The LIMA paper (Zhou et al., 2023) showed 1,000 carefully curated examples outperforming models trained on 50,000 lower-quality ones. The model already knows how to write. IFT teaches it to select the right kind of writing for a given instruction. Worked Example 34 below measures this apprenticeship directly: how much a tiny, consistent set of examples changes a real model’s behaviour.</p>
+</section>
+<section id="exposition" class="level2" data-number="34.2">
+<h2 data-number="34.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">34.2</span> Exposition</h2>
+<section id="lora-training-efficiently" class="level3" data-number="34.2.1">
+<h3 data-number="34.2.1" class="anchored" data-anchor-id="lora-training-efficiently"><span class="header-section-number">34.2.1</span> LoRA: Training Efficiently</h3>
+<p>Full-parameter fine-tuning of a 7B model means updating roughly 7 billion parameters: feasible on multi-GPU hardware, but expensive for most IFT use cases. LoRA (Low-Rank Adaptation) is the standard alternative. Instead of updating a full weight matrix <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi></mrow><annotation encoding="application/x-tex">W</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">W</span></span></span></span> directly, LoRA inserts two small trainable matrices <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi></mrow><annotation encoding="application/x-tex">A</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span></span></span></span> (shape <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>d</mi><mo>×</mo><mi>r</mi></mrow><annotation encoding="application/x-tex">d \times r</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7778em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span></span></span></span>) and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi></mrow><annotation encoding="application/x-tex">B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span></span></span></span> (shape <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi><mo>×</mo><mi>d</mi></mrow><annotation encoding="application/x-tex">r \times d</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span></span></span></span>), with rank <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>r</mi></mrow><annotation encoding="application/x-tex">r</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span></span></span></span> typically 8–64, so the effective forward pass becomes <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>⋅</mo><mi>x</mi><mo>+</mo><mi>B</mi><mo>⋅</mo><mi>A</mi><mo>⋅</mo><mi>x</mi></mrow><annotation encoding="application/x-tex">W \cdot x + B \cdot A \cdot x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span>. The base model weights stay frozen. Only <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi></mrow><annotation encoding="application/x-tex">A</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span></span></span></span> and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi></mrow><annotation encoding="application/x-tex">B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span></span></span></span> train, giving roughly <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2</mn><mo>⋅</mo><mi>d</mi><mo>⋅</mo><mi>r</mi></mrow><annotation encoding="application/x-tex">2 \cdot d \cdot r</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">2</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">d</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">r</span></span></span></span> trainable parameters, typically 0.1–1% of the original model. LoRA is normally applied to the attention projection matrices (Q, K, V, and sometimes the output projection), since that’s where the model’s “attention to meaning” is encoded, and adapting them is sufficient for most IFT tasks.</p>
+</section>
+<section id="qlora-fine-tuning-on-one-gpu" class="level3" data-number="34.2.2">
+<h3 data-number="34.2.2" class="anchored" data-anchor-id="qlora-fine-tuning-on-one-gpu"><span class="header-section-number">34.2.2</span> QLoRA: Fine-Tuning on One GPU</h3>
+<p>QLoRA (Dettmers et al., 2023) combines 4-bit quantisation of the base model’s frozen weights (cutting memory from roughly 14GB fp16 to roughly 4GB for a 7B model) with LoRA adapters trained in fp16/bf16 on top of the quantised base. The result: a 7B model can be fine-tuned on a single consumer GPU with 16–24GB of VRAM. The trade-off is slightly slower training and marginally lower quality than full-precision LoRA, negligible for most production use cases.</p>
+</section>
+<section id="why-data-quality-dominates" class="level3" data-number="34.2.3">
+<h3 data-number="34.2.3" class="anchored" data-anchor-id="why-data-quality-dominates"><span class="header-section-number">34.2.3</span> Why Data Quality Dominates</h3>
+<p>Signals of a high-quality IFT dataset: diverse instructions covering different task types, responses that are accurate, complete, and appropriately concise, consistent formatting and voice across examples, no contradictions, and minimal repetition. Near-duplicates hurt IFT the same way they hurt CPT. A hand-rolled prompt template mismatched against the tokenizer’s chat template at serving time is a specific, common failure. Any gap between training-time and inference-time formatting degrades output quality, which is why <code>tokenizer.apply_chat_template()</code> should be the single source of truth for formatting on both sides.</p>
+</section>
+<section id="evaluating-an-ift-model" class="level3" data-number="34.2.4">
+<h3 data-number="34.2.4" class="anchored" data-anchor-id="evaluating-an-ift-model"><span class="header-section-number">34.2.4</span> Evaluating an IFT Model</h3>
+<p>Evaluating an IFT model is harder than evaluating a classifier. It needs a combination of task-specific metrics (for SQL generation, run the SQL and check correctness), human evaluation, LLM-as-judge scoring (<a href="/books/modern-ai/ch32-llm-evaluation" class="quarto-xref"><span>Chapter 32</span></a> covers this in depth), and automated benchmarks. Always compare against the base model on the same evaluation set. IFT should improve task performance while maintaining general capability, and a comparison without a base-model baseline can’t distinguish genuine improvement from the model simply becoming narrower.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="34.3">
+<h2 data-number="34.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">34.3</span> Trade-offs and Limits</h2>
+<p>IFT works well with 500–100K high-quality instruction/response pairs, a task with a consistent, demonstrable format, and a goal of changing <em>how</em> the model communicates rather than <em>what</em> it knows. Knowledge changes are CPT’s job. It breaks down on small datasets (under roughly 200 examples, prompt engineering is usually the better first move), inconsistent responses (the model learns the inconsistency as faithfully as the pattern), tasks needing new facts (IFT memorises poorly; RAG is the right tool for factual grounding), and tasks requiring reasoning the base model can’t already do at all. Worked Example 34 below shows both sides of this at once: a real capability gain on a held-out example, and a real formatting artifact from training on too few, too-repetitive examples.</p>
+</section>
+<section id="procedures" class="level2" data-number="34.4">
+<h2 data-number="34.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">34.4</span> Procedures</h2>
+<p id="proc-34-1"><strong>Procedure 34.1 (Format an Instruction Dataset).</strong> <em>When to use:</em> before any fine-tuning run. The dataset format determines everything downstream.</p>
+<div id="lst-ift-format" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-ift-format-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;34.1: Chat-style format, one example per JSONL line
+</figcaption>
+<div aria-describedby="lst-ift-format-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1">chat_example <span class="op">=</span> {</span>
+<span id="cb1-2">    <span class="st">"messages"</span>: [</span>
+<span id="cb1-3">        {</span>
+<span id="cb1-4">            <span class="st">"role"</span>: <span class="st">"system"</span>,</span>
+<span id="cb1-5">            <span class="st">"content"</span>: <span class="st">"You are a helpful assistant."</span>,</span>
+<span id="cb1-6">        },</span>
+<span id="cb1-7">        {</span>
+<span id="cb1-8">            <span class="st">"role"</span>: <span class="st">"user"</span>,</span>
+<span id="cb1-9">            <span class="st">"content"</span>: <span class="st">"What is the capital of France?"</span>,</span>
+<span id="cb1-10">        },</span>
+<span id="cb1-11">        {</span>
+<span id="cb1-12">            <span class="st">"role"</span>: <span class="st">"assistant"</span>,</span>
+<span id="cb1-13">            <span class="st">"content"</span>: <span class="st">"The capital of France is Paris."</span>,</span>
+<span id="cb1-14">        },</span>
+<span id="cb1-15">    ]</span>
+<span id="cb1-16">}</span>
+<span id="cb1-17"><span class="cf">with</span> <span class="bu">open</span>(<span class="st">"ift_data.jsonl"</span>, <span class="st">"w"</span>) <span class="im">as</span> f:</span>
+<span id="cb1-18">    f.write(json.dumps(chat_example) <span class="op">+</span> <span class="st">"</span><span class="ch">\n</span><span class="st">"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> mixing formats within one dataset (some rows Alpaca-style, some chat-style). Pick one format and template every example identically. Inconsistent formatting is exactly the kind of noise that hurts a small IFT dataset the most.</p>
+<p id="proc-34-2"><strong>Procedure 34.2 (Apply a Chat Template Consistently).</strong> <em>When to use:</em> any model that will be served through a chat interface.</p>
+<div id="lst-ift-template" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-ift-template-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;34.2: Rendering the model’s expected special tokens
+</figcaption>
+<div aria-describedby="lst-ift-template-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1">tokenizer <span class="op">=</span> AutoTokenizer.from_pretrained(model_name)</span>
+<span id="cb2-2">formatted <span class="op">=</span> tokenizer.apply_chat_template(messages, tokenize<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb2-3"><span class="co"># Use the SAME apply_chat_template call at both training time and</span></span>
+<span id="cb2-4"><span class="co"># serving time</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-34-3"><strong>Procedure 34.3 (Fine-Tune with LoRA via <code>peft</code>).</strong> <em>When to use:</em> the default choice for instruction fine-tuning. Cheap, fast, reversible.</p>
+<div id="lst-ift-lora" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-ift-lora-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;34.3: LoRA config and application via peft
+</figcaption>
+<div aria-describedby="lst-ift-lora-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> peft <span class="im">import</span> LoraConfig, get_peft_model, TaskType</span>
+<span id="cb3-2"></span>
+<span id="cb3-3">lora_config <span class="op">=</span> LoraConfig(</span>
+<span id="cb3-4">    task_type<span class="op">=</span>TaskType.CAUSAL_LM, r<span class="op">=</span><span class="dv">16</span>, lora_alpha<span class="op">=</span><span class="dv">32</span>,</span>
+<span id="cb3-5">    target_modules<span class="op">=</span>[<span class="st">"q_proj"</span>, <span class="st">"k_proj"</span>, <span class="st">"v_proj"</span>, <span class="st">"o_proj"</span>],</span>
+<span id="cb3-6">    lora_dropout<span class="op">=</span><span class="fl">0.05</span>, bias<span class="op">=</span><span class="st">"none"</span>,</span>
+<span id="cb3-7">)</span>
+<span id="cb3-8">model <span class="op">=</span> get_peft_model(base_model, lora_config)</span>
+<span id="cb3-9"><span class="co"># sanity check: should be &lt;&lt; 1% for a 7B model</span></span>
+<span id="cb3-10">model.print_trainable_parameters()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> skipping the <code>print_trainable_parameters()</code> sanity check. This silently trains far more (or fewer) parameters than intended if <code>target_modules</code> doesn’t match the actual layer names in a given architecture.</p>
+</section>
+<section id="worked-example" class="level2" data-number="34.5">
+<h2 data-number="34.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">34.5</span> Worked Example</h2>
+<p>Apply LoRA (rank 8, applied to GPT-2’s fused <code>c_attn</code> projection) to real GPT-2 small, fine-tuned on six tiny instruction examples, all following the identical format <code>"Instruction: What is the capital of X?\nResponse: Y."</code>:</p>
+<div id="lst-ift-worked-setup" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-ift-worked-setup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;34.4: LoRA config and trainable-parameter count, measured
+</figcaption>
+<div aria-describedby="lst-ift-worked-setup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">lora_config <span class="op">=</span> LoraConfig(</span>
+<span id="cb4-2">    task_type<span class="op">=</span>TaskType.CAUSAL_LM,</span>
+<span id="cb4-3">    r<span class="op">=</span><span class="dv">8</span>,</span>
+<span id="cb4-4">    lora_alpha<span class="op">=</span><span class="dv">16</span>,</span>
+<span id="cb4-5">    target_modules<span class="op">=</span>[<span class="st">"c_attn"</span>],</span>
+<span id="cb4-6">    lora_dropout<span class="op">=</span><span class="fl">0.05</span>,</span>
+<span id="cb4-7">    bias<span class="op">=</span><span class="st">"none"</span>,</span>
+<span id="cb4-8">)</span>
+<span id="cb4-9">peft_model <span class="op">=</span> get_peft_model(model, lora_config)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>print_trainable_parameters()</code> reports <strong>294,912 trainable out of 124,734,720 total, 0.2364%</strong>, confirming Exposition’s “0.1–1%” claim directly on a real model rather than as a stated range. Before any training, average loss across the six training examples was <strong>4.651</strong>, and the model’s generation for a held-out prompt (“What is the capital of Portugal?”) was <code>"The capital of Portugal is the capital of Portugal."</code>: a base-model text-continuation loop, exactly Motivation’s description of a model that isn’t trying to answer.</p>
+<p>Training for 30 epochs over the six examples (full-batch, <code>lr=2e-4</code>) drove average loss down sharply and non-monotonically:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Epoch</th>
+<th>Avg loss</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>4.749</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td>3.360</td>
+</tr>
+<tr class="odd">
+<td>10</td>
+<td>1.403</td>
+</tr>
+<tr class="even">
+<td>15</td>
+<td>0.764</td>
+</tr>
+<tr class="odd">
+<td>20</td>
+<td><strong>0.265</strong></td>
+</tr>
+<tr class="even">
+<td>25</td>
+<td>0.539</td>
+</tr>
+<tr class="odd">
+<td>29 (final)</td>
+<td>0.415</td>
+</tr>
+</tbody>
+</table>
+<p>Final average loss across the six training examples: <strong>0.237</strong>, down from 4.651, a genuine, measured fit to the tiny instruction set. Note the loss is not monotonically decreasing past epoch 20 (0.265 → 0.539 → 0.415). With only six examples and full-batch updates at a relatively high LoRA-scale learning rate, the loss oscillates near its minimum rather than converging smoothly: a realistic artifact of training on a dataset this small rather than a sign of a broken run.</p>
+<p>The held-out generation after training: <code>"Lisbon. Response: Lisbon. Response: Portugal."</code> This is a genuinely mixed result, reported honestly rather than cleaned up. The model produced the <em>correct</em> answer, Lisbon, for a country never seen during training: a real generalisation from six examples of the same “Instruction: capital of X? / Response: Y.” pattern. But it also produced a repetition artifact (“Response: Lisbon. Response: Portugal”) that none of the six training examples exhibit. That’s a direct consequence of Trade-offs’ warning about small IFT datasets. Six examples is far below even LIMA’s “1,000 curated examples” floor, and the tiny dataset gave the model enough signal to learn the answer-lookup behaviour but not enough to fully stabilise clean output formatting.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">from</span> sagemaker.jumpstart.estimator <span class="im">import</span> JumpStartEstimator</span>
+<span id="cb5-2"></span>
+<span id="cb5-3">estimator <span class="op">=</span> JumpStartEstimator(</span>
+<span id="cb5-4">    model_id<span class="op">=</span><span class="st">"meta-textgeneration-llama-2-7b"</span>,</span>
+<span id="cb5-5">    instance_type<span class="op">=</span><span class="st">"ml.g5.2xlarge"</span>,</span>
+<span id="cb5-6">    hyperparameters<span class="op">=</span>{</span>
+<span id="cb5-7">        <span class="st">"epoch"</span>: <span class="st">"3"</span>,</span>
+<span id="cb5-8">        <span class="st">"learning_rate"</span>: <span class="st">"2e-4"</span>,</span>
+<span id="cb5-9">        <span class="st">"lora_r"</span>: <span class="st">"16"</span>,</span>
+<span id="cb5-10">    },</span>
+<span id="cb5-11">)</span>
+<span id="cb5-12"><span class="co"># JSONL, chat-style format</span></span>
+<span id="cb5-13">estimator.fit({<span class="st">"training"</span>: s3_ift_dataset_path})</span></code></pre></div>
+<p><strong>When to prefer SageMaker JumpStart over hand-rolled <code>peft</code>:</strong> JumpStart handles container selection, distributed training setup, and model registration for supported foundation models without writing the LoRA config or training loop directly. Procedure 34.3’s explicit <code>LoraConfig</code> is the right choice instead when the model isn’t in JumpStart’s catalogue or the training loop needs customisation JumpStart doesn’t expose.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="34.6">
+<h2 data-number="34.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">34.6</span> History and Further Reading</h2>
+<p>Zhou et al.’s “LIMA” is the source for the “quality beats quantity” claim this chapter’s Motivation states directly <span class="citation" data-cites="zhou2023lima">(<a href="#ref-zhou2023lima" role="doc-biblioref"><span class="nocase">Zhou et al.</span> 2023</a>)</span>. Hu et al.’s original “LoRA” paper is short and readable <span class="citation" data-cites="hu2022lora">(<a href="#ref-hu2022lora" role="doc-biblioref">Hu et al. 2022</a>)</span>, and Dettmers et al.’s “QLoRA” extends it to 4-bit quantised base models <span class="citation" data-cites="dettmers2023qlora">(<a href="#ref-dettmers2023qlora" role="doc-biblioref">Dettmers et al. 2023</a>)</span>. Burkov’s <em>Hundred-Page Language Models Book</em>, Sections 5.2-5.3 and 5.5, walks through supervised finetuning and LoRA in code, a practical companion to this chapter’s procedures <span class="citation" data-cites="burkov2025hundredpagellm">(<a href="#ref-burkov2025hundredpagellm" role="doc-biblioref">Burkov 2025</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="34.7">
+<h2 data-number="34.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">34.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/modern-ai/ch33-continuous-pretraining" class="quarto-xref"><span>Chapter 33</span></a> (IFT is frequently applied after CPT in the same pipeline: CPT for knowledge, IFT for behaviour) and <a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a> (LoRA adapts the attention matrices defined there). It enables Chapter 35’s RLHF, which further refines IFT models using human preference data, and connects directly to <a href="/books/modern-ai/ch32-llm-evaluation" class="quarto-xref"><span>Chapter 32</span></a> for the evaluation methodology needed to check whether an IFT run actually improved anything. It’s often confused with CPT. The key distinction, restated concretely by this chapter’s Worked Example, is that CPT is self-supervised on raw text and changes <em>knowledge</em>, while IFT is supervised on (instruction, response) pairs and changes <em>behaviour</em>. The Worked Example’s model didn’t learn any new facts about world capitals it didn’t already have latent in its weights. It learned to <em>express</em> them in the trained response format.</p>
+</section>
+<section id="exercises" class="level2" data-number="34.8">
+<h2 data-number="34.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">34.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-34-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the three parts of an IFT training example, and explain which part(s) loss is computed on during training.</p></li>
+<li id="ex-34-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Write LoRA’s effective forward-pass formula (<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi><mo>⋅</mo><mi>x</mi><mo>+</mo><mi>B</mi><mo>⋅</mo><mi>A</mi><mo>⋅</mo><mi>x</mi></mrow><annotation encoding="application/x-tex">W \cdot x + B \cdot A \cdot x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">W</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span>) and state which of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>W</mi></mrow><annotation encoding="application/x-tex">W</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">W</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>A</mi></mrow><annotation encoding="application/x-tex">A</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal">A</span></span></span></span>, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>B</mi></mrow><annotation encoding="application/x-tex">B</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0502em;">B</span></span></span></span> are frozen versus trained.</p></li>
+<li id="ex-34-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-ift-worked-setup" class="quarto-xref">Listing&nbsp;<span>34.4</span></a>’s measured trainable-parameter count (294,912 of 124,734,720, or 0.2364%), explain why this figure falling within Exposition’s stated “0.1–1%” range is a meaningful sanity check, not just a confirmation of something already known. What would a figure of, say, 40% have indicated about the <code>target_modules</code> configuration?</p></li>
+<li id="ex-34-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s before/after generations for “capital of Portugal,” identify specifically which part of the output demonstrates genuine generalisation and which part demonstrates a training-set-size artifact, and explain why both can be true of the same generated output.</p></li>
+<li id="ex-34-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team wants to fine-tune a model to know their company’s Q3 financial results. Using this chapter’s Trade-offs section and Motivation, write the two or three sentences you’d say about why IFT is the wrong tool for this and what to use instead.</p></li>
+<li id="ex-34-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 34.2 warns about mismatched chat templates between training and serving. Describe a concrete way this mismatch could pass unit tests but still degrade quality in production, using this chapter’s description of what a chat template controls.</p></li>
+<li id="ex-34-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about QLoRA’s 4-bit quantisation (NF4) approach. Explain in your own words why quantising the <em>frozen</em> base model weights, while keeping the LoRA adapters themselves in higher precision, is a reasonable design choice rather than quantising everything uniformly.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="34.9">
+<h2 data-number="34.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">34.9</span> Mental Model</h2>
+<p>IFT is apprenticeship. The model watches many examples of an expert responding to instructions and learns to replicate that pattern, inferring the rules from demonstrations rather than being told them explicitly. This is why data quality is everything. If the training examples are mediocre or too few, the model learns exactly that. This chapter’s Worked Example is the concrete version of that lesson. Six examples were enough to teach real generalisation (the correct capital of a held-out country) but not enough to teach clean, stable output formatting. Both outcomes trace back to the same root cause: a dataset far smaller than what production IFT actually requires.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2025hundredpagellm" class="csl-entry" role="listitem">
+Burkov, Andriy. 2025. <em>The Hundred-Page Language Models Book</em>. True Positive Inc.
+</div>
+<div id="ref-dettmers2023qlora" class="csl-entry" role="listitem">
+Dettmers, Tim, Artidoro Pagnoni, Ari Holtzman, and Luke Zettlemoyer. 2023. <span>“QLoRA: Efficient Finetuning of Quantized LLMs.”</span> <em>Advances in Neural Information Processing Systems</em> 36.
+</div>
+<div id="ref-hu2022lora" class="csl-entry" role="listitem">
+Hu, Edward J., Yelong Shen, Phillip Wallis, et al. 2022. <span>“LoRA: Low-Rank Adaptation of Large Language Models.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+<div id="ref-zhou2023lima" class="csl-entry" role="listitem">
+<span class="nocase">Zhou, Chunting, Pengfei Liu, Puxin Xu, et al.</span> 2023. <span>“LIMA: Less Is More for Alignment.”</span> <em>Advances in Neural Information Processing Systems</em> 36.
+</div>
+</div>
+</section>

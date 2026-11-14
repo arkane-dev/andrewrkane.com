@@ -1,0 +1,383 @@
+<p>Every supervised learning algorithm does the same thing. It takes examples where the answer is already known (this tumour was malignant, this customer churned, this house sold for $420k). It learns a mapping from inputs to outputs that generalises to examples it hasn’t seen. Dozens of algorithm families claim to solve it, each with a different idea of what that mapping should look like. No one algorithm wins every time. This chapter provides an overview of these algorithms: what the major families assume, where each one excels, and the trade-off, bias versus variance, that explains why picking an algorithm is picking a set of assumptions about your data.</p>
+<section id="motivation" class="level2" data-number="11.1">
+<h2 data-number="11.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">11.1</span> Motivation</h2>
+<p>A Solutions Architect doesn’t need to have implemented every algorithm from scratch. But they do need enough working knowledge to answer a very practical question fast: given this dataset and this business constraint, what’s the first thing worth trying? Reaching for the wrong family costs time. A KNN model that can’t serve predictions inside a latency budget. A decision tree that overfits the moment it touches data. A linear model fit to a relationship that curves: wrong in the same way no matter how much data arrives. Every algorithm family encodes an <strong>inductive bias</strong>: an assumption about the shape of the relationship between inputs and outputs. There’s no assumption-free algorithm. Choosing one is choosing what you’re willing to believe about your data. Flexibility has its own cost. A neural network trained on 800 rows will usually lose to a logistic regression trained in a couple of minutes on the same data. Not because the network’s assumptions are wrong. It barely has any. But 800 rows isn’t enough data to pin down such an unconstrained model. Book 2 covers exactly why, once neural networks have been introduced.</p>
+</section>
+<section id="exposition" class="level2" data-number="11.2">
+<h2 data-number="11.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">11.2</span> Exposition</h2>
+<section id="the-bias-variance-trade-off" class="level3" data-number="11.2.1">
+<h3 data-number="11.2.1" class="anchored" data-anchor-id="the-bias-variance-trade-off"><span class="header-section-number">11.2.1</span> The Bias-Variance Trade-Off</h3>
+<p>This is probably the most important idea in supervised learning. Everything else in this chapter is downstream of it. Every model’s error comes from two sources.</p>
+<p><strong>Bias</strong> is how wrong the model’s assumptions are. Systematically. No matter how much data it gets. A linear model fit to a curved relationship stays wrong forever. More data doesn’t fix a mismatched hypothesis class. It just makes the wrongness more precisely measured.</p>
+<p><strong>Variance</strong> is how much the model’s predictions change when trained on a different sample from the same population. A model that memorises its training data exactly will produce a completely different fit if a handful of training examples change. That instability is variance.</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>Expected&nbsp;Test&nbsp;Error</mtext><mo>=</mo><msup><mtext>Bias</mtext><mn>2</mn></msup><mo>+</mo><mtext>Variance</mtext><mo>+</mo><mtext>Irreducible&nbsp;Error</mtext></mrow><annotation encoding="application/x-tex">\text{Expected Test Error} = \text{Bias}^2 + \text{Variance} + \text{Irreducible Error}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord text"><span class="mord">Expected&nbsp;Test&nbsp;Error</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.9707em;vertical-align:-0.0833em;"></span><span class="mord"><span class="mord text"><span class="mord">Bias</span></span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8873em;"><span style="top:-3.1362em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7667em;vertical-align:-0.0833em;"></span><span class="mord text"><span class="mord">Variance</span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord text"><span class="mord">Irreducible&nbsp;Error</span></span></span></span></span></span></p>
+<p>The irreducible error is noise in the data. No model removes it. The trade-off is between the other two. A simple model (a straight line) has high bias and low variance. It’s wrong in the same way every time, but it’s stable. A flexible model (an unpruned decision tree) has low bias and high variance. It can better represent the true relationship. But it also happily fits noise, and small changes in training data produce a very different fit. Model complexity is a dial. The goal is finding where on that dial test error is minimised. That point has to be found empirically, because it depends on the specific dataset. Chapter 13 (Cross-Validation &amp; Model Selection) is the tool that finds it.</p>
+</section>
+<section id="linear-models" class="level3" data-number="11.2.2">
+<h3 data-number="11.2.2" class="anchored" data-anchor-id="linear-models"><span class="header-section-number">11.2.2</span> Linear Models</h3>
+<p><strong>What they assume:</strong> the relationship between inputs and output is a straight line (regression) or that a hyperplane can separate the classes (classification).</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>What Is a Hyperplane?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>A hyperplane is the general-dimensional version of a line. In two dimensions it’s an ordinary line. In three, an ordinary flat plane. In <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi></mrow><annotation encoding="application/x-tex">n</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">n</span></span></span></span> dimensions, it’s whatever flat, one-dimension-lower surface generalises that idea. It’s defined by the same equation either way: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="bold">w</mi><mo>⋅</mo><mi mathvariant="bold">x</mi><mo>+</mo><mi>b</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\mathbf{w} \cdot \mathbf{x} + b = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4445em;"></span><span class="mord mathbf" style="margin-right:0.016em;">w</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathbf">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">b</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>, using the dot product from Chapter 3. Every point on one side of that surface gives <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="bold">w</mi><mo>⋅</mo><mi mathvariant="bold">x</mi><mo>+</mo><mi>b</mi><mo>&gt;</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\mathbf{w} \cdot \mathbf{x} + b &gt; 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4445em;"></span><span class="mord mathbf" style="margin-right:0.016em;">w</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathbf">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7335em;vertical-align:-0.0391em;"></span><span class="mord mathnormal">b</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&gt;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>. Every point on the other side gives a negative value. A linear classifier’s whole job is choosing <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi mathvariant="bold">w</mi></mrow><annotation encoding="application/x-tex">\mathbf{w}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4444em;"></span><span class="mord mathbf" style="margin-right:0.016em;">w</span></span></span></span> and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>b</mi></mrow><annotation encoding="application/x-tex">b</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">b</span></span></span></span> so that surface falls between the two classes as cleanly as possible. A dataset with 30 features doesn’t live somewhere a hyperplane can be drawn and looked at. But the equation that defines one doesn’t care how many dimensions it’s operating in.</p>
+</div>
+</div>
+<p><strong>Logistic Regression</strong> is a classifier despite the name. It models <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mo>=</mo><mn>1</mn><mo>∣</mo><mi>x</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(y=1 \mid x)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal">x</span><span class="mclose">)</span></span></span></span> with a sigmoid applied to a linear combination of features, and its outputs are calibrated probabilities, not just labels.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>What Does a Sigmoid Curve Look Like?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The sigmoid function is <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mn>1</mn><mrow><mn>1</mn><mo>+</mo><msup><mi>e</mi><mrow><mo>−</mo><mi>z</mi></mrow></msup></mrow></mfrac></mrow><annotation encoding="application/x-tex">\sigma(z) = \frac{1}{1 + e^{-z}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.044em;">z</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.2484em;vertical-align:-0.4033em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.8451em;"><span style="top:-2.655em;"><span class="pstrut" style="height:3em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span><span class="mbin mtight">+</span><span class="mord mtight"><span class="mord mathnormal mtight">e</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.7027em;"><span style="top:-2.786em;margin-right:0.0714em;"><span class="pstrut" style="height:2.5em;"></span><span class="katex-sizing reset-size3 size1 mtight"><span class="mord mtight"><span class="mord mtight">−</span><span class="mord mathnormal mtight" style="margin-right:0.044em;">z</span></span></span></span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.394em;"><span class="pstrut" style="height:3em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mtight">1</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.4033em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span>, and its job is squashing any real number into the open interval <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo stretchy="false">(</mo><mn>0</mn><mo separator="true">,</mo><mn>1</mn><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">(0, 1)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">(</span><span class="mord">0</span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord">1</span><span class="mclose">)</span></span></span></span>, so it can be read as a probability. Large positive <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>z</mi></mrow><annotation encoding="application/x-tex">z</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.044em;">z</span></span></span></span> pushes <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\sigma(z)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.044em;">z</span><span class="mclose">)</span></span></span></span> towards 1; large negative <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>z</mi></mrow><annotation encoding="application/x-tex">z</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.044em;">z</span></span></span></span> pushes it towards 0; <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>z</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">z = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.044em;">z</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span> gives exactly 0.5. Plotted, it’s a smooth S-shaped curve (<a href="#fig-sigmoid-curve" class="quarto-xref">Figure&nbsp;<span>11.1</span></a>), steep near the middle and flat at both ends. That flatness matters: once the model is already confident, a further change to its linear combination of features barely moves the predicted probability, but near <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>z</mi><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">z = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.044em;">z</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>, a small change swings the prediction hard in one direction or the other.</p>
+<div id="fig-sigmoid-curve" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-sigmoid-curve-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch11/sigmoid-curve.png" class="img-fluid figure-img" style="width:55.0%" alt="The sigmoid function: a smooth S-curve, steepest at z = 0, flattening as z moves towards either extreme." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-sigmoid-curve-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;11.1: The sigmoid function: a smooth S-curve, steepest at z = 0, flattening as z moves towards either extreme.
+</figcaption>
+</figure>
+</div>
+</div>
+</div>
+<p><strong>Linear Regression</strong> fits a line by minimising squared error. Both are fast, interpretable (the coefficients are the explanation), and a recommended first step. Train the linear baseline before anything fancier. If a complex model can’t beat your baseline, the problem is the features or the data, not the missing complexity. Weaknesses: no nonlinear relationships without manual feature engineering, sensitivity to outliers (linear regression), and an independence assumption between features that regularisation only partly fixes.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>What Is Regularisation?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Regularisation adds a penalty for complexity to what a model is trying to minimise, on top of prediction error. Instead of fitting the training data as closely as possible, the model is pushed towards smaller, simpler coefficients, which tends to generalise better and lean less heavily on any single feature. For linear regression, that means adding a cost for large weights to the loss function, so a handful of correlated features can’t each grab an oversized, unstable share of the prediction the way they could unregularised. It doesn’t fix the independence assumption. It just limits the damage. Chapter 18 covers regularisation properly, including its two standard forms, Ridge and Lasso, and why they behave differently.</p>
+</div>
+</div>
+</section>
+<section id="support-vector-machines" class="level3" data-number="11.2.3">
+<h3 data-number="11.2.3" class="anchored" data-anchor-id="support-vector-machines"><span class="header-section-number">11.2.3</span> Support Vector Machines</h3>
+<p><strong>What they assume:</strong> among every hyperplane that separates the classes, the one with the widest margin to the nearest points of each class generalises best.</p>
+<p>A <strong>Support Vector Machine (SVM)</strong> starts from the same hyperplane idea as Logistic Regression, but picks it differently. Instead of any separating hyperplane, it finds the one maximising the distance to the closest point of either class, the margin. Only those closest points, the support vectors, determine where the boundary sits. Every other point could move, or vanish, without changing the decision boundary at all. Real data is rarely perfectly separable, so a slack parameter <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi></mrow><annotation encoding="application/x-tex">C</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span></span></span></span> trades margin width against tolerating some misclassified or margin-violating points. Small <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi></mrow><annotation encoding="application/x-tex">C</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span></span></span></span> gives a wide margin that tolerates more violations: higher bias, lower variance. Large <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>C</mi></mrow><annotation encoding="application/x-tex">C</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">C</span></span></span></span> gives a narrow margin that tolerates few: lower bias, higher variance. That’s the same trade-off this chapter’s first section named.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>What Is the Kernel Trick?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>A kernel function computes the dot product two points would have <em>after</em> being mapped into some higher-dimensional space, without ever performing that mapping explicitly. That matters because a boundary that’s a curve in the original space can be a hyperplane in the right higher-dimensional one. SVM training only ever needs dot products between points, never their raw transformed coordinates. The RBF kernel, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo stretchy="false">(</mo><msub><mi>x</mi><mi>i</mi></msub><mo separator="true">,</mo><msub><mi>x</mi><mi>j</mi></msub><mo stretchy="false">)</mo><mo>=</mo><mi>exp</mi><mo>⁡</mo><mo stretchy="false">(</mo><mo>−</mo><mi>γ</mi><mo stretchy="false">∥</mo><msub><mi>x</mi><mi>i</mi></msub><mo>−</mo><msub><mi>x</mi><mi>j</mi></msub><msup><mo stretchy="false">∥</mo><mn>2</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">K(x_i, x_j) = \exp(-\gamma \lVert x_i - x_j \rVert^2)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0361em;vertical-align:-0.2861em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0572em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">exp</span><span class="mopen">(</span><span class="mord">−</span><span class="mord mathnormal" style="margin-right:0.0556em;">γ</span><span class="mopen">∥</span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.1002em;vertical-align:-0.2861em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3117em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight" style="margin-right:0.0572em;">j</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mclose"><span class="mclose">∥</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">2</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span>, corresponds to an infinite-dimensional mapping and is the default choice when there’s no reason to assume a specific functional form. This is exactly the trick that lets an SVM draw a curved boundary around data no straight line can separate, the concentric-circles case later in this chapter’s Worked Example, where Logistic Regression collapses to 0.289.</p>
+</div>
+</div>
+<p>SVMs handle high-dimensional data well, and remain effective even when the number of features exceeds the number of rows. But training scales poorly past roughly tens of thousands of rows. And, like every distance-based method in this chapter, they need scaled features to behave sensibly.</p>
+</section>
+<section id="tree-based-models" class="level3" data-number="11.2.4">
+<h3 data-number="11.2.4" class="anchored" data-anchor-id="tree-based-models"><span class="header-section-number">11.2.4</span> Tree-Based Models</h3>
+<p><strong>What they assume:</strong> the relationship is well-approximated by a sequence of if/else splits on individual features.</p>
+<p>A <strong>Decision Tree</strong> recursively splits training data on whichever feature best separates classes, or reduces regression error, at each node. Each leaf is a prediction. Trees are naturally interpretable (print one and read it like a flowchart) and handle mixed numeric/categorical data without preprocessing. Their weakness is the high-variance failure mode above: an unconstrained tree memorises its training set, and a small change in the data produces a structurally different tree. Ensembling many trees, covered in Chapter 12, is the standard fix and the reason trees remain the dominant building block for tabular data despite being weak individually.</p>
+</section>
+<section id="distance-based-models" class="level3" data-number="11.2.5">
+<h3 data-number="11.2.5" class="anchored" data-anchor-id="distance-based-models"><span class="header-section-number">11.2.5</span> Distance-Based Models</h3>
+<p><strong>What they assume:</strong> similar inputs produce similar outputs: nearby points in feature space share a label.</p>
+<p><strong>k-Nearest Neighbours (KNN)</strong> classifies a new point by finding its <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>k</mi></mrow><annotation encoding="application/x-tex">k</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span></span></span></span> closest training examples, Euclidean distance by default, and taking a majority vote. For regression, it averages their targets. KNN makes no assumption about the shape of the boundary. It can represent arbitrarily complex relationships. But it pays for that flexibility at prediction time: every prediction requires computing distance to every training point, an <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> cost per prediction that gets expensive fast. It also degrades in high dimensions: the curse of dimensionality. As dimensionality grows, all points become roughly equidistant, and “nearest” loses meaning. And it requires feature scaling. Distance is meaningless when one feature ranges <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn><mtext>–</mtext><mn>1</mn></mrow><annotation encoding="application/x-tex">0–1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0–1</span></span></span></span> and another <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>0</mn><mtext>–</mtext><mn>1,000,000</mn></mrow><annotation encoding="application/x-tex">0–1{,}000{,}000</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">0–1</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span><span class="mord"><span class="mpunct">,</span></span><span class="mord">000</span></span></span></span>.</p>
+</section>
+<section id="probabilistic-models" class="level3" data-number="11.2.6">
+<h3 data-number="11.2.6" class="anchored" data-anchor-id="probabilistic-models"><span class="header-section-number">11.2.6</span> Probabilistic Models</h3>
+<p><strong>What they assume:</strong> features are conditionally independent given the class label, the “naive” in Naive Bayes.</p>
+<p>That assumption is almost never true, and the algorithm works well anyway. <strong>Naive Bayes</strong> applies Bayes’ theorem to compute the posterior probability of each class. The independence assumption reduces this to multiplying per-feature likelihoods, which is extremely fast to train and predict. It’s a strong, cheap baseline for text classification (bag-of-words features are close to independent given topic) and for any problem with very little training data, since it has few parameters to estimate. It underestimates feature correlations and can’t represent interactions, so it’s rarely competitive as a final model. But as a five-minute sanity check, it’s hard to beat.</p>
+</section>
+<section id="the-no-free-lunch-theorem" class="level3" data-number="11.2.7">
+<h3 data-number="11.2.7" class="anchored" data-anchor-id="the-no-free-lunch-theorem"><span class="header-section-number">11.2.7</span> The No Free Lunch Theorem</h3>
+<p>There’s a formal result behind the intuition that “it depends.” Averaged over <em>all possible problems</em>, no algorithm outperforms any other, including random guessing. What this rules out is a universal favourite. What it does not rule out, and what makes data science a skill rather than a lookup table, is that specific algorithms reliably outperform others on the specific <em>kinds</em> of problems that show up in practice. On tabular data, gradient-boosted trees (Chapter 12) win most of the time. On unstructured data, deep learning wins. Neither fact contradicts No Free Lunch, because “tabular data” and “image data” are not uniform samples over all possible problems. They have structure, and different algorithms are built to exploit different kinds of structure.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="11.3">
+<h2 data-number="11.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">11.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Algorithm</th>
+<th>Bias</th>
+<th>Variance</th>
+<th>Interpretable</th>
+<th>Nonlinear</th>
+<th>Speed</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Logistic Regression</td>
+<td>High</td>
+<td>Low</td>
+<td>Yes</td>
+<td>No</td>
+<td>Very fast</td>
+</tr>
+<tr class="even">
+<td>SVM (RBF kernel)</td>
+<td>Low–Med</td>
+<td>Low–Med</td>
+<td>No</td>
+<td>Yes</td>
+<td>Slow to train at scale</td>
+</tr>
+<tr class="odd">
+<td>Decision Tree (deep)</td>
+<td>Low</td>
+<td>High</td>
+<td>Yes (if shallow)</td>
+<td>Yes</td>
+<td>Fast</td>
+</tr>
+<tr class="even">
+<td>KNN</td>
+<td>Low</td>
+<td>High</td>
+<td>No</td>
+<td>Yes</td>
+<td>Slow at predict time</td>
+</tr>
+<tr class="odd">
+<td>Naive Bayes</td>
+<td>High</td>
+<td>Low</td>
+<td>Partial</td>
+<td>No</td>
+<td>Very fast</td>
+</tr>
+<tr class="even">
+<td>Random Forest</td>
+<td>Low–Med</td>
+<td>Low–Med</td>
+<td>No</td>
+<td>Yes</td>
+<td>Medium</td>
+</tr>
+</tbody>
+</table>
+<p>No row in this table is dominant. That’s the No Free Lunch theorem showing up as a design constraint. The practical resolution is empirical: try the fast, interpretable baseline first, and let cross-validated performance decide whether the added complexity of a more flexible family gives you something useful.</p>
+</section>
+<section id="procedures" class="level2" data-number="11.4">
+<h2 data-number="11.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">11.4</span> Procedures</h2>
+<p id="proc-11-1"><strong>Procedure 11.1 (Train and Evaluate Any sklearn Classifier: the Universal Pattern).</strong> <em>When to use:</em> every classification task, regardless of algorithm: the API is identical across all five families above.</p>
+<div id="lst-universal-pattern" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-universal-pattern-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;11.1: The universal sklearn fit/predict/evaluate pattern, always wrapped in a Pipeline
+</figcaption>
+<div aria-describedby="lst-universal-pattern-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> train_test_split</span>
+<span id="cb1-2"><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> StandardScaler</span>
+<span id="cb1-3"><span class="im">from</span> sklearn.pipeline <span class="im">import</span> Pipeline</span>
+<span id="cb1-4"><span class="co"># swap for any classifier</span></span>
+<span id="cb1-5"><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression</span>
+<span id="cb1-6"><span class="im">from</span> sklearn.metrics <span class="im">import</span> accuracy_score, classification_report</span>
+<span id="cb1-7"></span>
+<span id="cb1-8">X_train, X_test, y_train, y_test <span class="op">=</span> train_test_split(</span>
+<span id="cb1-9">    X, y, test_size<span class="op">=</span><span class="fl">0.2</span>, random_state<span class="op">=</span>RANDOM_SEED, stratify<span class="op">=</span>y</span>
+<span id="cb1-10">)</span>
+<span id="cb1-11"></span>
+<span id="cb1-12">clf <span class="op">=</span> Pipeline([</span>
+<span id="cb1-13">    (<span class="st">'scaler'</span>, StandardScaler()),</span>
+<span id="cb1-14">    (<span class="st">'model'</span>, LogisticRegression(max_iter<span class="op">=</span><span class="dv">1000</span>))</span>
+<span id="cb1-15">])</span>
+<span id="cb1-16">clf.fit(X_train, y_train)</span>
+<span id="cb1-17">y_pred <span class="op">=</span> clf.predict(X_test)</span>
+<span id="cb1-18"></span>
+<span id="cb1-19"><span class="bu">print</span>(<span class="ss">f'Accuracy: </span><span class="sc">{</span>accuracy_score(y_test, y_pred)<span class="sc">:.3f}</span><span class="ss">'</span>)</span>
+<span id="cb1-20"><span class="bu">print</span>(classification_report(y_test, y_pred))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Why the Pipeline matters:</strong> it guarantees the scaler is fitted only on training data and applied, not refitted, on test data. Fitting the scaler on the full dataset before splitting is a leakage bug, the classification analogue of the leakage failure mode from <a href="/books/classical-data-science/ch02-business-problem-framing" class="quarto-xref"><span>Chapter 2</span></a>.</p>
+<p id="proc-11-2"><strong>Procedure 11.2 (Compare Multiple Classifiers Under Identical Conditions).</strong> <em>When to use:</em> deciding which algorithm family is worth investing tuning time in, before committing to one.</p>
+<div id="lst-compare-classifiers" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-compare-classifiers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;11.2: Benchmarking several classifiers with identical preprocessing and cross-validation
+</figcaption>
+<div aria-describedby="lst-compare-classifiers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> cross_val_score</span>
+<span id="cb2-2"></span>
+<span id="cb2-3">classifiers <span class="op">=</span> {</span>
+<span id="cb2-4">    <span class="st">'Logistic Regression'</span>: LogisticRegression(max_iter<span class="op">=</span><span class="dv">1000</span>),</span>
+<span id="cb2-5">    <span class="st">'Decision Tree'</span>: DecisionTreeClassifier(</span>
+<span id="cb2-6">        random_state<span class="op">=</span>RANDOM_SEED</span>
+<span id="cb2-7">    ),</span>
+<span id="cb2-8">    <span class="st">'K-Nearest Neighbours'</span>: KNeighborsClassifier(n_neighbors<span class="op">=</span><span class="dv">5</span>),</span>
+<span id="cb2-9">    <span class="st">'Naive Bayes'</span>: GaussianNB(),</span>
+<span id="cb2-10">    <span class="st">'Random Forest'</span>: RandomForestClassifier(</span>
+<span id="cb2-11">        random_state<span class="op">=</span>RANDOM_SEED, n_estimators<span class="op">=</span><span class="dv">100</span></span>
+<span id="cb2-12">    ),</span>
+<span id="cb2-13">    <span class="st">'SVM (RBF)'</span>: SVC(random_state<span class="op">=</span>RANDOM_SEED),</span>
+<span id="cb2-14">}</span>
+<span id="cb2-15"></span>
+<span id="cb2-16"><span class="cf">for</span> name, clf <span class="kw">in</span> classifiers.items():</span>
+<span id="cb2-17">    pipe <span class="op">=</span> Pipeline([(<span class="st">'scaler'</span>, StandardScaler()), (<span class="st">'clf'</span>, clf)])</span>
+<span id="cb2-18">    scores <span class="op">=</span> cross_val_score(</span>
+<span id="cb2-19">        pipe, X_train, y_train, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'accuracy'</span></span>
+<span id="cb2-20">    )</span>
+<span id="cb2-21">    <span class="bu">print</span>(<span class="ss">f'</span><span class="sc">{</span>name<span class="sc">:&lt;25}</span><span class="ss"> </span><span class="sc">{</span>scores<span class="sc">.</span>mean()<span class="sc">:.3f}</span><span class="ss"> ± </span><span class="sc">{</span>scores<span class="sc">.</span>std()<span class="sc">:.3f}</span><span class="ss">'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> comparing algorithms using a single train/test split. Different splits can reorder the ranking entirely on a small dataset. Chapter 13 quantifies exactly how much.</p>
+<p id="proc-11-3"><strong>Procedure 11.3 (Get and Threshold Prediction Probabilities).</strong> <em>When to use:</em> whenever a confidence score matters more than a hard label: risk scoring, ranking, or a business-specific decision threshold (the precision/recall trade-off from <a href="/books/classical-data-science/ch02-business-problem-framing" class="quarto-xref"><span>Chapter 2</span></a>).</p>
+<div id="lst-predict-proba" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-predict-proba-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;11.3: Extracting probabilities and applying a custom decision threshold
+</figcaption>
+<div aria-describedby="lst-predict-proba-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">proba <span class="op">=</span> clf.predict_proba(X_test)   <span class="co"># shape (n_samples, n_classes)</span></span>
+<span id="cb3-2">positive_class_proba <span class="op">=</span> proba[:, <span class="dv">1</span>]</span>
+<span id="cb3-3"></span>
+<span id="cb3-4">threshold <span class="op">=</span> <span class="fl">0.3</span>   <span class="co"># lower than 0.5 → higher recall, lower precision</span></span>
+<span id="cb3-5">y_pred_custom <span class="op">=</span> (positive_class_proba <span class="op">&gt;=</span> threshold).astype(<span class="bu">int</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Not every estimator supports <code>predict_proba</code> (<code>LinearSVC</code> is a common exception). Use <code>decision_function()</code> instead, or switch to <code>SVC(probability=True)</code>.</p>
+<p id="proc-11-4"><strong>Procedure 11.4 (Diagnose Bias vs.&nbsp;Variance from the Train/Test Gap).</strong> <em>When to use:</em> a model’s cross-validated score is disappointing and the next step, more data, more regularisation, or a more flexible model, depends on which failure mode is present.</p>
+<div id="lst-bias-variance-diagnosis" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-bias-variance-diagnosis-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;11.4: Comparing train and test accuracy to diagnose overfitting vs.&nbsp;underfitting
+</figcaption>
+<div aria-describedby="lst-bias-variance-diagnosis-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">train_acc <span class="op">=</span> accuracy_score(y_train, clf.predict(X_train))</span>
+<span id="cb4-2">test_acc  <span class="op">=</span> accuracy_score(y_test, clf.predict(X_test))</span>
+<span id="cb4-3">gap <span class="op">=</span> train_acc <span class="op">-</span> test_acc</span>
+<span id="cb4-4"><span class="bu">print</span>(</span>
+<span id="cb4-5">    <span class="ss">f'Train: </span><span class="sc">{</span>train_acc<span class="sc">:.3f}</span><span class="ss">  Test: </span><span class="sc">{</span>test_acc<span class="sc">:.3f}</span><span class="ss">  Gap: </span><span class="sc">{</span>gap<span class="sc">:.3f}</span><span class="ss">'</span></span>
+<span id="cb4-6">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Rule of thumb:</strong> train high, test low, large gap → high variance (overfitting): simplify the model or get more data. Train and test both low → high bias (underfitting): use a more flexible model or better features. Wide spread across CV folds → high variance regardless of the train/test gap.</p>
+</section>
+<section id="worked-example" class="level2" data-number="11.5">
+<h2 data-number="11.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">11.5</span> Worked Example</h2>
+<p>The tutorial notebook runs five classifiers (Logistic Regression, Decision Tree, KNN, Naive Bayes, Random Forest) on the sklearn breast cancer dataset. It has 569 tumour samples and 30 numeric features, labelled malignant (class 0) or benign (class 1), split 62.7% benign / 37.3% malignant. A stratified 80/20 split gives 455 training and 114 test samples.</p>
+<p>Benchmarking all five with Procedure 11.2 (5-fold CV on the training set) plus a held-out test score and timing gives the results below. Timings are from this machine and vary by run and hardware. The CV and test scores are deterministic given the fixed seed.</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Algorithm</th>
+<th>Test Acc.</th>
+<th>CV Mean ± Std</th>
+<th>Train Time</th>
+<th>Predict Time</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Logistic Regression</td>
+<td>0.982</td>
+<td>0.980 ± 0.013</td>
+<td>16.0 ms</td>
+<td>1.1 ms</td>
+</tr>
+<tr class="even">
+<td>SVM (RBF)</td>
+<td>0.982</td>
+<td>0.971 ± 0.018</td>
+<td>6.5 ms</td>
+<td>1.5 ms</td>
+</tr>
+<tr class="odd">
+<td>K-Nearest Neighbours</td>
+<td>0.956</td>
+<td>0.967 ± 0.021</td>
+<td>1.5 ms</td>
+<td>35.4 ms</td>
+</tr>
+<tr class="even">
+<td>Random Forest</td>
+<td>0.956</td>
+<td>0.954 ± 0.023</td>
+<td>95.7 ms</td>
+<td>5.8 ms</td>
+</tr>
+<tr class="odd">
+<td>Naive Bayes</td>
+<td>0.930</td>
+<td>0.932 ± 0.004</td>
+<td>1.7 ms</td>
+<td>0.6 ms</td>
+</tr>
+<tr class="even">
+<td>Decision Tree</td>
+<td>0.912</td>
+<td>0.910 ± 0.019</td>
+<td>7.8 ms</td>
+<td>0.9 ms</td>
+</tr>
+</tbody>
+</table>
+<p>Logistic Regression and SVM tie for the top test accuracy. That’s unsurprising: 30 well-engineered clinical features separating two tumour classes is close to the linear-model sweet spot. The RBF kernel’s added flexibility here doesn’t help beyond what a straight hyperplane was already finding. Its slightly lower CV mean (0.971 vs.&nbsp;0.980) hints at a marginally less stable fit for capacity the data didn’t need. Two details are worth more attention than the ranking. First, KNN’s prediction time (35.4 ms) dwarfs every other model’s: more than six times slower than the next-slowest, Random Forest (5.8 ms), and over sixty times slower than the fastest, Naive Bayes (0.6 ms). That’s the <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> cost from the Exposition section, visible directly in milliseconds rather than asserted. Second, Naive Bayes has by far the lowest CV standard deviation (±0.004 against ±0.013–0.023 for everything else). The independence assumption gives it less to overfit, trading a slightly lower mean for a much more stable estimate: exactly the low-variance side of the bias-variance table.</p>
+<p>Random Forest’s full classification report on the held-out test set (with all 30 features) reads: malignant precision 0.95, recall 0.93, f1 0.94 (support 42); benign precision 0.96, recall 0.97, f1 0.97 (support 72); overall accuracy 0.96. The confusion matrix is <code>[[39, 3], [2, 70]]</code>: 3 malignant tumours misclassified as benign, 2 benign misclassified as malignant. The costlier error clinically, a missed malignancy, is the rarer one here. But neither is zero. That’s exactly why Chapter 2’s point about business-owned thresholds matters, even on a textbook dataset.</p>
+<p>Restricting every classifier to two features (<code>mean radius</code>, <code>mean texture</code>) so the decision boundary can be plotted in 2D drops accuracy across the board. Logistic Regression, KNN, and Naive Bayes all land at 0.877, Random Forest at 0.860, and Decision Tree falls hardest, to 0.789. The interesting result isn’t the accuracy drop: that’s expected, since 28 informative features were discarded. It’s that three structurally different algorithms converge on the <em>same</em> accuracy with only two features. The tree, the algorithm best able to exploit many features via deep splits, suffers the most from losing them, since it has nothing left to split on beyond two axes.</p>
+<p>Finally, a direct empirical example of No Free Lunch: on a synthetic dataset of two linearly-separable blob clusters, both Logistic Regression and Random Forest score a perfect 1.000. On a synthetic dataset of two concentric circles, no linear boundary can separate them, Random Forest still scores 1.000. Logistic Regression collapses to <strong>0.289</strong>. That’s worse than the ~0.5 a coin flip would give on balanced classes. With features standardised around the same origin the two circles share, the linear decision boundary lands on the <em>wrong</em> side of the split, actively anti-correlating with the true label rather than merely failing to find one. Two algorithms, two datasets, and the ranking flips completely. The No Free Lunch theorem is not an abstraction here. It’s a number that goes from 1.000 to 0.289 depending on the shape of the data.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="11.6">
+<h2 data-number="11.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">11.6</span> History and Further Reading</h2>
+<p>Burkov’s Chapter 3 gives a concise, precise pass through the main algorithm families this chapter covers. Chapter 4 formalises “the anatomy of a learning algorithm,” the representation/loss/optimisation breakdown this chapter’s Motivation section leans on <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Murphy’s Introduction, Chapters 9–10, gives the full probabilistic treatment of linear and logistic regression for readers who want the derivations behind the sigmoid and the squared-error loss <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Géron’s <em>Hands-On Machine Learning</em> devotes separate chapters to classification (Ch. 3), support vector machines (Ch. 5), and decision trees (Ch. 6), each with worked Scikit-Learn code for the families this chapter surveys <span class="citation" data-cites="geron2019hands">(<a href="#ref-geron2019hands" role="doc-biblioref">Géron 2019</a>)</span>. The No Free Lunch theorem is due to Wolpert and Macready (1997). It’s worth reading in the original for how narrow its actual claim is: far narrower than the popular one-line summary suggests.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="11.7">
+<h2 data-number="11.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">11.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 3 (the probability and linear algebra underneath every algorithm here), Chapter 6 (the Python/sklearn ecosystem all the code above assumes), and Chapter 10 (the lifecycle stage this sits inside). It enables Chapter 12, where these same algorithms (trees especially) become base learners inside ensembles, and Chapter 16, which needs trained models before it can evaluate them. It’s often confused with the supervised/unsupervised distinction: everything in this chapter learns from <em>labelled</em> examples. Chapter 19 covers what happens when there’s no label to learn from at all.</p>
+</section>
+<section id="exercises" class="level2" data-number="11.8">
+<h2 data-number="11.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">11.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-11-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> For each of the following, name the algorithm family (Linear, Support Vector Machine, Tree-Based, Distance-Based, Probabilistic) and state its core assumption in one sentence: (a) spam detection using word-count features; (b) predicting house price from square footage and location; (c) classifying flowers from petal measurements using their five closest labelled neighbours.</p></li>
+<li id="ex-11-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain, in your own words, why increasing model flexibility (e.g., letting a decision tree grow deeper) tends to reduce bias while increasing variance. Use the bias-variance equation from this chapter.</p></li>
+<li id="ex-11-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the benchmark table in the Worked Example, identify every algorithm whose <em>test</em> accuracy exceeds its <em>CV mean</em> accuracy. Explain what that ordering does, or doesn’t, tell you about overfitting for those models.</p></li>
+<li id="ex-11-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> The Worked Example shows Decision Tree accuracy falling from 0.912 (30 features) to 0.789 (2 features), the largest drop of any algorithm. Using this chapter’s description of how trees split, explain why restricting to two features hurts a tree more than it hurts Naive Bayes (0.930 → 0.877).</p></li>
+<li id="ex-11-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A client has a 40,000-row tabular dataset with strongly nonlinear feature interactions and needs predictions to run inside a 5ms latency budget per request. Using <a href="#lst-universal-pattern" class="quarto-xref">Listing&nbsp;<span>11.1</span></a> and this chapter’s Trade-offs table, name the algorithm you would rule out first, and explain why using the prediction-time numbers from the Worked Example.</p></li>
+<li id="ex-11-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The No Free Lunch theorem is often summarised as “no algorithm is better than any other.” Using the blobs-vs-circles result (1.000 vs.&nbsp;0.289 for Logistic Regression), explain why that popular summary is misleading for a working data scientist, and state the narrower claim the theorem makes.</p></li>
+<li id="ex-11-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Burkov’s Chapter 4 on the anatomy of a learning algorithm. Apply its three-part framework (hypothesis representation, loss function, optimisation procedure) to Naive Bayes, and explain what makes its optimisation step so much faster than logistic regression’s.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="11.9">
+<h2 data-number="11.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">11.9</span> Mental Model</h2>
+<p>Every supervised learning algorithm is a machine for turning labelled examples into a decision rule. The algorithms differ only in what shape of rule they’re willing to consider: a line, a maximum-margin boundary (straight or kernel-bent), a set of rectangular cuts, a neighbourhood vote, a product of per-feature likelihoods. Before touching code, ask what shape the real boundary between classes (or the true curve through the regression data) is likely to take. The answer to that question picks the first algorithm to try faster than any benchmark table can.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-geron2019hands" class="csl-entry" role="listitem">
+Géron, Aurélien. 2019. <em>Hands-on Machine Learning with Scikit-Learn, Keras, and TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+</div>
+</section>

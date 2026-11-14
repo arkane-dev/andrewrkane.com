@@ -1,0 +1,424 @@
+<p>The pre-modelling foundations are now in place: framing a business problem (Chapter 2), exploring and cleaning data (Chapters 7-9). Modelling starts next chapter. It’s time for a change of pace. Knowing the individual skills is not the same as knowing how to run a project. The plan is more useful before the work than after it. Where do you start? When do you stop exploring and start modelling? When is a model “done”? What happens after it ships? Most data science failures are not algorithmic. They are process failures. A model built against the wrong version of the data, three weeks spent tuning before anyone checks whether the baseline was already good enough, a model that ships and silently degrades six months later with nobody watching. This chapter provides a map: the repeatable process that turns a business problem into a monitored, working system, and back into a better business problem.</p>
+<section id="motivation" class="level2" data-number="10.1">
+<h2 data-number="10.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">10.1</span> Motivation</h2>
+<p>Every data science project moves through the same broad stages, whatever the use case. Understand the problem, get and understand the data, prepare the data, build a model, evaluate it, deploy it, monitor it, and use what was learned to do it better next time. If you read enough data science texts, you’ll see this drawn as a clean left-to-right pipeline. It’s not. Reality is a loop with paths going backwards at every stage. This chapter provides two things. A formal vocabulary for the stages, so data scientists can talk to each other through established frameworks like CRISP-DM. And a picture of how the process behaves in practice: non-linear, iterative, and full of opportunities for projects to quietly die.</p>
+</section>
+<section id="exposition" class="level2" data-number="10.2">
+<h2 data-number="10.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">10.2</span> Exposition</h2>
+<section id="the-stages-mapped-to-this-book" class="level3" data-number="10.2.1">
+<h3 data-number="10.2.1" class="anchored" data-anchor-id="the-stages-mapped-to-this-book"><span class="header-section-number">10.2.1</span> The Stages, Mapped to This Book</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>What happens</th>
+<th>Where it lives in this book</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1. Problem framing</td>
+<td>Understand the business goal, translate it into a precise ML problem statement</td>
+<td>Chapter 2</td>
+</tr>
+<tr class="even">
+<td>2. Data collection &amp; understanding</td>
+<td>Identify data sources, pull data, understand structure, quality, and limitations</td>
+<td>Chapters 7-9</td>
+</tr>
+<tr class="odd">
+<td>3. Data preparation</td>
+<td>Clean, transform, and engineer features into a model-ready form</td>
+<td>Chapters 7, 14</td>
+</tr>
+<tr class="even">
+<td>4. Modelling</td>
+<td>Select an algorithm family, train candidate models, tune hyperparameters</td>
+<td>Chapters 11-20</td>
+</tr>
+<tr class="odd">
+<td>5. Evaluation</td>
+<td>Measure model performance against the success metric defined in stage 1, not just accuracy, but the business metric</td>
+<td>Chapters 13, 16</td>
+</tr>
+<tr class="even">
+<td>6. Deployment</td>
+<td>Package the model and serve predictions, batch or real-time</td>
+<td>Not in this book: Book 2, Chapters 22-23</td>
+</tr>
+<tr class="odd">
+<td>7. Monitoring</td>
+<td>Watch for data drift, model drift, and operational failures in production</td>
+<td>Not in this book: Book 2, Chapters 24-25</td>
+</tr>
+<tr class="even">
+<td>8. Iteration</td>
+<td>Feed what was learned, from evaluation and from production, back into a better problem statement</td>
+<td>Back to stage 1, Chapter 2</td>
+</tr>
+</tbody>
+</table>
+<p>This is a compressed version of two well-known industry frameworks. <strong>CRISP-DM</strong> (Cross-Industry Standard Process for Data Mining) runs through business understanding, data understanding, data preparation, modelling, evaluation, and deployment. Microsoft’s <strong>Team Data Science Process (TDSP)</strong> adds explicit emphasis on the operational stages (deployment, monitoring, project governance). The structure of this book series deliberately mirrors TDSP’s operational emphasis, because a Solutions Architect is disproportionately valuable precisely at the stages CRISP-DM neglects.</p>
+</section>
+<section id="why-the-textbook-diagram-lies" class="level3" data-number="10.2.2">
+<h3 data-number="10.2.2" class="anchored" data-anchor-id="why-the-textbook-diagram-lies"><span class="header-section-number">10.2.2</span> Why the Textbook Diagram Lies</h3>
+<p>Every lifecycle diagram is drawn as a left-to-right pipeline with a feedback arrow tacked on to the end. That is not how the world works. In a real project, EDA (stage 2) routinely breaks the problem statement (stage 1): the label wanted doesn’t exist, or the class balance makes the original success metric impossible to hit. Back to the drawing board before modelling has even begun. Modelling (stage 4) routinely sends a project back to data preparation (stage 3): a model’s errors reveal a feature bug, or that an important signal isn’t in the data. The two stages cycle dozens of times, rather than being “finished” in sequence. Evaluation (stage 5) routinely reveals that the success metric was wrong. A model hits 0.85 AUC. The team celebrates. Then the business owner explains they care about precision at a specific operating point nobody optimised for. That sends the project back to stage 1’s definition of success. And monitoring (stage 7) is stage 1 for the next iteration: production drift is the start of the next project. Well-run teams treat monitoring alerts as new problem statements rather than tickets to patch.</p>
+<p>Reality is a graph. Every stage has an edge back to every earlier stage. Good project management in data science is about recognising which stage you are in, not pretending you are close to some mythical end.</p>
+</section>
+<section id="why-projects-die-at-each-stage" class="level3" data-number="10.2.3">
+<h3 data-number="10.2.3" class="anchored" data-anchor-id="why-projects-die-at-each-stage"><span class="header-section-number">10.2.3</span> Why Projects Die at Each Stage</h3>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Common failure mode</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Problem framing</td>
+<td>No one asks “is ML even the right tool?” Months are spent on a problem a SQL query would have solved</td>
+</tr>
+<tr class="even">
+<td>Data understanding</td>
+<td>The team never checks whether labelled data still reflects the current business process</td>
+</tr>
+<tr class="odd">
+<td>Data preparation</td>
+<td>Data leakage goes undetected until production, when the leaked feature no longer exists at prediction time</td>
+</tr>
+<tr class="even">
+<td>Modelling</td>
+<td>The team optimises the model metric and never revisits whether it maps to the business metric agreed in stage 1</td>
+</tr>
+<tr class="odd">
+<td>Evaluation</td>
+<td>The model is evaluated once, on one static test set, and never re-evaluated as new data arrives: silent staleness</td>
+</tr>
+<tr class="even">
+<td>Deployment</td>
+<td>The model works in the notebook but nobody built the serving path, so it never reaches production: oddly, this is the most common failure in industry</td>
+</tr>
+<tr class="odd">
+<td>Monitoring</td>
+<td>No one owns the model after it’s shipped; drift goes undetected for months</td>
+</tr>
+<tr class="even">
+<td>Iteration</td>
+<td>“Done” is treated as permanent; no process triggers retraining or re-framing</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Deployment is the stage most projects never reach.</strong> Industry surveys consistently find that most data science prototypes never make it to production. Which is why deployment, MLOps, and monitoring exist as a dedicated block in Book 2. The modelling techniques in Chapters 11-20 are necessary but not enough. A Solutions Architect’s systems-thinking background is what’s needed: “does it run in a notebook” and “is it a reliable production system” are not the same bar. That distinction is second nature to anyone who has built production systems.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="10.3">
+<h2 data-number="10.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">10.3</span> Trade-offs and Limits</h2>
+<p>There is a trade-off between rigid process and iteration speed. Formal frameworks like CRISP-DM and TDSP are excellent for communicating with stakeholders and for audits. Followed literally as a waterfall, they slow projects down. Their practical use is as shared vocabulary and checklist, not as a gate that must be cleared before moving to the next stage.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Waterfall Wasn’t Meant to Be Rigid Either
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Software engineering had this same argument decades earlier. Winston Royce’s 1970 paper is usually credited as the origin of “waterfall,” but Royce never used that word. His own paper calls the strict sequential version risky, and proposes feedback loops back to earlier phases as a required part of the process, not a sign something went wrong. The rigid, one-way reading came later, from people summarising the paper rather than reading it closely. The Agile Manifesto (2001) formalised the fix decades on: short iterative cycles instead of long sequential phases, built specifically to solve the waterfall problem software teams had been living with since Royce’s warning went unheeded. CRISP-DM and TDSP inherit the identical tension: a diagram drawn as a sequence, describing a process that was always meant to loop back.</p>
+</div>
+</div>
+<p>There is a matching trade-off between depth of upfront framing and speed to first result. Spending three weeks perfecting a problem statement before touching data is its own failure mode. Nobody can know what’s realistic until the data has been seen. The practical approach is a <em>lightweight</em> problem statement (Chapter 2’s template, filled in quickly), followed by a fast pass through EDA, followed by a <em>revised</em> problem statement. Iterate the contract. Don’t treat the draft as final.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Rabbit, Horse, or Elephant?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Robertson and Robertson’s <em>Mastering the Requirements Process</em>, already the standard reference cited in Chapter 2, gives this trade-off a name <span class="citation" data-cites="robertson2012mastering">(<a href="#ref-robertson2012mastering" role="doc-biblioref">Robertson and Robertson 2012</a>)</span>. Their Formality Guide sorts projects into Rabbit, Horse, and Elephant, with Horse as the default middle case. A Rabbit project is small, fast, and short-lived: it discovers requirements in small units, implements a small increment, and uses that working increment to get feedback from stakeholders, rather than writing a complete specification first. An Elephant project is the opposite: long duration, many distributed stakeholders, and a genuine need for a complete, formal specification before work starts. Data science projects are Rabbits, or should be treated as such whenever possible. The failure mode this section describes is treating one like an Elephant: writing the specification an Elephant needs for a project the data will reshape within a week.</p>
+</div>
+</div>
+</section>
+<section id="procedures" class="level2" data-number="10.4">
+<h2 data-number="10.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">10.4</span> Procedures</h2>
+<p id="proc-10-1"><strong>Procedure 10.1 (Write a Project Charter).</strong> <em>When to use:</em> at project kick-off, before any data work: a lightweight companion to Chapter 2’s problem statement template, scoped to the whole project rather than the ML problem alone.</p>
+<div id="lst-project-charter" class="markdown listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-project-charter-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;10.1: A project charter template, filled in before data work begins
+</figcaption>
+<div aria-describedby="lst-project-charter-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb1-1"><span class="fu">## Project Charter</span></span>
+<span id="cb1-2"></span>
+<span id="cb1-3">**Project name:** <span class="co">[</span><span class="ot">Name</span><span class="co">]</span></span>
+<span id="cb1-4">**Sponsor / business owner:** [Who owns the outcome and</span>
+<span id="cb1-5">  signs off on "done"]</span>
+<span id="cb1-6">**Lifecycle stage owners:**</span>
+<span id="cb1-7"><span class="ss">  - </span>Data:        <span class="co">[</span><span class="ot">who owns data access/quality</span><span class="co">]</span></span>
+<span id="cb1-8"><span class="ss">  - </span>Modelling:   <span class="co">[</span><span class="ot">who builds and evaluates models</span><span class="co">]</span></span>
+<span id="cb1-9"><span class="ss">  - </span>Deployment:  <span class="co">[</span><span class="ot">who owns the serving path</span><span class="co">]</span></span>
+<span id="cb1-10"><span class="ss">  - </span>Monitoring:  [who gets paged when it breaks -- must</span>
+<span id="cb1-11">    be a named person, not "the team"]</span>
+<span id="cb1-12"></span>
+<span id="cb1-13">**Problem statement:** [link to the Chapter 2 ML problem</span>
+<span id="cb1-14">  statement]</span>
+<span id="cb1-15"></span>
+<span id="cb1-16">**Timeline:**</span>
+<span id="cb1-17"><span class="ss">  - </span>Data understanding complete by: <span class="co">[</span><span class="ot">date</span><span class="co">]</span></span>
+<span id="cb1-18"><span class="ss">  - </span>First baseline model by: <span class="co">[</span><span class="ot">date</span><span class="co">]</span></span>
+<span id="cb1-19"><span class="ss">  - </span>Go/no-go decision by: <span class="co">[</span><span class="ot">date</span><span class="co">]</span></span>
+<span id="cb1-20"><span class="ss">  - </span>Production deployment by: <span class="co">[</span><span class="ot">date</span><span class="co">]</span></span>
+<span id="cb1-21"></span>
+<span id="cb1-22">**Definition of done:** [Not "model built" -- "model</span>
+<span id="cb1-23">  deployed, monitored, and business metric moving"]</span>
+<span id="cb1-24"></span>
+<span id="cb1-25">**Kill criteria:** [Under what conditions does this project</span>
+<span id="cb1-26">  get cancelled? e.g. "baseline model doesn't beat the</span>
+<span id="cb1-27">  existing rule by 10%"]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> skipping “kill criteria.” Projects without an explicit exit condition tend to survive purely on sunk cost, consuming months of effort on a problem that was never going to work.</p>
+<p id="proc-10-2"><strong>Procedure 10.2 (Run a Pre-Mortem).</strong> <em>When to use:</em> right after the charter is written, before data work begins: a 30-minute exercise that surfaces risks while they are still cheap to fix.</p>
+<div id="lst-premortem" class="markdown listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-premortem-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;10.2: A pre-mortem checklist, worked through before data work starts
+</figcaption>
+<div aria-describedby="lst-premortem-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb2-1"><span class="fu">## Pre-Mortem: Assume this project failed.</span></span>
+<span id="cb2-2"><span class="fu">## It's 6 months from now. Why?</span></span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="ss">1. </span>Data reasons it failed:</span>
+<span id="cb2-5"><span class="ss">   - </span><span class="va">[ ]</span> The label wasn't recorded reliably</span>
+<span id="cb2-6"><span class="ss">   - </span><span class="va">[ ]</span> Class imbalance was worse than expected</span>
+<span id="cb2-7"><span class="ss">   - </span><span class="va">[ ]</span> A key feature isn't available at prediction time</span>
+<span id="cb2-8">         (leakage discovered late)</span>
+<span id="cb2-9"><span class="ss">   - </span><span class="va">[ ]</span> Data access/pipeline broke and nobody noticed for weeks</span>
+<span id="cb2-10"></span>
+<span id="cb2-11"><span class="ss">2. </span>Modelling reasons it failed:</span>
+<span id="cb2-12"><span class="ss">   - </span><span class="va">[ ]</span> The offline metric didn't translate to a business outcome</span>
+<span id="cb2-13"><span class="ss">   - </span><span class="va">[ ]</span> The model needed retraining more often than</span>
+<span id="cb2-14">         anyone budgeted for</span>
+<span id="cb2-15"></span>
+<span id="cb2-16"><span class="ss">3. </span>Organisational reasons it failed:</span>
+<span id="cb2-17"><span class="ss">   - </span><span class="va">[ ]</span> Nobody owned deployment, so it stayed in a notebook</span>
+<span id="cb2-18"><span class="ss">   - </span><span class="va">[ ]</span> Nobody owned monitoring, so drift went undetected</span>
+<span id="cb2-19"><span class="ss">   - </span><span class="va">[ ]</span> The business owner changed and the new owner didn't buy in</span>
+<span id="cb2-20"></span>
+<span id="cb2-21"><span class="ss">4. </span>For every checked box: what's the mitigation, and who owns it?</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> treating the pre-mortem as a formality and skipping straight to “no risks, let’s build.” The exercise only works if the team tries to find the failure mode before it happens.</p>
+<p id="proc-10-3"><strong>Procedure 10.3 (Decide “Is This Even a Project?”).</strong> <em>When to use:</em> when a stakeholder brings an ask and it needs quick triage: full lifecycle project, or a five-minute answer?</p>
+<div id="lst-triage" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-triage-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;10.3: A quick triage function for an incoming data science request
+</figcaption>
+<div aria-describedby="lst-triage-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">def</span> triage(ask: <span class="bu">dict</span>) <span class="op">-&gt;</span> <span class="bu">str</span>:</span>
+<span id="cb3-2">    <span class="co">"""Quick triage for an incoming DS/ML request."""</span></span>
+<span id="cb3-3">    <span class="cf">if</span> ask.get(<span class="st">"simple_rule_suffices"</span>):</span>
+<span id="cb3-4">        <span class="cf">return</span> (</span>
+<span id="cb3-5">            <span class="st">"Not a project -- write the rule, ship it "</span></span>
+<span id="cb3-6">            <span class="st">"in a day (Chapter 2)"</span></span>
+<span id="cb3-7">        )</span>
+<span id="cb3-8">    <span class="cf">if</span> <span class="kw">not</span> ask.get(<span class="st">"historical_labelled_data_exists"</span>):</span>
+<span id="cb3-9">        <span class="cf">return</span> (</span>
+<span id="cb3-10">            <span class="st">"Not ready -- this is a data collection "</span></span>
+<span id="cb3-11">            <span class="st">"project first, an ML project second"</span></span>
+<span id="cb3-12">        )</span>
+<span id="cb3-13">    <span class="cf">if</span> ask.get(<span class="st">"one_off_analysis_only"</span>):</span>
+<span id="cb3-14">        <span class="cf">return</span> (</span>
+<span id="cb3-15">            <span class="st">"Not a lifecycle project -- this is an "</span></span>
+<span id="cb3-16">            <span class="st">"analytics/EDA task (Chapter 9)"</span></span>
+<span id="cb3-17">        )</span>
+<span id="cb3-18">    <span class="cf">if</span> ask.get(<span class="st">"requires_deployed_prediction_system"</span>):</span>
+<span id="cb3-19">        <span class="cf">return</span> <span class="st">"Full lifecycle project -- use the charter template"</span></span>
+<span id="cb3-20">    <span class="cf">return</span> (</span>
+<span id="cb3-21">        <span class="st">"Unclear -- run a 1-day spike using EDA (Chapter 9) "</span></span>
+<span id="cb3-22">        <span class="st">"before committing to a charter"</span></span>
+<span id="cb3-23">    )</span>
+<span id="cb3-24"></span>
+<span id="cb3-25">ask <span class="op">=</span> {</span>
+<span id="cb3-26">    <span class="st">"simple_rule_suffices"</span>: <span class="va">False</span>,</span>
+<span id="cb3-27">    <span class="st">"historical_labelled_data_exists"</span>: <span class="va">True</span>,</span>
+<span id="cb3-28">    <span class="st">"one_off_analysis_only"</span>: <span class="va">False</span>,</span>
+<span id="cb3-29">    <span class="st">"requires_deployed_prediction_system"</span>: <span class="va">True</span>,</span>
+<span id="cb3-30">}</span>
+<span id="cb3-31"><span class="bu">print</span>(triage(ask))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-10-4"><strong>Procedure 10.4 (Structure a Data Science Project Repository).</strong> <em>When to use:</em> at the start of every project: a consistent layout makes handoffs and audits far easier.</p>
+<div id="lst-repo-structure" class="markdown listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-repo-structure-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;10.4: A standard data science project repository layout
+</figcaption>
+<div aria-describedby="lst-repo-structure-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb4-1">project_name/</span>
+<span id="cb4-2"><span class="pp">|</span>-- README.md      # Charter, kept up to date</span>
+<span id="cb4-3"><span class="pp">|</span>-- data/</span>
+<span id="cb4-4"><span class="pp">|</span>   <span class="pp">|</span>-- raw/       # Never modified -- read-only</span>
+<span id="cb4-5"><span class="pp">|</span>   <span class="pp">|</span>-- interim/   # Intermediate cleaning outputs</span>
+<span id="cb4-6"><span class="pp">|</span>   `-- processed/ # Model-ready datasets</span>
+<span id="cb4-7"><span class="pp">|</span>-- notebooks/</span>
+<span id="cb4-8"><span class="pp">|</span>   <span class="pp">|</span>-- 01_eda.ipynb</span>
+<span id="cb4-9"><span class="pp">|</span>   <span class="pp">|</span>-- 02_feature_engineering.ipynb</span>
+<span id="cb4-10"><span class="pp">|</span>   `-- 03_modelling.ipynb</span>
+<span id="cb4-11"><span class="pp">|</span>-- src/</span>
+<span id="cb4-12"><span class="pp">|</span>   <span class="pp">|</span>-- data_prep.py  # Reusable, tested code</span>
+<span id="cb4-13"><span class="pp">|</span>   <span class="pp">|</span>-- features.py</span>
+<span id="cb4-14"><span class="pp">|</span>   <span class="pp">|</span>-- train.py</span>
+<span id="cb4-15"><span class="pp">|</span>   `-- evaluate.py</span>
+<span id="cb4-16"><span class="pp">|</span>-- models/        # Serialised artefacts, versioned</span>
+<span id="cb4-17"><span class="pp">|</span>-- monitoring/</span>
+<span id="cb4-18"><span class="pp">|</span>   `-- drift_checks.py</span>
+<span id="cb4-19"><span class="pp">|</span>-- tests/</span>
+<span id="cb4-20">`-- requirements.txt</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> leaving all logic in notebooks. Notebooks are for exploration (stages 2-4); anything that needs to run in production (data prep, feature engineering, inference) belongs in tested <code>.py</code> modules that the notebooks <em>call</em>, not duplicate.</p>
+<p id="proc-10-5"><strong>Procedure 10.5 (Run a Project Retrospective).</strong> <em>When to use:</em> at the end of every lifecycle iteration, whether the project shipped, was killed, or is looping back to stage 1.</p>
+<div id="lst-retrospective" class="markdown listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-retrospective-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;10.5: A project retrospective template
+</figcaption>
+<div aria-describedby="lst-retrospective-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb5-1"><span class="fu">## Retrospective: [Project Name] -- [Date]</span></span>
+<span id="cb5-2"></span>
+<span id="cb5-3">**What we set out to do:** <span class="co">[</span><span class="ot">Original problem statement</span><span class="co">]</span></span>
+<span id="cb5-4">**What actually happened:** [Outcome -- shipped / killed /</span>
+<span id="cb5-5">  iterating]</span>
+<span id="cb5-6"></span>
+<span id="cb5-7">**What went well:**</span>
+<span id="cb5-8"><span class="ss">- </span><span class="co">[</span><span class="ot">...</span><span class="co">]</span></span>
+<span id="cb5-9"></span>
+<span id="cb5-10">**What we'd do differently:**</span>
+<span id="cb5-11"><span class="ss">- </span><span class="co">[</span><span class="ot">...</span><span class="co">]</span></span>
+<span id="cb5-12"></span>
+<span id="cb5-13">**Where did we loop back, and why?**</span>
+<span id="cb5-14"><span class="ss">  - </span><span class="co">[</span><span class="ot">Stage</span><span class="co">]</span> -&gt; <span class="co">[</span><span class="ot">Earlier stage</span><span class="co">]</span>: <span class="co">[</span><span class="ot">reason</span><span class="co">]</span></span>
+<span id="cb5-15"></span>
+<span id="cb5-16">**Is there a next iteration? If so, what's the revised</span>
+<span id="cb5-17">  problem statement?**</span>
+<span id="cb5-18"><span class="ss">- </span><span class="co">[</span><span class="ot">...</span><span class="co">]</span></span>
+<span id="cb5-19"></span>
+<span id="cb5-20">**Action items for the team's process (not just this project):**</span>
+<span id="cb5-21"><span class="ss">- </span><span class="co">[</span><span class="ot">...</span><span class="co">]</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> only running retrospectives on failed projects. Successful projects have just as much to teach about which stage transitions worked smoothly and why. Capture that too.</p>
+</section>
+<section id="worked-example" class="level2" data-number="10.5">
+<h2 data-number="10.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">10.5</span> Worked Example</h2>
+<p>The tutorial notebook carries a single churn-prediction problem, the same telco scenario from Chapter 2, through all eight lifecycle stages in miniature, in one notebook. It is worth telling because the result is a project that does <em>not</em> clear its own bar. That’s the realistic outcome of a first pass, not a flaw in the exercise.</p>
+<p>Stage 1 restates the abbreviated problem statement from Chapter 2: predict <code>churned_within_30d</code>, one row per customer at end of billing cycle. Success is defined as <strong>precision <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≥</mo></mrow><annotation encoding="application/x-tex">\geq</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7719em;vertical-align:-0.136em;"></span><span class="mrel">≥</span></span></span></span> 0.40 at recall <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≥</mo></mrow><annotation encoding="application/x-tex">\geq</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7719em;vertical-align:-0.136em;"></span><span class="mrel">≥</span></span></span></span> 0.60</strong> against the model metric, and beating the existing simple rule against the business metric. Stage 2 generates a synthetic population of 8,000 customers with a churn-generating process built from support tickets, payment failures, login recency, tenure, plan type, and product count. The resulting churn rate comes out to <strong>7.0%</strong>. That’s realistically imbalanced, and low enough that accuracy alone would be almost meaningless as a metric, exactly the trap Chapter 2 warns against.</p>
+<p>Stage 3 splits the data (80/20, stratified, <code>random_state=42</code>) before touching anything further: 6,400 training rows and 1,600 test rows, each preserving the 7% churn rate. It fits a <code>StandardScaler</code> on the training fold only, to avoid leaking test-set statistics into the features. Stage 4 then insists on two baselines before any real model is trained:</p>
+<div id="lst-baselines" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-baselines-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;10.6: Two baselines established before any real model is trained
+</figcaption>
+<div aria-describedby="lst-baselines-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">dummy <span class="op">=</span> DummyClassifier(</span>
+<span id="cb6-2">    strategy<span class="op">=</span><span class="st">'most_frequent'</span>, random_state<span class="op">=</span>RANDOM_SEED</span>
+<span id="cb6-3">)</span>
+<span id="cb6-4">dummy.fit(X_train, y_train)</span>
+<span id="cb6-5"></span>
+<span id="cb6-6">rule_preds <span class="op">=</span> (</span>
+<span id="cb6-7">    (X_test[<span class="st">'num_support_tickets_90d'</span>] <span class="op">&gt;=</span> <span class="dv">2</span>)</span>
+<span id="cb6-8">    <span class="op">&amp;</span> (X_test[<span class="st">'payment_failures_6m'</span>] <span class="op">&gt;=</span> <span class="dv">1</span>)</span>
+<span id="cb6-9">).astype(<span class="bu">int</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>On the actual generated data, the naive “always predict no churn” baseline scores 93% accuracy while catching <strong>zero</strong> churners (precision and recall both 0.00 on the positive class). That’s a direct example of why accuracy is the wrong metric here. The hand-written rule does slightly better on recall but is still weak: 9% precision, 8% recall. Only then does Stage 4 train a logistic regression with class weighting, which reaches <strong>AUC-ROC <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo></mrow><annotation encoding="application/x-tex">\approx</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mrel">≈</span></span></span></span> 0.638</strong>, a real but modest improvement over guessing.</p>
+<p>Stage 5 is where the lifecycle’s honesty pays off. Sweeping thresholds for the point that clears recall <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≥</mo></mrow><annotation encoding="application/x-tex">\geq</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7719em;vertical-align:-0.136em;"></span><span class="mrel">≥</span></span></span></span> 0.60 finds a threshold of <strong><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo></mrow><annotation encoding="application/x-tex">\approx</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mrel">≈</span></span></span></span> 0.493</strong>. But the precision achieved there is only <strong><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo></mrow><annotation encoding="application/x-tex">\approx</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mrel">≈</span></span></span></span> 0.103</strong>, well short of the 0.40 target set in Stage 1. At that threshold the model flags 661 of 1,600 test customers, more than six times as many as the simple rule’s 100, for a precision barely above the rule’s. <strong>The model does not meet the business contract.</strong> This is exactly the “loop-back” moment the chapter’s Exposition describes in the abstract, made concrete. With only six raw features, the right move is not to declare victory on a good-looking AUC. It’s to return to Stage 3 for better features (Chapter 14’s feature engineering), or to Stage 1 to renegotiate the metric, not to proceed to deployment.</p>
+<p>The notebook proceeds through Stages 6-8 anyway, explicitly labelled as showing <em>what those stages look like</em>, rather than a validated next step for this particular model. A deployment plan favours nightly batch scoring, since the intervention workflow takes hours, so real-time serving doesn’t help. A monitoring plan watches feature drift, predicted-churn-rate drift, and realised precision on a rolling window. And a retrospective records the loop-back: Stage 5 to Stage 3 for better features, and potentially Stage 5 to Stage 1 if better features still don’t clear the bar. The retrospective is a Python dictionary in the notebook, not a prose afterthought. That matters: writing the loop-back down in a structured form, easy to find again later, is what makes the next iteration happen instead of quietly dying. It echoes the Trade-offs section’s point about kill criteria and named owners.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="co"># SageMaker Projects gives a templated, governed version of</span></span>
+<span id="cb7-2"><span class="co"># the repo structure above, with CI/CD wiring for the</span></span>
+<span id="cb7-3"><span class="co"># deployment and monitoring stages built in.</span></span>
+<span id="cb7-4"><span class="im">import</span> sagemaker</span>
+<span id="cb7-5"></span>
+<span id="cb7-6"><span class="co"># Projects are typically created via the SageMaker Studio UI</span></span>
+<span id="cb7-7"><span class="co"># or Service Catalog, using a pre-built or custom MLOps</span></span>
+<span id="cb7-8"><span class="co"># template (build/train/deploy pipeline).</span></span>
+<span id="cb7-9"><span class="co"># Once created, each project provisions:</span></span>
+<span id="cb7-10"><span class="co">#   - A CodeCommit/CodeStar repo mirroring the structure above</span></span>
+<span id="cb7-11"><span class="co">#   - CodePipeline stages for build -&gt; train -&gt; deploy</span></span>
+<span id="cb7-12"><span class="co">#   - A Model Registry entry per trained model version</span></span>
+<span id="cb7-13"></span>
+<span id="cb7-14"><span class="co"># For a lighter-weight equivalent without full SageMaker</span></span>
+<span id="cb7-15"><span class="co"># Projects overhead, a SageMaker Pipeline captures the</span></span>
+<span id="cb7-16"><span class="co"># stages directly in code:</span></span>
+<span id="cb7-17"><span class="co"># from sagemaker.workflow.pipeline import Pipeline</span></span>
+<span id="cb7-18"><span class="co"># pipeline = Pipeline(</span></span>
+<span id="cb7-19"><span class="co">#     name="churn-lifecycle-pipeline",</span></span>
+<span id="cb7-20"><span class="co">#     # mirrors stages 3-6</span></span>
+<span id="cb7-21"><span class="co">#     steps=[</span></span>
+<span id="cb7-22"><span class="co">#         data_prep_step, train_step, eval_step, register_step</span></span>
+<span id="cb7-23"><span class="co">#     ],</span></span>
+<span id="cb7-24"><span class="co"># )</span></span></code></pre></div>
+<p><strong>When to prefer SageMaker Projects:</strong> once a project has moved from “one person’s notebook” to “a system with a defined deployment and monitoring owner”, i.e., once it has cleared its own pre-mortem and is heading to production. Don’t provision full MLOps scaffolding for stage-1/2 exploratory work.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="10.6">
+<h2 data-number="10.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">10.6</span> History and Further Reading</h2>
+<p>The original CRISP-DM paper by Wirth and Hipp remains the most widely cited process framework in the field. It’s worth reading in full, even though it predates the operational emphasis this chapter argues for. Microsoft’s public documentation on the Team Data Science Process is the closest published equivalent to this chapter’s own stage structure, particularly its explicit treatment of deployment and monitoring as first-class stages rather than afterthoughts. Thakur’s opening chapter gives a practitioner’s ground-level view of what a data science project looks like day to day, complementing this chapter’s more structural framing <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Burkov’s first chapter, read alongside this one, gives the formal anatomy of a supervised learning project that this chapter’s Stage 3-5 sequence builds directly on <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019, 1–15</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="10.7">
+<h2 data-number="10.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">10.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/classical-data-science/ch02-business-problem-framing" class="quarto-xref"><span>Chapter 2</span></a>, which is where the lifecycle starts and which gets revisited every time the lifecycle loops back. It also builds on Chapter 9, whose EDA structure fills stage 2. It enables Book 2’s chapters on experiment tracking, deployment, MLOps, and monitoring, pointing ahead to why each of those exists and where it fits before any of them are covered in depth. It is often confused with a project plan or Gantt chart. But the lifecycle is not a schedule. It is a project state machine, detailing what states a project can be in and how it moves between them. Two projects following the exact same lifecycle can take a week or a year, depending on how many loops back they need.</p>
+</section>
+<section id="exercises" class="level2" data-number="10.8">
+<h2 data-number="10.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">10.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-10-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the eight lifecycle stages in order. For each, name one chapter (or block of chapters) in this book where that stage’s skills live.</p></li>
+<li id="ex-10-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in two or three sentences why the textbook left-to-right pipeline diagram is misleading, using at least one concrete example of a backward loop from this chapter.</p></li>
+<li id="ex-10-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-triage" class="quarto-xref">Listing&nbsp;<span>10.3</span></a>, construct an <code>ask</code> dictionary describing a hypothetical stakeholder request where <code>historical_labelled_data_exists</code> is <code>False</code>. Report what the function returns, and why that’s the correct triage outcome.</p></li>
+<li id="ex-10-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-baselines" class="quarto-xref">Listing&nbsp;<span>10.6</span></a>’ logic as a model, compute what accuracy the naive “predict majority class” baseline would score on a dataset with a 3% positive rate. Explain why that number is a poor argument for using the naive baseline in production.</p></li>
+<li id="ex-10-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> The tutorial’s logistic regression achieved AUC-ROC of approximately 0.638 but failed to meet the precision/recall target from Stage 1. Using this chapter’s Stage 5 discussion, name the two specific stages the project should loop back to. For each, give one concrete change that might close the gap.</p></li>
+<li id="ex-10-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Rewrite the tutorial’s Stage 6 deployment plan for a scenario where the business owner instead wants real-time scoring at the moment a customer contacts support, rather than nightly batch scoring. What changes about the serving pattern, the latency budget, and the rollback plan?</p></li>
+<li id="ex-10-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team tells you they “follow CRISP-DM,” but their retrospectives show every project has shipped a model that was never revisited after deployment. Using this chapter’s Framework Comparison discussion, explain which stage CRISP-DM under-specifies that likely explains this pattern. Explain what TDSP would have required instead.</p></li>
+<li id="ex-10-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the original CRISP-DM paper (Wirth &amp; Hipp, 2000) or the Microsoft TDSP documentation. Compare its treatment of “iteration” to this chapter’s Stage 8. Does the source treat iteration as a distinct, named stage with its own deliverable, or as an implicit property of the whole process? What does that difference suggest about how seriously each framework takes the “loop back” problem?</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="10.9">
+<h2 data-number="10.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">10.9</span> Mental Model</h2>
+<p>The data science lifecycle is not a straight road walked once. It is a loop walked many times. The skill is knowing which stage you are in now versus which stage you <em>think</em> you are in. If a model’s metrics look great but nobody agreed on what “great” means for the business, the project is still in stage 1. No matter how much modelling code has been written. If a model is in production but no one is watching it, the project is not done. It just hasn’t discovered it’s back at the beginning.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-robertson2012mastering" class="csl-entry" role="listitem">
+Robertson, Suzanne, and James Robertson. 2012. <em>Mastering the Requirements Process: Getting Requirements Right</em>. 3rd ed. Addison-Wesley.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

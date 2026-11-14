@@ -1,0 +1,266 @@
+<p>Before transformers, working with text felt like working with a different data type than numbers, because it was. A spreadsheet column of integers feeds into a model without a second thought. A column of customer reviews, legal clauses, or support tickets does not. The field spent decades developing techniques to bridge that gap: turn words into numbers in ways that preserve enough meaning to be useful. Understanding those techniques still matters, not as history, but because TF-IDF and classical NLP solve many enterprise text problems faster and cheaper than an LLM. The concepts here, tokens, embeddings, similarity, are exactly what’s needed to understand transformers, RAG, and fine-tuning in the chapters ahead.</p>
+<section id="motivation" class="level2" data-number="27.1">
+<h2 data-number="27.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">27.1</span> Motivation</h2>
+<p>There are three progressively smarter ways to represent text as numbers. Every technique in this chapter is a variation on one of them. Bag of words counts how many times each word appears in a document, ignoring order entirely. <code>"the cat sat on the mat"</code> becomes <code>{the: 2, cat: 1, sat: 1, on: 1, mat: 1}</code>. It loses grammar and word order, which sounds disastrous, but works surprisingly well for classification tasks where word <em>presence</em> matters more than sequence. Its failure mode is that common words like “the”, “a”, “is” dominate every document’s vector regardless of topic. That motivates TF-IDF. Pretrained word embeddings solve a different failure mode entirely. Bag-of-words and TF-IDF both treat “car” and “automobile” as unrelated dimensions, even though they mean the same thing.</p>
+</section>
+<section id="exposition" class="level2" data-number="27.2">
+<h2 data-number="27.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">27.2</span> Exposition</h2>
+<section id="tf-idf" class="level3" data-number="27.2.1">
+<h3 data-number="27.2.1" class="anchored" data-anchor-id="tf-idf"><span class="header-section-number">27.2.1</span> TF-IDF</h3>
+<p>TF-IDF (Term Frequency–Inverse Document Frequency) is bag of words with a reweighting step. The weight of a word in a document is TF × IDF, where TF is the count of the word in that document divided by the document’s total word count, and IDF is <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>log</mi><mo>⁡</mo><mo stretchy="false">(</mo><mi>N</mi><mi mathvariant="normal">/</mi><mtext>df</mtext><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">\log(N / \text{df})</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord">/</span><span class="mord text"><span class="mord">df</span></span><span class="mclose">)</span></span></span></span>: the log of the total document count over the number of documents containing that word. Words that appear in every document get an IDF near zero (since <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>log</mi><mo>⁡</mo><mo stretchy="false">(</mo><mi>N</mi><mi mathvariant="normal">/</mi><mi>N</mi><mo stretchy="false">)</mo><mo>=</mo><mn>0</mn></mrow><annotation encoding="application/x-tex">\log(N/N) = 0</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mord">/</span><span class="mord mathnormal" style="margin-right:0.109em;">N</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0</span></span></span></span>). Words that appear in only a few documents get a high IDF. The net effect: common words are downweighted, rare-but-informative words are upweighted. TF-IDF is still used in production today. For topic modelling, keyword extraction, and document similarity, it’s faster, cheaper, and more interpretable than any neural approach, and Worked Example 27 below measures exactly how competitive it remains.</p>
+</section>
+<section id="word-embeddings-and-the-distributional-hypothesis" class="level3" data-number="27.2.2">
+<h3 data-number="27.2.2" class="anchored" data-anchor-id="word-embeddings-and-the-distributional-hypothesis"><span class="header-section-number">27.2.2</span> Word Embeddings and the Distributional Hypothesis</h3>
+<p>Word embeddings represent each word as a dense vector in a continuous space (typically 50–300 dimensions), trained so that words with similar meanings end up close together. The training signal comes from context: “You shall know a word by the company it keeps” (Firth, 1957). Words that appear near the same neighbours tend to mean similar things. Word2Vec (Mikolov et al., 2013) formalised this into two efficient training objectives (Skip-gram: predict context from word; CBOW: predict word from context). GloVe (Pennington et al., 2014) instead trains on a corpus-wide word co-occurrence matrix. Both produce a geometric space where vector arithmetic captures analogy: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mover accent="true"><mtext>king</mtext><mo>⃗</mo></mover><mo>−</mo><mover accent="true"><mtext>man</mtext><mo>⃗</mo></mover><mo>+</mo><mover accent="true"><mtext>woman</mtext><mo>⃗</mo></mover><mo>≈</mo><mover accent="true"><mtext>queen</mtext><mo>⃗</mo></mover></mrow><annotation encoding="application/x-tex">\vec{\text{king}} - \vec{\text{man}} + \vec{\text{woman}} \approx \vec{\text{queen}}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.1719em;vertical-align:-0.1944em;"></span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.9774em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord text"><span class="mord">king</span></span></span><span style="top:-3.2634em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2355em;"><span class="katex-overlay" style="height:0.714em;width:0.471em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.471em" height="0.714em" style="width:0.471em" viewBox="0 0 471 714" preserveAspectRatio="xMinYMin"><path d="M377 20c0-5.333 1.833-10 5.5-14S391 0 397 0c4.667 0 8.667 1.667 12 5
+3.333 2.667 6.667 9 10 19 6.667 24.667 20.333 43.667 41 57 7.333 4.667 11
+10.667 11 18 0 6-1 10-3 12s-6.667 5-14 9c-28.667 14.667-53.667 35.667-75 63
+-1.333 1.333-3.167 3.5-5.5 6.5s-4 4.833-5 5.5c-1 .667-2.5 1.333-4.5 2s-4.333 1
+-7 1c-4.667 0-9.167-1.833-13.5-5.5S337 184 337 178c0-12.667 15.667-32.333 47-59
+H213l-171-1c-8.667-6-13-12.333-13-19 0-4.667 4.333-11.333 13-20h359
+c-16-25.333-24-45-24-59z"></path></svg></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.7973em;vertical-align:-0.0833em;"></span><span class="mord katex-accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.714em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord text"><span class="mord">man</span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2355em;"><span class="katex-overlay" style="height:0.714em;width:0.471em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.471em" height="0.714em" style="width:0.471em" viewBox="0 0 471 714" preserveAspectRatio="xMinYMin"><path d="M377 20c0-5.333 1.833-10 5.5-14S391 0 397 0c4.667 0 8.667 1.667 12 5
+3.333 2.667 6.667 9 10 19 6.667 24.667 20.333 43.667 41 57 7.333 4.667 11
+10.667 11 18 0 6-1 10-3 12s-6.667 5-14 9c-28.667 14.667-53.667 35.667-75 63
+-1.333 1.333-3.167 3.5-5.5 6.5s-4 4.833-5 5.5c-1 .667-2.5 1.333-4.5 2s-4.333 1
+-7 1c-4.667 0-9.167-1.833-13.5-5.5S337 184 337 178c0-12.667 15.667-32.333 47-59
+H213l-171-1c-8.667-6-13-12.333-13-19 0-4.667 4.333-11.333 13-20h359
+c-16-25.333-24-45-24-59z"></path></svg></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.714em;"></span><span class="mord katex-accent"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.714em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord text"><span class="mord">woman</span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2355em;"><span class="katex-overlay" style="height:0.714em;width:0.471em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.471em" height="0.714em" style="width:0.471em" viewBox="0 0 471 714" preserveAspectRatio="xMinYMin"><path d="M377 20c0-5.333 1.833-10 5.5-14S391 0 397 0c4.667 0 8.667 1.667 12 5
+3.333 2.667 6.667 9 10 19 6.667 24.667 20.333 43.667 41 57 7.333 4.667 11
+10.667 11 18 0 6-1 10-3 12s-6.667 5-14 9c-28.667 14.667-53.667 35.667-75 63
+-1.333 1.333-3.167 3.5-5.5 6.5s-4 4.833-5 5.5c-1 .667-2.5 1.333-4.5 2s-4.333 1
+-7 1c-4.667 0-9.167-1.833-13.5-5.5S337 184 337 178c0-12.667 15.667-32.333 47-59
+H213l-171-1c-8.667-6-13-12.333-13-19 0-4.667 4.333-11.333 13-20h359
+c-16-25.333-24-45-24-59z"></path></svg></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">≈</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.9084em;vertical-align:-0.1944em;"></span><span class="mord katex-accent"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.714em;"><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="mord text"><span class="mord">queen</span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span class="accent-body" style="left:-0.2355em;"><span class="katex-overlay" style="height:0.714em;width:0.471em;"><svg xmlns="http://www.w3.org/2000/svg" width="0.471em" height="0.714em" style="width:0.471em" viewBox="0 0 471 714" preserveAspectRatio="xMinYMin"><path d="M377 20c0-5.333 1.833-10 5.5-14S391 0 397 0c4.667 0 8.667 1.667 12 5
+3.333 2.667 6.667 9 10 19 6.667 24.667 20.333 43.667 41 57 7.333 4.667 11
+10.667 11 18 0 6-1 10-3 12s-6.667 5-14 9c-28.667 14.667-53.667 35.667-75 63
+-1.333 1.333-3.167 3.5-5.5 6.5s-4 4.833-5 5.5c-1 .667-2.5 1.333-4.5 2s-4.333 1
+-7 1c-4.667 0-9.167-1.833-13.5-5.5S337 184 337 178c0-12.667 15.667-32.333 47-59
+H213l-171-1c-8.667-6-13-12.333-13-19 0-4.667 4.333-11.333 13-20h359
+c-16-25.333-24-45-24-59z"></path></svg></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.1944em;"><span></span></span></span></span></span></span></span></span>. This isn’t magic. It’s what emerges from training on enough text that co-occurrence statistics encode relational structure. Worked Example 27 reproduces this analogy directly against a real pretrained embedding table, not as an assertion to take on faith.</p>
+</section>
+<section id="subword-tokenization" class="level3" data-number="27.2.3">
+<h3 data-number="27.2.3" class="anchored" data-anchor-id="subword-tokenization"><span class="header-section-number">27.2.3</span> Subword Tokenization</h3>
+<p>Word embeddings and TF-IDF both assume a fixed vocabulary, decided in advance. Every word gets its own row in a table. That breaks the moment a document contains a word the vocabulary never saw: a rare technical term, a typo, a name, a word in another language. This is the out-of-vocabulary (OOV) problem. The usual fix, a generic <code>&lt;unk&gt;</code> token, discards whatever signal that word carried.</p>
+<p>Subword tokenization sidesteps OOV entirely by building the vocabulary out of pieces smaller than whole words. <strong>Byte-Pair Encoding (BPE)</strong> starts from individual characters and repeatedly merges the most frequent adjacent pair into a new token, thousands of times, until reaching a target vocabulary size. Common words end up as a single token (“the” stays “the”). Rare or unseen words split into recognisable pieces (“tokenization” might become “token” + “ization”). There is no OOV problem left. Any string, however unfamiliar, decomposes into some sequence of known subword pieces, worst case falling back to individual bytes or characters. <strong>WordPiece</strong> (used by BERT) and <strong>SentencePiece</strong> (used by many multilingual and modern LLM tokenizers) follow the same idea with different merge criteria. SentencePiece additionally drops the assumption that whitespace marks word boundaries, which matters for languages that don’t separate words with spaces at all.</p>
+<p>This is the actual mechanism <code>AutoTokenizer</code> runs when it turns a string into token IDs (Chapter 29). It’s also why LLM pricing and context limits are measured in tokens rather than words or characters. A token is whatever the model’s subword vocabulary says it is, whole word, word fragment, or punctuation mark, all counted the same way.</p>
+<p>Tokenization also underlies the oldest way of scoring a language model. An n-gram model estimates the probability of the next token from the previous <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>n</mi><mo>−</mo><mn>1</mn></mrow><annotation encoding="application/x-tex">n-1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal">n</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">1</span></span></span></span> tokens by counting how often that sequence appeared in a training corpus. <strong>Perplexity</strong>, the exponentiated average negative log-likelihood the model assigns to held-out text, measures how well any language model, n-gram or transformer, predicts text it wasn’t trained on. Lower perplexity means the model was less “surprised” by the real continuation. Chapter 33’s Worked Example computes this directly against a real model rather than stating it abstractly.</p>
+</section>
+<section id="the-bridge-to-transformers" class="level3" data-number="27.2.4">
+<h3 data-number="27.2.4" class="anchored" data-anchor-id="the-bridge-to-transformers"><span class="header-section-number">27.2.4</span> The Bridge to Transformers</h3>
+<p>Word embeddings are <em>static</em>. “Bank” has the same vector whether the sentence is about a river or a loan. Transformers (<a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a>) replace this with contextual embeddings, where a word’s representation depends on its surrounding words. That’s the key advance. But the underlying idea, words as points in a semantic space where distance means similarity, is unchanged. Transformers compute it dynamically via attention instead of storing it in a static lookup table.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="27.3">
+<h2 data-number="27.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">27.3</span> Trade-offs and Limits</h2>
+<p>TF-IDF is fast to compute, trivial to interpret (which features fire tells you which words mattered), needs no GPU, and runs on a laptop across millions of documents in seconds. It’s the right default for keyword search, topic classification, and spam detection. It breaks down when synonymy matters (“car” and “automobile” share no dimension), when word order changes meaning (“not good” vs.&nbsp;“good”), or when documents are very short. Word embeddings fix the synonymy problem and give genuine semantic similarity, which matters for retrieval and for feeding downstream neural models. But the dense vectors aren’t human-readable. General-purpose embeddings represent specialised domain vocabulary (medical, legal, code) poorly. Averaging word vectors into a document vector, the simplest way to get one, throws away word order just as thoroughly as bag of words did. Worked Example 27 shows this last trade-off is not theoretical. On a real classification task, naive embedding averaging measurably underperforms TF-IDF.</p>
+</section>
+<section id="procedures" class="level2" data-number="27.4">
+<h2 data-number="27.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">27.4</span> Procedures</h2>
+<p id="proc-27-1"><strong>Procedure 27.1 (Build a Text Preprocessing Pipeline).</strong> <em>When to use:</em> before feeding any text into a model, every time, on both training and inference paths.</p>
+<div id="lst-nlp-preprocess" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nlp-preprocess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;27.1: Lowercase, tokenise, strip stopwords, lemmatise
+</figcaption>
+<div aria-describedby="lst-nlp-preprocess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">from</span> nltk.corpus <span class="im">import</span> stopwords</span>
+<span id="cb1-2"><span class="im">from</span> nltk.stem <span class="im">import</span> WordNetLemmatizer</span>
+<span id="cb1-3"><span class="im">from</span> nltk.tokenize <span class="im">import</span> word_tokenize</span>
+<span id="cb1-4"></span>
+<span id="cb1-5">stop_words <span class="op">=</span> <span class="bu">set</span>(stopwords.words(<span class="st">'english'</span>))</span>
+<span id="cb1-6">lemmatizer <span class="op">=</span> WordNetLemmatizer()</span>
+<span id="cb1-7"></span>
+<span id="cb1-8"><span class="kw">def</span> preprocess(text):</span>
+<span id="cb1-9">    text <span class="op">=</span> text.lower()</span>
+<span id="cb1-10">    tokens <span class="op">=</span> word_tokenize(text)</span>
+<span id="cb1-11">    tokens <span class="op">=</span> [</span>
+<span id="cb1-12">        t <span class="cf">for</span> t <span class="kw">in</span> tokens <span class="cf">if</span> t.isalpha() <span class="kw">and</span> t <span class="kw">not</span> <span class="kw">in</span> stop_words</span>
+<span id="cb1-13">    ]</span>
+<span id="cb1-14">    tokens <span class="op">=</span> [lemmatizer.lemmatize(t) <span class="cf">for</span> t <span class="kw">in</span> tokens]</span>
+<span id="cb1-15">    <span class="cf">return</span> <span class="st">' '</span>.join(tokens)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> applying preprocessing to training data but forgetting to apply the <em>identical</em> function to test data and new documents at inference time. Wrap it in a function and call it everywhere, never inline the steps twice.</p>
+<p id="proc-27-2"><strong>Procedure 27.2 (Vectorise Text with TF-IDF).</strong> <em>When to use:</em> classification, clustering, or similarity search where bag-of-words signal is sufficient.</p>
+<div id="lst-nlp-tfidf" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nlp-tfidf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;27.2: TfidfVectorizer: fit on train, transform on test
+</figcaption>
+<div aria-describedby="lst-nlp-tfidf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sklearn.feature_extraction.text <span class="im">import</span> TfidfVectorizer</span>
+<span id="cb2-2"></span>
+<span id="cb2-3">vectorizer <span class="op">=</span> TfidfVectorizer(</span>
+<span id="cb2-4">    max_features<span class="op">=</span><span class="dv">20_000</span>, ngram_range<span class="op">=</span>(</span>
+<span id="cb2-5">        <span class="dv">1</span>,</span>
+<span id="cb2-6">        <span class="dv">2</span>,</span>
+<span id="cb2-7">    ), min_df<span class="op">=</span><span class="dv">2</span>, sublinear_tf<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb2-8">)</span>
+<span id="cb2-9"><span class="co"># fit on train</span></span>
+<span id="cb2-10">X_train <span class="op">=</span> vectorizer.fit_transform(train_docs)</span>
+<span id="cb2-11"><span class="co"># transform test: never fit_transform here</span></span>
+<span id="cb2-12">X_test  <span class="op">=</span> vectorizer.transform(test_docs)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Key rule:</strong> always <code>.fit_transform()</code> on training data and <code>.transform()</code> (never <code>.fit_transform()</code>) on test data. Fitting the vocabulary/IDF table on test data leaks information about the test set into training.</p>
+<p id="proc-27-3"><strong>Procedure 27.3 (Build a Text Classification Pipeline).</strong> <em>When to use:</em> bundling preprocessing, vectorisation, and a model as one fit/predict unit, so cross-validation handles the whole thing correctly.</p>
+<div id="lst-nlp-pipeline" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nlp-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;27.3: A single Pipeline object: raw text in, predictions out
+</figcaption>
+<div aria-describedby="lst-nlp-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> sklearn.pipeline <span class="im">import</span> Pipeline</span>
+<span id="cb3-2"><span class="im">from</span> sklearn.linear_model <span class="im">import</span> LogisticRegression</span>
+<span id="cb3-3"></span>
+<span id="cb3-4">pipeline <span class="op">=</span> Pipeline([</span>
+<span id="cb3-5">    (</span>
+<span id="cb3-6">        <span class="st">'tfidf'</span>,</span>
+<span id="cb3-7">        TfidfVectorizer(</span>
+<span id="cb3-8">            max_features<span class="op">=</span><span class="dv">20_000</span>,</span>
+<span id="cb3-9">            ngram_range<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">2</span>),</span>
+<span id="cb3-10">            stop_words<span class="op">=</span><span class="st">'english'</span>,</span>
+<span id="cb3-11">        ),</span>
+<span id="cb3-12">    ),</span>
+<span id="cb3-13">    (<span class="st">'clf'</span>,   LogisticRegression(max_iter<span class="op">=</span><span class="dv">1000</span>, C<span class="op">=</span><span class="fl">1.0</span>)),</span>
+<span id="cb3-14">])</span>
+<span id="cb3-15">pipeline.fit(X_train_raw, y_train)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-27-4"><strong>Procedure 27.4 (Load and Query Pretrained Word Embeddings).</strong> <em>When to use:</em> exploring semantic relationships, or building the simplest possible document embedding.</p>
+<div id="lst-nlp-embed-load" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nlp-embed-load-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;27.4: Loading a GloVe vector table and querying it
+</figcaption>
+<div aria-describedby="lst-nlp-embed-load-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># emb: dict[str, np.ndarray], loaded from a GloVe .txt/.gz release</span></span>
+<span id="cb4-2"><span class="co"># shape: (50,)</span></span>
+<span id="cb4-3">vector <span class="op">=</span> emb[<span class="st">'hospital'</span>]</span>
+<span id="cb4-4"><span class="co"># always check membership first</span></span>
+<span id="cb4-5"><span class="cf">if</span> <span class="st">'someword'</span> <span class="kw">in</span> emb:</span>
+<span id="cb4-6">    vec <span class="op">=</span> emb[<span class="st">'someword'</span>]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-27-5"><strong>Procedure 27.5 (Build Document Embeddings by Averaging).</strong> <em>When to use:</em> the simplest way to get one vector per document from word vectors.</p>
+<div id="lst-nlp-doc-embed" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nlp-doc-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;27.5: Mean-pooling word vectors into a document vector
+</figcaption>
+<div aria-describedby="lst-nlp-doc-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb5-2"></span>
+<span id="cb5-3"><span class="kw">def</span> doc_embedding(text, emb, dim<span class="op">=</span><span class="dv">50</span>):</span>
+<span id="cb5-4">    tokens <span class="op">=</span> text.lower().split()</span>
+<span id="cb5-5">    vectors <span class="op">=</span> [emb[t] <span class="cf">for</span> t <span class="kw">in</span> tokens <span class="cf">if</span> t <span class="kw">in</span> emb]</span>
+<span id="cb5-6">    <span class="cf">return</span> np.mean(</span>
+<span id="cb5-7">        vectors,</span>
+<span id="cb5-8">        axis<span class="op">=</span><span class="dv">0</span>,</span>
+<span id="cb5-9">    ) <span class="cf">if</span> vectors <span class="cf">else</span> np.zeros(dim, dtype<span class="op">=</span>np.float32)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Limitation:</strong> mean-pooling discards word order entirely, same as bag of words. For short documents the averaged signal is weak; sentence-transformers (<a href="/books/modern-ai/ch31-rag-vector-databases" class="quarto-xref"><span>Chapter 31</span></a>) train a model specifically to produce good single-vector document embeddings rather than pooling word vectors after the fact.</p>
+</section>
+<section id="worked-example" class="level2" data-number="27.5">
+<h2 data-number="27.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">27.5</span> Worked Example</h2>
+<p>Four categories from the 20 Newsgroups dataset, <code>comp.graphics</code>, <code>rec.sport.hockey</code>, <code>sci.med</code>, <code>sci.space</code>, give 3,949 documents total, split 75/25 stratified (2,961 train / 988 test). Two representations were built head-to-head on the identical split: TF-IDF (Procedure 27.2, unigrams+bigrams, <code>max_features=20,000</code>, English stopwords removed) feeding a Logistic Regression, versus 50-dimensional GloVe vectors (<code>glove-wiki-gigaword-50</code>, 400,000-word vocabulary) mean-pooled per document (Procedure 27.5) feeding an identical Logistic Regression.</p>
+<div id="lst-nlp-worked-tfidf" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nlp-worked-tfidf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;27.6: Fitting the TF-IDF baseline
+</figcaption>
+<div aria-describedby="lst-nlp-worked-tfidf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">vec <span class="op">=</span> TfidfVectorizer(</span>
+<span id="cb6-2">    max_features<span class="op">=</span><span class="dv">20000</span>,</span>
+<span id="cb6-3">    ngram_range<span class="op">=</span>(<span class="dv">1</span>, <span class="dv">2</span>),</span>
+<span id="cb6-4">    min_df<span class="op">=</span><span class="dv">2</span>,</span>
+<span id="cb6-5">    sublinear_tf<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-6">    stop_words<span class="op">=</span><span class="st">'english'</span>,</span>
+<span id="cb6-7">)</span>
+<span id="cb6-8">X_train <span class="op">=</span> vec.fit_transform(X_train_raw)</span>
+<span id="cb6-9">clf <span class="op">=</span> LogisticRegression(max_iter<span class="op">=</span><span class="dv">1000</span>, C<span class="op">=</span><span class="fl">1.0</span>)</span>
+<span id="cb6-10">clf.fit(X_train, y_train)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>TF-IDF scored <strong>macro-F1 = 0.9074</strong> (91% accuracy), training and evaluating in 4.9 seconds end to end. The top TF-IDF features per class are exactly the words a human would pick by hand: <code>comp.graphics → graphics, 3d, file, image, computer</code>; <code>rec.sport.hockey → game, hockey, team, games, nhl</code>; <code>sci.med → doctor, medical, disease, msg, pain</code>; <code>sci.space → space, orbit, nasa, earth, moon</code>. This is TF-IDF’s interpretability advantage made concrete. The model’s reasoning is legible by inspecting <code>coef_</code>.</p>
+<div id="lst-nlp-worked-embed" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nlp-worked-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;27.7: Mean-pooled GloVe-50 features, identical classifier
+</figcaption>
+<div aria-describedby="lst-nlp-worked-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">Xtr_emb <span class="op">=</span> np.array(</span>
+<span id="cb7-2">    [doc_embedding(t, emb, <span class="dv">50</span>) <span class="cf">for</span> t <span class="kw">in</span> X_train_raw]</span>
+<span id="cb7-3">)</span>
+<span id="cb7-4">clf2 <span class="op">=</span> LogisticRegression(</span>
+<span id="cb7-5">    max_iter<span class="op">=</span><span class="dv">1000</span>,</span>
+<span id="cb7-6">    C<span class="op">=</span><span class="fl">1.0</span>,</span>
+<span id="cb7-7">).fit(Xtr_emb, y_train)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The mean-pooled GloVe-50 representation scored <strong>macro-F1 = 0.8327</strong>, nearly 7.5 points lower than TF-IDF, on the same split, same classifier, same evaluation. This is not a close result. It’s the opposite of what “embeddings are the more advanced technique” might lead someone to assume. On a topic-classification task where the discriminating signal is specific vocabulary (<code>nhl</code>, <code>orbit</code>, <code>3d</code>), TF-IDF’s sparse, high-dimensional, exact-word-match representation preserves that signal directly, while averaging 50-dimensional word vectors blurs a document with 200 words containing three topic-defining nouns into a vector dominated by the other 197 generic words. This is Trade-offs and Limits’ warning made measurable rather than theoretical. Embeddings are not a strict upgrade over TF-IDF. They are a different tool, better suited to semantic similarity and retrieval than to topic classification with a clear, discriminating vocabulary.</p>
+<p>The analogy arithmetic from Exposition holds on the same 400,000-word GloVe table used for the classification comparison above:</p>
+<div id="lst-nlp-worked-analogy" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nlp-worked-analogy-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;27.8: king - man + woman, searched against all 400,000 vectors
+</figcaption>
+<div aria-describedby="lst-nlp-worked-analogy-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1">v <span class="op">=</span> emb[<span class="st">'king'</span>] <span class="op">-</span> emb[<span class="st">'man'</span>] <span class="op">+</span> emb[<span class="st">'woman'</span>]</span>
+<span id="cb8-2"><span class="co"># cosine-similarity search over the full vocabulary, excluding the</span></span>
+<span id="cb8-3"><span class="co"># three input words</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This returns, in order: <code>queen</code> (cosine similarity 0.861), <code>daughter</code> (0.768), <code>prince</code> (0.764), <code>throne</code> (0.763), <code>princess</code> (0.751). <code>queen</code> is the top result, exactly as Exposition claimed, not a cherry-picked example. <code>paris - france + italy</code> returns <code>rome</code> (0.838) as the top result, followed by <code>milan</code>, <code>turin</code>, <code>venice</code>, <code>madrid</code>: every one of the top five a real Italian or nearby-European city. That’s the geometry of co-occurrence statistics doing genuine work, not a coincidence of one lucky query.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="27.6">
+<h2 data-number="27.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">27.6</span> History and Further Reading</h2>
+<p>Burkov, Ch. 5, covers classical text feature representations in more depth than this chapter’s scope <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Mikolov et al.’s original Word2Vec paper <span class="citation" data-cites="mikolov2013word2vec">(<a href="#ref-mikolov2013word2vec" role="doc-biblioref">Mikolov et al. 2013</a>)</span> and Pennington et al.’s GloVe paper <span class="citation" data-cites="pennington2014glove">(<a href="#ref-pennington2014glove" role="doc-biblioref">Pennington et al. 2014</a>)</span> are both short and worth reading directly for the training objectives this chapter states without deriving. Burkov’s <em>Hundred-Page Language Models Book</em>, Ch. 2, covers bag-of-words, word embeddings, byte-pair encoding, and count-based language models from the ground up, the direct prerequisite to the neural language models Chapter 29 builds on <span class="citation" data-cites="burkov2025hundredpagellm">(<a href="#ref-burkov2025hundredpagellm" role="doc-biblioref">Burkov 2025</a>)</span>. Tunstall, von Werra, and Wolf’s <em>Natural Language Processing with Transformers</em>, Ch. 1, tours the same task landscape this chapter surveys (classification, NER, question answering, summarisation, generation) from the applied, Hugging Face-first angle <span class="citation" data-cites="tunstall2022nlptransformers">(<a href="#ref-tunstall2022nlptransformers" role="doc-biblioref">Tunstall et al. 2022</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="27.7">
+<h2 data-number="27.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">27.7</span> How This Connects</h2>
+<p>This chapter builds on Book 1’s supervised learning chapters (the classifiers used throughout are unchanged from earlier chapters, only the feature representation is new) and the pandas/Python foundations from Book 1. It enables <a href="/books/modern-ai/ch28-intro-neural-networks" class="quarto-xref"><span>Chapter 28</span></a>, where a neural network learns its own embeddings rather than using a fixed pretrained table, and <a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a>, which replaces static embeddings with contextual ones computed dynamically. It’s often confused with sentence embeddings. Word2Vec and GloVe give one vector per <em>word</em>. Retrieval systems need one vector per <em>document</em> or <em>sentence</em>, which requires a model trained for that purpose directly (<a href="/books/modern-ai/ch31-rag-vector-databases" class="quarto-xref"><span>Chapter 31</span></a>), not word-vector averaging as done in this chapter’s second Worked Example.</p>
+</section>
+<section id="exercises" class="level2" data-number="27.8">
+<h2 data-number="27.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">27.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-27-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Write the TF-IDF formula and explain, in one sentence, why a word appearing in every document in the corpus gets a weight of exactly zero.</p></li>
+<li id="ex-27-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the one-sentence rule for when to call <code>.fit_transform()</code> versus <code>.transform()</code> on a <code>TfidfVectorizer</code>, and what goes wrong if the rule is violated.</p></li>
+<li id="ex-27-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-nlp-worked-tfidf" class="quarto-xref">Listing&nbsp;<span>27.6</span></a> and <a href="#lst-nlp-worked-embed" class="quarto-xref">Listing&nbsp;<span>27.7</span></a>’s measured results (macro-F1 0.9074 vs.&nbsp;0.8327 on the same 4-category split), explain in your own words why TF-IDF outperformed mean-pooled GloVe-50 here, and describe one type of task where you’d expect the ranking to flip.</p></li>
+<li id="ex-27-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-nlp-worked-analogy" class="quarto-xref">Listing&nbsp;<span>27.8</span></a>’s result for <code>king - man + woman</code> (top-5: queen, daughter, prince, throne, princess, with cosine similarities 0.861 down to 0.751), explain what the <em>gap</em> between the top result and the second result suggests about how unambiguous this particular analogy is in the embedding space.</p></li>
+<li id="ex-27-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague argues “word embeddings are strictly better than TF-IDF because they capture meaning.” Using this chapter’s Worked Example, write the two or three sentences you’d say in response.</p></li>
+<li id="ex-27-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 27.5’s <code>doc_embedding</code> returns a zero vector when none of a document’s tokens are in the embedding vocabulary. Explain one concrete way this could silently corrupt a downstream classifier’s training data, and one way to detect it happening.</p></li>
+<li id="ex-27-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about FastText’s subword embedding approach. Explain why it can produce a reasonable vector for a word never seen during training (e.g., “unhappiness”), when GloVe and Word2Vec, both used in this chapter, cannot.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="27.9">
+<h2 data-number="27.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">27.9</span> Mental Model</h2>
+<p>Text → Numbers → Model. The only real question is <em>which</em> numbers. Bag of words uses presence and absence. TF-IDF uses importance-weighted counts. Word embeddings use learned positions in a semantic space. This chapter’s Worked Example is the reminder that “smarter representation” doesn’t mean “always better.” The right choice depends on whether the task needs exact vocabulary matching or genuine semantic similarity. Measuring both, as done here, is the only way to know which one a specific task actually needs.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-burkov2025hundredpagellm" class="csl-entry" role="listitem">
+Burkov, Andriy. 2025. <em>The Hundred-Page Language Models Book</em>. True Positive Inc.
+</div>
+<div id="ref-mikolov2013word2vec" class="csl-entry" role="listitem">
+Mikolov, Tomas, Kai Chen, Greg Corrado, and Jeffrey Dean. 2013. <span>“Efficient Estimation of Word Representations in Vector Space.”</span> <em>arXiv Preprint arXiv:1301.3781</em>.
+</div>
+<div id="ref-pennington2014glove" class="csl-entry" role="listitem">
+Pennington, Jeffrey, Richard Socher, and Christopher Manning. 2014. <span>“GloVe: Global Vectors for Word Representation.”</span> <em>Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing</em> (Doha, Qatar), 1532–43.
+</div>
+<div id="ref-tunstall2022nlptransformers" class="csl-entry" role="listitem">
+Tunstall, Lewis, Leandro von Werra, and Thomas Wolf. 2022. <em>Natural Language Processing with Transformers: Building Language Applications with Hugging Face</em>. O’Reilly Media.
+</div>
+</div>
+</section>

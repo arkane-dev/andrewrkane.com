@@ -1,0 +1,354 @@
+<p>Python was not designed for data science. It won anyway. Not because of the language itself but because of the layered stack of libraries built on top of it. Each layer solves a specific problem the one below it doesn’t. NumPy makes numerical computation fast. pandas adds labels and structure to tabular data. matplotlib and seaborn turn tables into pictures. scipy supplies the statistical machinery. scikit-learn wraps every classical algorithm behind one consistent interface. None of these libraries are magic. Together they form the working vocabulary of everything that follows in this book. This chapter is a map of that stack: what each layer does, why it exists, and how the pieces compose.</p>
+<section id="motivation" class="level2" data-number="6.1">
+<h2 data-number="6.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">6.1</span> Motivation</h2>
+<p>Every later chapter in this book assumes fluency with this stack: not memorised syntax, but an understanding of which library to reach for and why. A Solutions Architect who understands the layering can diagnose problems quickly. A slow <code>for</code> loop over a NumPy array is immediately suspect. A sklearn <code>DataConversionWarning</code> is immediately traceable to array shape. A matplotlib customisation that seaborn’s API doesn’t expose is immediately solvable by dropping one level down. Without that mental model, the same problems turn into hours of aimless searching. The goal here isn’t full API coverage (<code>reference.md</code>-derived material for that lives in Appendix A). It’s the <em>why</em> behind the design of each layer, so the <em>what</em> becomes easy to look up when needed.</p>
+</section>
+<section id="exposition" class="level2" data-number="6.2">
+<h2 data-number="6.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">6.2</span> Exposition</h2>
+<section id="the-layered-stack" class="level3" data-number="6.2.1">
+<h3 data-number="6.2.1" class="anchored" data-anchor-id="the-layered-stack"><span class="header-section-number">6.2.1</span> The Layered Stack</h3>
+<p>The Python data science stack is layered. Each layer builds on the one below it. scikit-learn, XGBoost, and statsmodels sit at the top, providing ML algorithms. pandas sits below that, providing labelled tabular data. matplotlib, seaborn, and plotly provide visualisation. scipy provides general scientific computing. NumPy provides fast array operations. CPython, with its C extensions, is the engine underneath all of it.</p>
+<div id="fig-layered-stack" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-layered-stack-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch06/layered-stack.png" class="img-fluid figure-img" style="width:65.0%" alt="The Python data science stack: each layer builds on the one below it." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-layered-stack-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;6.1: The Python data science stack: each layer builds on the one below it.
+</figcaption>
+</figure>
+</div>
+<p>You don’t need to understand C to use NumPy. But you do need to understand NumPy to use pandas effectively. And you need pandas to use sklearn well. The abstractions are leaky in useful ways. pandas is built directly on NumPy arrays. Knowing that explains a great deal of pandas’ behaviour: why operations are fast, why <code>.values</code> and <code>.to_numpy()</code> exist, and why sklearn ultimately wants arrays, not DataFrames.</p>
+</section>
+<section id="numpy-fast-arrays" class="level3" data-number="6.2.2">
+<h3 data-number="6.2.2" class="anchored" data-anchor-id="numpy-fast-arrays"><span class="header-section-number">6.2.2</span> NumPy: Fast Arrays</h3>
+<p>Pure Python loops are slow for numerical work. Every iteration of <code>for item in my_list: result += item * 2</code> forces the interpreter to check the type of <code>item</code>, look up the <code>*</code> operator, allocate a new integer object, and manage garbage collection. That overhead dominates once a list reaches a million elements. NumPy solves this by storing data in contiguous blocks of memory with a single fixed type: a <code>float64</code> array is 64 bits per element, laid out in order. It implements operations on that memory in compiled C. That typically runs somewhere between 50 and 200 times faster than the equivalent Python loop, for simple elementwise operations like this.</p>
+<p>The feature that makes this usable rather than just fast is <strong>broadcasting</strong>: NumPy applies operations between arrays of matching or compatible shapes without an explicit loop. <code>array * 2</code>, <code>array_a + array_b</code>, <code>matrix @ vector</code> all work element-wise or via broadcasting rules. All of them run in compiled code.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>What Is Broadcasting?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Broadcasting is NumPy’s rule for combining arrays of different shapes without writing a loop to line them up by hand. The simplest case: <code>array + 5</code> adds 5 to every element. NumPy treats the single number 5 as if it were stretched into an array the same shape as <code>array</code>, without copying it in memory. The same idea extends to two arrays: adding a <code>(3,)</code> array to a <code>(4, 3)</code> array adds that one row to every one of the four rows. NumPy lines up their shapes from the right, and stretches any dimension that’s size 1, or missing, to match. Shapes that can’t be lined up this way raise a <code>ValueError</code>, loudly, rather than silently producing the wrong answer.</p>
+</div>
+</div>
+<p>Boolean indexing follows the same principle: <code>array[array &gt; threshold]</code> filters without a loop, by first constructing a boolean mask (<code>array &gt; threshold</code>) and then using it to select.</p>
+</section>
+<section id="pandas-labelled-tabular-data" class="level3" data-number="6.2.3">
+<h3 data-number="6.2.3" class="anchored" data-anchor-id="pandas-labelled-tabular-data"><span class="header-section-number">6.2.3</span> pandas: Labelled Tabular Data</h3>
+<p>NumPy arrays have no column names, no row labels, and no native concept of mixed types across columns. Every real dataset has all three. pandas supplies two structures on top of NumPy: a <strong>Series</strong>, a one-dimensional labelled array representing a single column, and a <strong>DataFrame</strong>, a two-dimensional labelled table whose columns can each hold a different type. The central concept is the <strong>index</strong>: every row carries a label, not just a position. That lets pandas align data from different sources automatically, support time-series-specific operations, and avoid the off-by-one errors that plague pure positional indexing. Because each column of a DataFrame is, under the hood, a NumPy array, pandas operations inherit NumPy’s speed. Any pandas Series can be dropped back down to a raw array with <code>.to_numpy()</code> whenever raw-array behaviour is needed.</p>
+</section>
+<section id="matplotlib-the-low-level-plotting-layer" class="level3" data-number="6.2.4">
+<h3 data-number="6.2.4" class="anchored" data-anchor-id="matplotlib-the-low-level-plotting-layer"><span class="header-section-number">6.2.4</span> matplotlib: The Low-Level Plotting Layer</h3>
+<p>matplotlib is the foundation of Python visualisation, and is deliberately imperative. It gives precise control over every element of a plot: axes, ticks, labels, colours, line styles, text. But it requires each of them to be spelled out, step by step. Every other visualisation library in the stack is built on top of it. When seaborn returns a plot, it is returning a matplotlib figure. When pandas’ <code>.plot()</code> is called, it is calling matplotlib internally. Fluency with matplotlib means any chart, regardless of which higher-level library generated it, can always be customised further.</p>
+</section>
+<section id="seaborn-statistical-visualisation" class="level3" data-number="6.2.5">
+<h3 data-number="6.2.5" class="anchored" data-anchor-id="seaborn-statistical-visualisation"><span class="header-section-number">6.2.5</span> seaborn: Statistical Visualisation</h3>
+<p>seaborn is a high-level wrapper around matplotlib, purpose-built for statistical data visualisation. It understands DataFrames natively, ships with better-looking defaults, and has built-in support for the chart types data scientists reach for constantly: distribution plots, regression plots, categorical comparisons, heatmaps, pairplots. In practice, matplotlib is for <em>drawing</em>, seaborn is for <em>exploring data</em>. For exploratory data analysis, seaborn is almost always the right starting point. For fine-grained custom charts, dropping to matplotlib is the right move.</p>
+</section>
+<section id="scipy-scientific-computing" class="level3" data-number="6.2.6">
+<h3 data-number="6.2.6" class="anchored" data-anchor-id="scipy-scientific-computing"><span class="header-section-number">6.2.6</span> scipy: Scientific Computing</h3>
+<p>scipy sits alongside NumPy and supplies algorithms that pure array operations can’t handle efficiently on their own: statistical tests, optimisation, signal processing, additional linear algebra, interpolation, integration. In day-to-day data science work, the module used most is <code>scipy.stats</code> (t-tests, chi-squared tests, and probability distributions), with <code>scipy.optimize</code> making occasional appearances (Chapter 4 covers optimisation in depth).</p>
+</section>
+<section id="scikit-learn-the-ml-algorithm-layer" class="level3" data-number="6.2.7">
+<h3 data-number="6.2.7" class="anchored" data-anchor-id="scikit-learn-the-ml-algorithm-layer"><span class="header-section-number">6.2.7</span> scikit-learn: The ML Algorithm Layer</h3>
+<p>scikit-learn is probably the most considered library in the ecosystem. Its defining feature is a <strong>consistent API</strong> that every estimator follows: <code>.fit(X, y)</code> learns from data. <code>.predict(X)</code> generates predictions for supervised models. <code>.transform(X)</code> transforms data for preprocessing steps. <code>.fit_transform(X)</code> does both in one call. <code>.score(X, y)</code> evaluates performance. Once <code>LogisticRegression</code> is understood, <code>RandomForestClassifier</code> is essentially already understood: same <code>.fit()</code>, same <code>.predict()</code>, same <code>.score()</code>. This consistency pays off more than it looks. The cost of learning a new algorithm in sklearn is mostly the cost of understanding the algorithm itself. sklearn also supplies preprocessing utilities (scaling, encoding), cross-validation, evaluation metrics, and pipelines that chain multiple steps into a single object.</p>
+</section>
+<section id="jupyter-notebooks-literate-computing" class="level3" data-number="6.2.8">
+<h3 data-number="6.2.8" class="anchored" data-anchor-id="jupyter-notebooks-literate-computing"><span class="header-section-number">6.2.8</span> Jupyter Notebooks: Literate Computing</h3>
+<p>A Jupyter notebook mixes live code, output (including charts), and markdown text in one document. The idea is older than Jupyter itself. Donald Knuth called this literate programming in 1984: write the code and the explanation of the code as a single interleaved document, meant to be read by a person first and a computer second. A notebook is that idea, running, decades later. It is the standard environment for data science because it makes exploration natural: run a cell, see the result, adjust, run again. A notebook doubles as a communication artefact. It can be shared with someone who doesn’t read Python, and they can still follow the narrative and understand the findings. The trade-off is that notebooks encourage non-linear execution: running cells out of order. That produces hidden state bugs that aren’t visible in the code as written. The discipline that prevents this: restart the kernel and run all cells top to bottom before treating any result as final.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="6.3">
+<h2 data-number="6.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">6.3</span> Trade-offs and Limits</h2>
+<p>This stack excels at rapid prototyping and exploration, and at tabular data of any size that fits in memory. It’s good for sharing work with colleagues through notebooks. It also gives access to almost every classical ML algorithm ever published through one consistent interface. It struggles in three situations. Datasets larger than available RAM, where Dask, Spark, or a cloud-native tool is needed instead. Real-time production serving, where a dedicated serving framework replaces ad hoc notebook code (Chapter 23 covers this in depth). Mobile or edge deployment, where TensorFlow Lite or ONNX are the right tools rather than the full stack. None of these are flaws in the libraries. They’re outside the problem this stack was built to solve: interactive, in-memory, exploratory analysis and modelling.</p>
+</section>
+<section id="procedures" class="level2" data-number="6.4">
+<h2 data-number="6.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">6.4</span> Procedures</h2>
+<p id="proc-6-1"><strong>Procedure 6.1 (Install and Verify the Stack).</strong> <em>When to use:</em> at the start of any new project or environment, before writing analysis code.</p>
+<div id="lst-verify-env" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-verify-env-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.1: Installing the core stack and verifying the active environment has it
+</figcaption>
+<div aria-describedby="lst-verify-env-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="co"># Option A -- pip (minimal, exact control)</span></span>
+<span id="cb1-2"><span class="co"># pip install numpy pandas matplotlib seaborn scipy \</span></span>
+<span id="cb1-3"><span class="co">#     scikit-learn jupyter</span></span>
+<span id="cb1-4"></span>
+<span id="cb1-5"><span class="co"># Option B -- conda (recommended for reproducibility)</span></span>
+<span id="cb1-6"><span class="co"># conda create -n dsenv python=3.11</span></span>
+<span id="cb1-7"><span class="co"># conda activate dsenv</span></span>
+<span id="cb1-8"><span class="co"># conda install numpy pandas matplotlib seaborn scipy \</span></span>
+<span id="cb1-9"><span class="co">#     scikit-learn jupyter</span></span>
+<span id="cb1-10"></span>
+<span id="cb1-11"><span class="co"># Option C -- check an existing environment</span></span>
+<span id="cb1-12"><span class="im">import</span> numpy, pandas, matplotlib, seaborn, scipy, sklearn</span>
+<span id="cb1-13"><span class="bu">print</span>(numpy.__version__, pandas.__version__, sklearn.__version__)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>What to look for:</strong> a <code>ModuleNotFoundError</code> almost always means the wrong environment is active, not that the package is missing system-wide. Check <code>which python</code> / <code>conda info --envs</code> before reinstalling anything.</p>
+<p id="proc-6-2"><strong>Procedure 6.2 (Convert Between NumPy Arrays and pandas DataFrames).</strong> <em>When to use:</em> scikit-learn’s estimators accept NumPy arrays; real data usually lives in a DataFrame first, so conversion happens at the fit/predict boundary.</p>
+<div id="lst-array-df-convert" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-array-df-convert-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.2: Converting between DataFrame, Series, and NumPy array representations
+</figcaption>
+<div aria-describedby="lst-array-df-convert-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-2"><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb2-3"></span>
+<span id="cb2-4"><span class="co"># DataFrame -&gt; NumPy array</span></span>
+<span id="cb2-5">df <span class="op">=</span> pd.DataFrame({<span class="st">'a'</span>: [<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">3</span>], <span class="st">'b'</span>: [<span class="dv">4</span>, <span class="dv">5</span>, <span class="dv">6</span>]})</span>
+<span id="cb2-6">arr <span class="op">=</span> df.to_numpy()            <span class="co"># (3, 2)</span></span>
+<span id="cb2-7"></span>
+<span id="cb2-8"><span class="co"># NumPy array -&gt; DataFrame</span></span>
+<span id="cb2-9">arr <span class="op">=</span> np.array([[<span class="dv">1</span>, <span class="dv">2</span>], [<span class="dv">3</span>, <span class="dv">4</span>], [<span class="dv">5</span>, <span class="dv">6</span>]])</span>
+<span id="cb2-10">df <span class="op">=</span> pd.DataFrame(arr, columns<span class="op">=</span>[<span class="st">'col_a'</span>, <span class="st">'col_b'</span>])</span>
+<span id="cb2-11"></span>
+<span id="cb2-12"><span class="co"># Series &lt;-&gt; 1D array</span></span>
+<span id="cb2-13">arr_1d <span class="op">=</span> df[<span class="st">'col_a'</span>].to_numpy()</span>
+<span id="cb2-14">s <span class="op">=</span> pd.Series(arr_1d, name<span class="op">=</span><span class="st">'col_a'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> scikit-learn raises a warning if a model is fit on a DataFrame with named features and later passed a plain array, or vice versa. Pick one representation per pipeline and stay consistent through the whole <code>fit</code>/<code>predict</code> cycle.</p>
+<p id="proc-6-3"><strong>Procedure 6.3 (Plot Directly from a DataFrame).</strong> <em>When to use:</em> quick exploratory plots, before setting up matplotlib axes by hand is worth the effort.</p>
+<div id="lst-df-plot" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-df-plot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.3: Plotting straight off a DataFrame for fast exploratory charts
+</figcaption>
+<div aria-describedby="lst-df-plot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> matplotlib.pyplot <span class="im">as</span> plt</span>
+<span id="cb3-2"></span>
+<span id="cb3-3"><span class="co"># line</span></span>
+<span id="cb3-4">df[<span class="st">'value'</span>].plot(title<span class="op">=</span><span class="st">'My Value Over Time'</span>)</span>
+<span id="cb3-5"><span class="co"># bar</span></span>
+<span id="cb3-6">df.groupby(<span class="st">'category'</span>)[<span class="st">'value'</span>].mean().plot(kind<span class="op">=</span><span class="st">'bar'</span>, rot<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb3-7"><span class="co"># histogram</span></span>
+<span id="cb3-8">df[<span class="st">'age'</span>].plot(kind<span class="op">=</span><span class="st">'hist'</span>, bins<span class="op">=</span><span class="dv">20</span>, edgecolor<span class="op">=</span><span class="st">'white'</span>)</span>
+<span id="cb3-9"><span class="co"># scatter</span></span>
+<span id="cb3-10">df.plot(kind<span class="op">=</span><span class="st">'scatter'</span>, x<span class="op">=</span><span class="st">'feature_a'</span>, y<span class="op">=</span><span class="st">'feature_b'</span>, alpha<span class="op">=</span><span class="fl">0.5</span>)</span>
+<span id="cb3-11"></span>
+<span id="cb3-12">plt.tight_layout()</span>
+<span id="cb3-13">plt.show()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-6-4"><strong>Procedure 6.4 (Use scikit-learn’s Consistent fit/predict/score API).</strong> <em>When to use:</em> every time any sklearn estimator is fit. The five-method pattern never changes across algorithms.</p>
+<div id="lst-sklearn-api" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sklearn-api-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.4: The fit / predict / score pattern every sklearn estimator follows
+</figcaption>
+<div aria-describedby="lst-sklearn-api-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> sklearn.neighbors <span class="im">import</span> KNeighborsClassifier</span>
+<span id="cb4-2"><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> StandardScaler</span>
+<span id="cb4-3"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> train_test_split</span>
+<span id="cb4-4"><span class="im">from</span> sklearn.metrics <span class="im">import</span> accuracy_score</span>
+<span id="cb4-5"></span>
+<span id="cb4-6">X_train, X_test, y_train, y_test <span class="op">=</span> train_test_split(</span>
+<span id="cb4-7">    X, y, test_size<span class="op">=</span><span class="fl">0.2</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb4-8">)</span>
+<span id="cb4-9"></span>
+<span id="cb4-10">model <span class="op">=</span> KNeighborsClassifier(n_neighbors<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb4-11">model.fit(X_train, y_train)              <span class="co"># learn</span></span>
+<span id="cb4-12">y_pred <span class="op">=</span> model.predict(X_test)           <span class="co"># predict</span></span>
+<span id="cb4-13"><span class="bu">print</span>(accuracy_score(y_test, y_pred))    <span class="co"># evaluate</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> fitting a scaler or encoder on <code>X_test</code> rather than only on <code>X_train</code>. The scaler must learn its mean and standard deviation exclusively from training data, then apply that same transform to test data:</p>
+<div id="lst-scaler-leakage" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-scaler-leakage-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.5: Fitting a scaler once on train data, applying it to both splits
+</figcaption>
+<div aria-describedby="lst-scaler-leakage-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">scaler <span class="op">=</span> StandardScaler()</span>
+<span id="cb5-2"><span class="co"># fit ON train, transform train</span></span>
+<span id="cb5-3">X_train_scaled <span class="op">=</span> scaler.fit_transform(X_train)</span>
+<span id="cb5-4"><span class="co"># transform test with the SAME scaler</span></span>
+<span id="cb5-5">X_test_scaled <span class="op">=</span> scaler.transform(X_test)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Fitting the scaler on <code>X_test</code> (or on the full dataset before splitting) leaks test-set statistics into training and silently inflates reported performance. The model looks better than it is, with no error raised to signal it.</p>
+<p id="proc-6-5"><strong>Procedure 6.5 (Diagnose Common Stack Errors).</strong> <em>When to use:</em> when an error message doesn’t obviously point at its own cause.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Error / symptom</th>
+<th>Most likely cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>ModuleNotFoundError: No module named 'numpy'</code></td>
+<td>Wrong environment active</td>
+<td>Activate the right env, then reinstall</td>
+</tr>
+<tr class="even">
+<td><code>ValueError: Input contains NaN</code></td>
+<td>sklearn received missing values</td>
+<td>Clean data first (Chapter 7)</td>
+</tr>
+<tr class="odd">
+<td><code>DataConversionWarning: A column-vector y was passed</code></td>
+<td><code>y</code> has shape <code>(n, 1)</code> not <code>(n,)</code></td>
+<td><code>y.ravel()</code> or <code>y.squeeze()</code></td>
+</tr>
+<tr class="even">
+<td>Plot is blank / not showing</td>
+<td><code>plt.show()</code> called before the data-plotting calls</td>
+<td>Move plotting calls above <code>plt.show()</code></td>
+</tr>
+<tr class="odd">
+<td>seaborn <code>hue</code> not working</td>
+<td>The hue column contains <code>NaN</code> values</td>
+<td><code>df.dropna(subset=['hue_col'])</code> first</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="worked-example" class="level2" data-number="6.5">
+<h2 data-number="6.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">6.5</span> Worked Example</h2>
+<p>The tutorial notebook behind this chapter is a tour through the whole stack, on two real, bundled datasets: seaborn’s Titanic passenger list and scikit-learn’s iris flower measurements. Three moments from it are worth walking through in detail, because each one makes a claim from the Exposition concrete with real numbers.</p>
+<p>The first is the NumPy-versus-Python-loop speed claim. Doubling one million elements with a Python list comprehension versus NumPy’s vectorised multiplication, timed directly:</p>
+<div id="lst-numpy-speed" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-numpy-speed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.6: Measuring the vectorisation speedup directly rather than asserting it
+</figcaption>
+<div aria-describedby="lst-numpy-speed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb6-2"><span class="im">import</span> timeit</span>
+<span id="cb6-3"></span>
+<span id="cb6-4">N <span class="op">=</span> <span class="dv">1_000_000</span></span>
+<span id="cb6-5">py_list <span class="op">=</span> <span class="bu">list</span>(<span class="bu">range</span>(N))</span>
+<span id="cb6-6">np_array <span class="op">=</span> np.arange(N, dtype<span class="op">=</span>np.float64)</span>
+<span id="cb6-7"></span>
+<span id="cb6-8">t_py <span class="op">=</span> timeit.timeit(</span>
+<span id="cb6-9">    <span class="st">'[x * 2 for x in py_list]'</span>, <span class="bu">globals</span><span class="op">=</span><span class="bu">globals</span>(), number<span class="op">=</span><span class="dv">5</span></span>
+<span id="cb6-10">) <span class="op">/</span> <span class="dv">5</span></span>
+<span id="cb6-11">t_np <span class="op">=</span> timeit.timeit(</span>
+<span id="cb6-12">    <span class="st">'np_array * 2'</span>, <span class="bu">globals</span><span class="op">=</span><span class="bu">globals</span>(), number<span class="op">=</span><span class="dv">5</span></span>
+<span id="cb6-13">) <span class="op">/</span> <span class="dv">5</span></span>
+<span id="cb6-14"><span class="bu">print</span>(<span class="ss">f'Python loop: </span><span class="sc">{</span>t_py<span class="op">*</span><span class="dv">1000</span><span class="sc">:.2f}</span><span class="ss"> ms'</span>)</span>
+<span id="cb6-15"><span class="bu">print</span>(<span class="ss">f'NumPy:       </span><span class="sc">{</span>t_np<span class="op">*</span><span class="dv">1000</span><span class="sc">:.3f}</span><span class="ss"> ms'</span>)</span>
+<span id="cb6-16"><span class="bu">print</span>(<span class="ss">f'Speedup:     </span><span class="sc">{</span>t_py<span class="op">/</span>t_np<span class="sc">:.0f}</span><span class="ss">x'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>On this machine, the Python loop takes roughly <strong>27.7 ms</strong> and the NumPy operation roughly <strong>0.24 ms</strong>, a <strong>117x</strong> speedup, well within the “50-200x” range this chapter’s Exposition claims, and a difference that only grows as array size grows further.</p>
+<p>The second moment combines pandas and scipy on the Titanic dataset (891 passengers, 15 columns). A grouped aggregation answers a real question (did survival rate depend on passenger class and sex?) in one line:</p>
+<div id="lst-titanic-groupby" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-titanic-groupby-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.7: A pivot table answering a two-dimensional question in one call
+</figcaption>
+<div aria-describedby="lst-titanic-groupby-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">pivot <span class="op">=</span> df.pivot_table(</span>
+<span id="cb7-2">    values<span class="op">=</span><span class="st">'survived'</span>,</span>
+<span id="cb7-3">    index<span class="op">=</span><span class="st">'pclass'</span>,</span>
+<span id="cb7-4">    columns<span class="op">=</span><span class="st">'sex'</span>,</span>
+<span id="cb7-5">    aggfunc<span class="op">=</span><span class="st">'mean'</span>,</span>
+<span id="cb7-6">)</span>
+<span id="cb7-7"><span class="bu">print</span>(pivot.<span class="bu">round</span>(<span class="dv">2</span>))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The result: first-class women survived at <strong>97%</strong>, first-class men at <strong>37%</strong>. By third class those numbers fall to <strong>50%</strong> and <strong>14%</strong> respectively. Class and sex both mattered, and mattered together. A single-dimension <code>groupby</code> would have hidden that. A natural follow-up question (did survivors pay more?) is answered with a two-sample t-test:</p>
+<div id="lst-titanic-ttest" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-titanic-ttest-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.8: A one-line hypothesis test on real fare data
+</figcaption>
+<div aria-describedby="lst-titanic-ttest-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><span class="im">from</span> scipy <span class="im">import</span> stats</span>
+<span id="cb8-2"></span>
+<span id="cb8-3">survivors <span class="op">=</span> df[df[<span class="st">'survived'</span>] <span class="op">==</span> <span class="dv">1</span>][<span class="st">'fare'</span>].dropna()</span>
+<span id="cb8-4">non_survivors <span class="op">=</span> df[df[<span class="st">'survived'</span>] <span class="op">==</span> <span class="dv">0</span>][<span class="st">'fare'</span>].dropna()</span>
+<span id="cb8-5"></span>
+<span id="cb8-6">t_stat, p_value <span class="op">=</span> stats.ttest_ind(survivors, non_survivors)</span>
+<span id="cb8-7"><span class="bu">print</span>(<span class="ss">f'Survivor mean fare:     £</span><span class="sc">{</span>survivors<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">'</span>)</span>
+<span id="cb8-8"><span class="bu">print</span>(<span class="ss">f'Non-survivor mean fare: £</span><span class="sc">{</span>non_survivors<span class="sc">.</span>mean()<span class="sc">:.2f}</span><span class="ss">'</span>)</span>
+<span id="cb8-9"><span class="bu">print</span>(<span class="ss">f't = </span><span class="sc">{</span>t_stat<span class="sc">:.2f}</span><span class="ss">, p = </span><span class="sc">{</span>p_value<span class="sc">:.2e}</span><span class="ss">'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Survivors paid <strong>£48.40</strong> on average against <strong>£22.12</strong> for non-survivors, with <code>t = 7.94</code> and <code>p ~ 6.1e-15</code>. That’s far below the usual 0.05 threshold, so the fare gap is not plausibly due to chance. Fare correlates strongly with class, and class correlates strongly with survival. So this single number is surfacing the same class effect the pivot table showed directly. That’s a reminder that a significant p-value tells you an effect is real, not what’s causing it.</p>
+<p>The third moment is the scikit-learn API pattern, applied to the classic iris dataset (150 flowers, 4 features, 3 species):</p>
+<div id="lst-iris-knn" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-iris-knn-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;6.9: fit / predict / score on a new dataset, same pattern as Listing 6.4
+</figcaption>
+<div aria-describedby="lst-iris-knn-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><span class="im">from</span> sklearn.datasets <span class="im">import</span> load_iris</span>
+<span id="cb9-2"><span class="im">from</span> sklearn.neighbors <span class="im">import</span> KNeighborsClassifier</span>
+<span id="cb9-3"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> train_test_split</span>
+<span id="cb9-4"><span class="im">from</span> sklearn.metrics <span class="im">import</span> accuracy_score</span>
+<span id="cb9-5"></span>
+<span id="cb9-6">iris <span class="op">=</span> load_iris(as_frame<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb9-7">X_train, X_test, y_train, y_test <span class="op">=</span> train_test_split(</span>
+<span id="cb9-8">    iris.data, iris.target, test_size<span class="op">=</span><span class="fl">0.2</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb9-9">)</span>
+<span id="cb9-10"></span>
+<span id="cb9-11">model <span class="op">=</span> KNeighborsClassifier(n_neighbors<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb9-12">model.fit(X_train, y_train)</span>
+<span id="cb9-13">y_pred <span class="op">=</span> model.predict(X_test)</span>
+<span id="cb9-14"><span class="bu">print</span>(<span class="ss">f'Accuracy: </span><span class="sc">{</span>accuracy_score(y_test, y_pred)<span class="sc">:.0%}</span><span class="ss">'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>With 120 training and 30 test samples, this particular split scores <strong>100% accuracy</strong>. Iris is a famously easy, well-separated dataset. That’s exactly why it’s a good first dataset for learning the API pattern, rather than learning about model performance. Chapter 11 returns to k-Nearest Neighbours, on harder data, where accuracy stops being a foregone conclusion.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="6.6">
+<h2 data-number="6.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">6.6</span> History and Further Reading</h2>
+<p>Thakur’s Ch. 1 sets up the working environment used throughout his book. It’s a good companion to this chapter’s Procedure 6.1 <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Burkov’s Ch. 2 gives the same core concepts, vectors, matrices, functions, from the mathematical-notation side rather than the code side. It’s useful for connecting this chapter to Chapter 3’s formalism <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Beyond the bibliography, the official NumPy quickstart at numpy.org and pandas’ “10 Minutes to pandas” guide are both worth reading directly. They’re as short as they claim to be, and more precise on edge cases (broadcasting rules, index alignment) than any secondary summary.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="6.7">
+<h2 data-number="6.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">6.7</span> How This Connects</h2>
+<p>This chapter builds on ordinary Python fluency (lists, dicts, functions, <code>pip</code>), which this book treats as a prerequisite rather than a chapter of its own. It enables essentially everything that follows. Every remaining chapter in this book uses NumPy, pandas, and scikit-learn as its working vocabulary, the way <a href="/books/classical-data-science/ch02-business-problem-framing" class="quarto-xref"><span>Chapter 2</span></a> used <code>pandas</code> and <code>sklearn.model_selection</code> without pausing to introduce them. It is often confused with PyTorch and TensorFlow. Those are deep learning frameworks, covered starting in Book 2. They sit <em>alongside</em> this stack rather than inside it: a production system often uses pandas for data wrangling and scikit-learn for a baseline model, even when the final model is a neural network.</p>
+</section>
+<section id="exercises" class="level2" data-number="6.8">
+<h2 data-number="6.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">6.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-6-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Using the layered-stack idea from this chapter’s Exposition, explain in one or two sentences why learning pandas well requires understanding NumPy, but not the other way around.</p></li>
+<li id="ex-6-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State in one sentence each what <code>.fit()</code>, <code>.transform()</code>, and <code>.predict()</code> do in the scikit-learn API pattern. Identify which of the three should never be called on test data.</p></li>
+<li id="ex-6-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-numpy-speed" class="quarto-xref">Listing&nbsp;<span>6.6</span></a> as a template, measure the speedup of <code>np.sqrt</code> over an equivalent Python loop (using <code>math.sqrt</code>) on an array of 500,000 elements, and report the ratio you observe.</p></li>
+<li id="ex-6-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-titanic-groupby" class="quarto-xref">Listing&nbsp;<span>6.7</span></a>’s approach, compute survival rate by passenger class <strong>and</strong> <code>embark_town</code> instead of class and sex. Report which single (class, port) combination has the lowest survival rate.</p></li>
+<li id="ex-6-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Reproduce <a href="#lst-titanic-ttest" class="quarto-xref">Listing&nbsp;<span>6.8</span></a>, but compare passenger <strong>age</strong> between survivors and non-survivors instead of fare. Is the difference statistically significant at <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>p</mi><mo>&lt;</mo><mn>0.05</mn></mrow><annotation encoding="application/x-tex">p &lt; 0.05</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7335em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">p</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&lt;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">0.05</span></span></span></span>? Which group is older on average?</p></li>
+<li id="ex-6-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 6.4’s common mistake describes fitting a scaler on test data. Write two or three sentences explaining what would go wrong with a reported accuracy number if this mistake were made silently on a real project, and why no exception would be raised to catch it.</p></li>
+<li id="ex-6-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague proposes dropping pandas entirely and working with raw NumPy arrays “for speed” on a project with twenty columns of mixed numeric and categorical data. Using this chapter’s Trade-offs section, write the two or three sentence argument against this.</p></li>
+<li id="ex-6-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the NumPy quickstart mentioned in this chapter’s Further Reading. Find one broadcasting rule this chapter’s Exposition did not discuss. Describe a data science situation where getting that rule wrong would silently produce an incorrect result rather than an error.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="6.9">
+<h2 data-number="6.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">6.9</span> Mental Model</h2>
+<p>Think of the ecosystem as a toolbox with layers of abstraction. NumPy is the raw material. pandas is the workbench. matplotlib and seaborn are the drafting table. scikit-learn is the instrument kit. Going below NumPy is rarely necessary. pandas and scikit-learn will be used in essentially every project in this book. Knowing which layer a problem lives in is most of the battle in solving it quickly.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

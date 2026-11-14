@@ -1,0 +1,263 @@
+<p>A large language model’s knowledge is frozen at training time, compressed into its weights, and impossible to verify. Ask it about a company’s internal deployment runbook, last week’s incident postmortem, or a product that launched after its training cutoff, and it either says “I don’t know,” or, worse, confidently makes something up. There are two ways to get an LLM to reason over information it wasn’t trained on: fine-tune it on that information (Chapter 34), or hand it the relevant information at request time. Fine-tuning is slow, expensive, and doesn’t solve staleness. Every data change means retraining. Handing the model the right information at request time is fast, cheap, auditable, and trivially kept current. That second approach is Retrieval-Augmented Generation. It’s very likely the first architecture an SA reaches for when a customer wants an LLM to “know about our stuff,” well before fine-tuning enters the conversation.</p>
+<section id="motivation" class="level2" data-number="31.1">
+<h2 data-number="31.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">31.1</span> Motivation</h2>
+<p>RAG runs two stages at very different times. Indexing (offline, done once, updated as data changes): split documents into chunks, convert each chunk into a dense embedding, store the embeddings in a vector database indexed for fast similarity search. Retrieval and generation (online, one round-trip per query): embed the user’s query with the same embedding model, search the vector store for the closest chunks (retrieval), construct a prompt containing the retrieved chunks plus the original query (augmentation), and send that to an LLM to generate an answer grounded in the retrieved text. The model never needed to have “known” the answer. It only needed to be handed the right passage and asked to read it. Worked Example 31 below measures exactly how much this handoff matters against the alternative of not retrieving at all.</p>
+</section>
+<section id="exposition" class="level2" data-number="31.2">
+<h2 data-number="31.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">31.2</span> Exposition</h2>
+<section id="dense-embeddings-vs.-what-chapter-27-covered" class="level3" data-number="31.2.1">
+<h3 data-number="31.2.1" class="anchored" data-anchor-id="dense-embeddings-vs.-what-chapter-27-covered"><span class="header-section-number">31.2.1</span> Dense Embeddings vs.&nbsp;What Chapter 27 Covered</h3>
+<p>Chapter 27 covered TF-IDF (weighted word counts, sparse, exact-match-driven) and Word2Vec (one static vector per word). Neither is quite right for RAG. TF-IDF misses synonyms entirely. A query about “canceling a subscription” won’t match a document that says “terminate your plan,” because the words share zero vocabulary overlap. Word2Vec has no notion of a vector for a whole sentence or paragraph. RAG uses sentence embedding models (the <code>sentence-transformers</code> family): transformer encoders (<a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a>) fine-tuned specifically so that semantically similar sentences land close together in vector space, regardless of exact word overlap. This is the same transformer architecture from Chapter 29, repurposed. Instead of generating text, it compresses text into a fixed-size vector.</p>
+</section>
+<section id="similarity-search" class="level3" data-number="31.2.2">
+<h3 data-number="31.2.2" class="anchored" data-anchor-id="similarity-search"><span class="header-section-number">31.2.2</span> Similarity Search</h3>
+<p>Once every chunk is a vector, “find the most relevant chunks” becomes “find the vectors closest to the query vector,” usually via cosine similarity: the angle between two vectors, independent of magnitude, so a long document and a short one are judged purely on directional similarity of meaning. At small scale (thousands of chunks), brute-force comparison against every stored vector is fine. At production scale (millions of chunks), vector databases use approximate nearest neighbour algorithms. HNSW (Hierarchical Navigable Small World graphs) is the most common. It trades a small amount of recall for a large speedup, turning an <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span> scan into something close to <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><mi>log</mi><mo>⁡</mo><mi>n</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(\log n)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mop">lo<span style="margin-right:0.0139em;">g</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal">n</span><span class="mclose">)</span></span></span></span>.</p>
+</section>
+<section id="chunking-strategy" class="level3" data-number="31.2.3">
+<h3 data-number="31.2.3" class="anchored" data-anchor-id="chunking-strategy"><span class="header-section-number">31.2.3</span> Chunking Strategy</h3>
+<p>Chunk size is a direct trade-off. Chunks too small (a sentence) lack surrounding context, so a retrieved chunk can be technically relevant but unintelligible alone, or the real answer splits across two chunks and neither ranks highly enough individually. Chunks too large (a whole document) turn the embedding into an average of everything the document discusses, diluting the signal for any specific question and wasting context-window space on irrelevant text. A common compromise: a few hundred tokens per chunk with 10–20% overlap between consecutive chunks, so an idea spanning a chunk boundary still appears intact in at least one chunk.</p>
+</section>
+<section id="failure-modes-to-expect" class="level3" data-number="31.2.4">
+<h3 data-number="31.2.4" class="anchored" data-anchor-id="failure-modes-to-expect"><span class="header-section-number">31.2.4</span> Failure Modes to Expect</h3>
+<p>Cosine similarity always returns <em>something</em>, even when nothing in the store is actually relevant. There’s no built-in “I don’t have that” signal, so a similarity threshold and an explicit “no relevant context” path are required, or the model will confidently generate an answer from irrelevant retrieved text. Irrelevant or contradictory retrieved chunks can pull generation off course even when a good chunk is also present. And empirically, LLMs pay less attention to information placed in the middle of a long context than at the very start or end (“lost in the middle”). Retrieved chunks should be ordered with the most relevant near the beginning or end of the prompt, not buried in the middle.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="31.3">
+<h2 data-number="31.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">31.3</span> Trade-offs and Limits</h2>
+<p>RAG versus fine-tuning (Chapter 34): RAG wins when knowledge changes often, needs to be auditable/citable, or is too large to bake into weights economically. Fine-tuning wins when the need is to change the model’s <em>behaviour or style</em> rather than give it <em>facts</em>. RAG can hand a model a fact but can’t teach it a new skill or reasoning pattern the way fine-tuning can. Production systems often use both: fine-tuning for behaviour, RAG for facts. Self-hosted vector stores (Chroma, FAISS, self-managed pgvector) give full control with no per-query cost but mean owning uptime, scaling, and backups. Managed services (Amazon OpenSearch Service’s vector engine, Bedrock Knowledge Bases) cost more per query but remove the operational burden. That’s the right default for most production SA-recommended architectures absent a strong reason to self-host. More retrieved chunks raise the odds the right information is somewhere in context, at the cost of latency, token spend, and “lost in the middle” risk. Reranking (retrieve a larger candidate set cheaply, re-score with a slower, more accurate model, keep only the true top-k) is the standard fix.</p>
+</section>
+<section id="procedures" class="level2" data-number="31.4">
+<h2 data-number="31.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">31.4</span> Procedures</h2>
+<p id="proc-31-1"><strong>Procedure 31.1 (Chunk Text, Sentence-Aware).</strong> <em>When to use:</em> indexing any new document set, before embedding anything.</p>
+<div id="lst-rag-chunk" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rag-chunk-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;31.1: Chunking that never splits a sentence in half
+</figcaption>
+<div aria-describedby="lst-rag-chunk-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> re</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="kw">def</span> chunk_by_sentences(</span>
+<span id="cb1-4">    text, max_words<span class="op">=</span><span class="dv">200</span>, overlap_sentences<span class="op">=</span><span class="dv">1</span></span>
+<span id="cb1-5">):</span>
+<span id="cb1-6">    sentences <span class="op">=</span> re.split(<span class="vs">r'</span><span class="kw">(</span><span class="fu">?&lt;</span><span class="vs">=</span><span class="pp">[.!?]</span><span class="kw">)</span><span class="dv">\s</span><span class="op">+</span><span class="vs">'</span>, text.strip())</span>
+<span id="cb1-7">    chunks, current, current_len <span class="op">=</span> [], [], <span class="dv">0</span></span>
+<span id="cb1-8">    <span class="cf">for</span> sent <span class="kw">in</span> sentences:</span>
+<span id="cb1-9">        n <span class="op">=</span> <span class="bu">len</span>(sent.split())</span>
+<span id="cb1-10">        <span class="cf">if</span> current_len <span class="op">+</span> n <span class="op">&gt;</span> max_words <span class="kw">and</span> current:</span>
+<span id="cb1-11">            chunks.append(<span class="st">" "</span>.join(current))</span>
+<span id="cb1-12">            current <span class="op">=</span> (</span>
+<span id="cb1-13">                current[<span class="op">-</span>overlap_sentences:]</span>
+<span id="cb1-14">                <span class="cf">if</span> overlap_sentences <span class="cf">else</span> []</span>
+<span id="cb1-15">            )</span>
+<span id="cb1-16">            current_len <span class="op">=</span> <span class="bu">sum</span>(<span class="bu">len</span>(s.split()) <span class="cf">for</span> s <span class="kw">in</span> current)</span>
+<span id="cb1-17">        current.append(sent)</span>
+<span id="cb1-18">        current_len <span class="op">+=</span> n</span>
+<span id="cb1-19">    <span class="cf">if</span> current:</span>
+<span id="cb1-20">        chunks.append(<span class="st">" "</span>.join(current))</span>
+<span id="cb1-21">    <span class="cf">return</span> chunks</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> chunking by raw character count without regard to sentence boundaries. This regularly splits a sentence mid-thought, leaving one half’s embedding nonsensical and the other half missing context.</p>
+<p id="proc-31-2"><strong>Procedure 31.2 (Embed Documents and Queries with the Same Model).</strong> <em>When to use:</em> every indexing and every query. Always the identical model and version.</p>
+<div id="lst-rag-embed" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rag-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;31.2: sentence-transformers: the standard embedding call
+</figcaption>
+<div aria-describedby="lst-rag-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sentence_transformers <span class="im">import</span> SentenceTransformer</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="co"># 384 dims, ~80MB, good CPU default</span></span>
+<span id="cb2-4">model <span class="op">=</span> SentenceTransformer(<span class="st">"all-MiniLM-L6-v2"</span>)</span>
+<span id="cb2-5">doc_embeddings <span class="op">=</span> model.encode(chunks, normalize_embeddings<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-6">query_embedding <span class="op">=</span> model.encode([query], normalize_embeddings<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Key rule:</strong> never embed queries and documents with two different models, or the same model at two different versions. Retrieval quality collapses if the query and document embeddings weren’t produced by the exact same model.</p>
+<p id="proc-31-3"><strong>Procedure 31.3 (Set Up a Persistent Vector Store).</strong> <em>When to use:</em> once a document store grows past comfortable in-memory size, or persistence across restarts is needed.</p>
+<div id="lst-rag-vectorstore" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rag-vectorstore-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;31.3: Chroma: local, persistent, metadata-aware
+</figcaption>
+<div aria-describedby="lst-rag-vectorstore-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> chromadb</span>
+<span id="cb3-2"></span>
+<span id="cb3-3">client <span class="op">=</span> chromadb.PersistentClient(path<span class="op">=</span><span class="st">"./chroma_store"</span>)</span>
+<span id="cb3-4">collection <span class="op">=</span> client.get_or_create_collection(<span class="st">"docs"</span>)</span>
+<span id="cb3-5">collection.add(</span>
+<span id="cb3-6">    ids<span class="op">=</span>doc_ids,</span>
+<span id="cb3-7">    documents<span class="op">=</span>chunks,</span>
+<span id="cb3-8">    embeddings<span class="op">=</span>doc_embeddings.tolist(),</span>
+<span id="cb3-9">)</span>
+<span id="cb3-10"></span>
+<span id="cb3-11">results <span class="op">=</span> collection.query(</span>
+<span id="cb3-12">    query_embeddings<span class="op">=</span>[query_embedding.tolist()],</span>
+<span id="cb3-13">    n_results<span class="op">=</span><span class="dv">3</span>,</span>
+<span id="cb3-14">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-31-4"><strong>Procedure 31.4 (Construct the Augmented Prompt).</strong> <em>When to use:</em> every generation call, after retrieval returns its top-k chunks.</p>
+<div id="lst-rag-augment" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rag-augment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;31.4: Grounding the prompt in retrieved context, with an explicit fallback
+</figcaption>
+<div aria-describedby="lst-rag-augment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="kw">def</span> build_prompt(query, retrieved_chunks, min_similarity<span class="op">=</span><span class="fl">0.3</span>):</span>
+<span id="cb4-2">    relevant <span class="op">=</span> [</span>
+<span id="cb4-3">        c <span class="cf">for</span> c <span class="kw">in</span> retrieved_chunks <span class="cf">if</span> c[<span class="st">"score"</span>] <span class="op">&gt;=</span> min_similarity</span>
+<span id="cb4-4">    ]</span>
+<span id="cb4-5">    <span class="cf">if</span> <span class="kw">not</span> relevant:</span>
+<span id="cb4-6">        <span class="cf">return</span> (</span>
+<span id="cb4-7">            <span class="ss">f"No relevant context found for: </span><span class="sc">{</span>query<span class="sc">}</span><span class="ch">\n</span><span class="ss">"</span></span>
+<span id="cb4-8">            <span class="st">"Answer from general knowledge, and say so."</span></span>
+<span id="cb4-9">        )</span>
+<span id="cb4-10">    context <span class="op">=</span> <span class="st">"</span><span class="ch">\n\n</span><span class="st">"</span>.join(c[<span class="st">"text"</span>] <span class="cf">for</span> c <span class="kw">in</span> relevant)</span>
+<span id="cb4-11">    <span class="cf">return</span> (</span>
+<span id="cb4-12">        <span class="ss">f"Context:</span><span class="ch">\n</span><span class="sc">{</span>context<span class="sc">}</span><span class="ch">\n\n</span><span class="ss">Question: </span><span class="sc">{</span>query<span class="sc">}</span><span class="ch">\n</span><span class="ss">"</span></span>
+<span id="cb4-13">        <span class="st">"Answer using only the context above."</span></span>
+<span id="cb4-14">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="31.5">
+<h2 data-number="31.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">31.5</span> Worked Example</h2>
+<p>Six short support-documentation snippets (pricing, password reset, 2FA, API limits, account termination, enterprise SLA) are indexed two ways, TF-IDF (Chapter 27’s baseline) and <code>all-MiniLM-L6-v2</code> sentence embeddings (Procedure 31.2), then queried with <strong>“How do I cancel my subscription?”</strong>, a query deliberately written with zero literal word overlap against the correct document, which reads “To terminate your plan, go to Account Settings and select Close Account…”:</p>
+<div id="lst-rag-worked-compare" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rag-worked-compare-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;31.5: Same query, same six documents, two retrieval methods
+</figcaption>
+<div aria-describedby="lst-rag-worked-compare-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">sims_embed <span class="op">=</span> cosine_similarity(</span>
+<span id="cb5-2">    model.encode([query]),</span>
+<span id="cb5-3">    model.encode(docs),</span>
+<span id="cb5-4">)[<span class="dv">0</span>]</span>
+<span id="cb5-5">sims_tfidf <span class="op">=</span> cosine_similarity(</span>
+<span id="cb5-6">    tfidf.transform([query]),</span>
+<span id="cb5-7">    tfidf_docs,</span>
+<span id="cb5-8">)[<span class="dv">0</span>]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Doc</th>
+<th>Embedding similarity</th>
+<th>TF-IDF similarity</th>
+<th>Snippet</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Termination (correct answer)</td>
+<td><strong>0.5147</strong></td>
+<td>0.0000</td>
+<td>“To terminate your plan, go to Account Settings…”</td>
+</tr>
+<tr class="even">
+<td>Password reset</td>
+<td>0.3638</td>
+<td>0.0000</td>
+<td>“To reset your password, click Forgot Password…”</td>
+</tr>
+<tr class="odd">
+<td>Pricing tiers</td>
+<td>0.1766</td>
+<td>0.0000</td>
+<td>“Our pricing tiers are Basic ($9/mo)…”</td>
+</tr>
+<tr class="even">
+<td>Enterprise SLA</td>
+<td>0.1725</td>
+<td>0.0000</td>
+<td>“Enterprise customers get a dedicated…”</td>
+</tr>
+<tr class="odd">
+<td>API rate limits</td>
+<td>0.1549</td>
+<td>0.0000</td>
+<td>“The API rate limit is 100 requests…”</td>
+</tr>
+<tr class="even">
+<td>Two-factor auth</td>
+<td>0.1213</td>
+<td>0.0000</td>
+<td>“Two-factor authentication can be enabled…”</td>
+</tr>
+</tbody>
+</table>
+<p>The embedding model ranks the correct document first with a clear margin, 0.5147 versus the next-closest 0.3638, and correctly ranks it well above topically-unrelated documents like API limits or 2FA. TF-IDF, meanwhile, returns <strong>exactly 0.0000 similarity for all six documents</strong>, because the query’s words (<code>cancel</code>, <code>subscription</code>, <code>how</code>, <code>my</code>, <code>do</code>, <code>i</code>) share zero literal overlap with any document’s vocabulary, including the one document that actually answers the question. Confirming this directly: <code>set(query_words) &amp; set(doc0_words)</code> returns the empty set. This is Exposition’s synonym-mismatch claim made concrete rather than asserted. TF-IDF here doesn’t retrieve the <em>wrong</em> document. It retrieves <em>nothing</em>, with every candidate tied at zero, which is exactly the “no built-in relevance signal, everything looks equally (ir)relevant” failure a naive keyword-search-only RAG pipeline would silently produce on a paraphrased query like this one.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># Amazon Bedrock Knowledge Bases: managed RAG,</span></span>
+<span id="cb6-2"><span class="co"># chunking, embedding, and vector store in one service</span></span>
+<span id="cb6-3"><span class="im">import</span> boto3</span>
+<span id="cb6-4"></span>
+<span id="cb6-5">client <span class="op">=</span> boto3.client(<span class="st">"bedrock-agent-runtime"</span>)</span>
+<span id="cb6-6">response <span class="op">=</span> client.retrieve_and_generate(</span>
+<span id="cb6-7">    <span class="bu">input</span><span class="op">=</span>{<span class="st">"text"</span>: <span class="st">"How do I cancel my subscription?"</span>},</span>
+<span id="cb6-8">    retrieveAndGenerateConfiguration<span class="op">=</span>{</span>
+<span id="cb6-9">        <span class="st">"type"</span>: <span class="st">"KNOWLEDGE_BASE"</span>,</span>
+<span id="cb6-10">        <span class="st">"knowledgeBaseConfiguration"</span>: {</span>
+<span id="cb6-11">            <span class="st">"knowledgeBaseId"</span>: <span class="st">"KB123456"</span>,</span>
+<span id="cb6-12">            <span class="st">"modelArn"</span>: (</span>
+<span id="cb6-13">                <span class="st">"arn:aws:bedrock:us-east-1::foundation-model/"</span></span>
+<span id="cb6-14">                <span class="st">"anthropic.claude-sonnet"</span></span>
+<span id="cb6-15">            ),</span>
+<span id="cb6-16">        },</span>
+<span id="cb6-17">    },</span>
+<span id="cb6-18">)</span></code></pre></div>
+<p><strong>When to prefer Bedrock Knowledge Bases:</strong> it replaces the entire indexing pipeline (Procedures 31.1–31.3) with a managed service backed by OpenSearch Serverless’s vector engine. Documents are dropped in S3, chunking and embedding happen automatically, and <code>retrieve_and_generate</code> does retrieval, augmentation, and generation in one call, at the cost of less control over chunking strategy than Procedure 31.1 gives directly.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="31.6">
+<h2 data-number="31.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">31.6</span> History and Further Reading</h2>
+<p>Lewis et al.’s “Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks” is the original RAG paper <span class="citation" data-cites="lewis2020rag">(<a href="#ref-lewis2020rag" role="doc-biblioref">Lewis et al. 2020</a>)</span>. Liu et al.’s “Lost in the Middle” is the empirical source for the context-position effect described in Exposition’s Failure Modes section <span class="citation" data-cites="liu2024lostinthemiddle">(<a href="#ref-liu2024lostinthemiddle" role="doc-biblioref">Liu et al. 2024</a>)</span>. Burkov’s <em>Hundred-Page Language Models Book</em>, Section 5.8, frames RAG specifically as a hallucination-mitigation technique, grounding this chapter’s architecture in the failure mode it was built to solve <span class="citation" data-cites="burkov2025hundredpagellm">(<a href="#ref-burkov2025hundredpagellm" role="doc-biblioref">Burkov 2025</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="31.7">
+<h2 data-number="31.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">31.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 27’s embedding foundations (TF-IDF and Word2Vec are the direct ancestors of the dense embeddings used here) and <a href="/books/modern-ai/ch29-transformers" class="quarto-xref"><span>Chapter 29</span></a> (sentence embedding models are transformer encoders fine-tuned for this specific purpose). It enables Chapter 32’s LLM evaluation, which covers RAG-specific metrics, faithfulness to retrieved context, answer relevance, beyond generic LLM evaluation. It’s often confused with “just use a long-context model instead.” Longer context windows reduce the <em>need</em> for aggressive chunking but don’t eliminate RAG’s value. Retrieval still lets a system scale to a document store far larger than any context window, and stays far cheaper per query than stuffing megabytes of text into every prompt.</p>
+</section>
+<section id="exercises" class="level2" data-number="31.8">
+<h2 data-number="31.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">31.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-31-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> List RAG’s four online-stage steps in order (embed query, retrieve, augment, generate) and state which two stages happen only once, offline, during indexing.</p></li>
+<li id="ex-31-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the “key rule” from Procedure 31.2 about embedding models, and explain in one sentence what breaks if it’s violated.</p></li>
+<li id="ex-31-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-rag-worked-compare" class="quarto-xref">Listing&nbsp;<span>31.5</span></a>’s measured results (embedding top score 0.5147 vs.&nbsp;TF-IDF’s 0.0000 across all six documents), explain why TF-IDF’s failure here is worse than simply ranking the correct document lower. What specifically does “0.0000 for every document” mean for a system that has to pick a top-k automatically?</p></li>
+<li id="ex-31-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 31.4’s <code>build_prompt</code> function and this chapter’s measured TF-IDF results, trace through what <code>build_prompt</code> would do if it had been fed TF-IDF’s similarity scores for this query with <code>min_similarity=0.3</code>, and explain why this is actually the <em>safer</em> failure mode compared to what a naive prompt-building function without the threshold check would do.</p></li>
+<li id="ex-31-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague says “we don’t need RAG, we’ll just fine-tune the model on our documentation every week.” Using this chapter’s Trade-offs section, write the two or three sentences you’d say about what that plan gets wrong.</p></li>
+<li id="ex-31-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 31.1’s <code>chunk_by_sentences</code> uses <code>overlap_sentences=1</code> by default. Describe a concrete scenario, using this chapter’s Chunking Strategy discussion, where an idea spanning a chunk boundary would still be missed even with this overlap, and what parameter you’d change to fix it.</p></li>
+<li id="ex-31-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about HNSW (Hierarchical Navigable Small World graphs). Explain in your own words what “approximate” costs in an approximate nearest neighbour search, and why that cost is usually an acceptable trade at the “millions of chunks” scale this chapter describes.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="31.9">
+<h2 data-number="31.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">31.9</span> Mental Model</h2>
+<p>RAG turns “does the model know this?” into “can the model find this?” Finding is a search problem, not a training problem. Every RAG failure traces back to one of two places. The retrieval step returned the wrong (or no) evidence, or the generation step was given the right evidence and still didn’t use it well. This chapter’s Worked Example is a debugging lesson as much as a comparison. TF-IDF’s flat 0.0000 across every candidate is a visible, checkable symptom of a retrieval-stage failure: the kind of signal worth checking for directly before ever assuming the problem is in generation.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2025hundredpagellm" class="csl-entry" role="listitem">
+Burkov, Andriy. 2025. <em>The Hundred-Page Language Models Book</em>. True Positive Inc.
+</div>
+<div id="ref-lewis2020rag" class="csl-entry" role="listitem">
+Lewis, Patrick, Ethan Perez, Aleksandra Piktus, et al. 2020. <span>“Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks.”</span> <em>Advances in Neural Information Processing Systems</em> 33.
+</div>
+<div id="ref-liu2024lostinthemiddle" class="csl-entry" role="listitem">
+Liu, Nelson F., Kevin Lin, John Hewitt, et al. 2024. <span>“Lost in the Middle: How Language Models Use Long Contexts.”</span> <em>Transactions of the Association for Computational Linguistics</em> 12: 157–73.
+</div>
+</div>
+</section>

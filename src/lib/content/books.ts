@@ -1,7 +1,14 @@
 import type { Book } from './types';
 
-// Real titles from the Field Guide source (Quarto). Fill in summaries, page counts and links
-// once the web edition (books project) is live.
+// Real titles from the Field Guide source (Quarto).
+//
+// A volume is published online only when it has a readHref. Without one, its web edition and
+// quizzes are not built (src/lib/books/index.ts).
+//
+// A missing link shows as a grayed-out button. Add each one when it exists (BACKLOG.md #4):
+//   buyHref: a universal Amazon link that sends each reader to their local store
+//   pdfHref: the PDF in a release or on the CDN
+//   payHref: the pay-what-you-want page (Ko-fi, Gumroad, Stripe Payment Link, …)
 export const series = {
 	title: "A Solutions Architect's Field Guide",
 	zh: '架构师手册',
@@ -17,9 +24,10 @@ export const books: Book[] = [
 		zh: '经典',
 		summary: 'The foundations. Framing the business problem, the maths, Python and SQL. Then the classical ML toolkit: ensembles, validation, features, evaluation and time series.',
 		chapters: 20,
-		status: 'building',
+		status: 'live',
 		tone: 'magenta',
-		// buyHref: '<universal link>', // ‹store link when published. Use a universal link, not one regional Amazon store (BACKLOG.md #4)›
+		readHref: '/books/classical-data-science',
+		quizHref: '/books/classical-data-science/quiz'
 	},
 	{
 		slug: 'modern-ai',
@@ -30,8 +38,7 @@ export const books: Book[] = [
 		summary: 'From MLOps to LLMs. Responsible AI, deployment and monitoring. Then neural networks, transformers, RAG, fine-tuning, RLHF and agents.',
 		chapters: 17,
 		status: 'building',
-		tone: 'cyan',
-		// buyHref: '<universal link>', // ‹store link when published. Use a universal link, not one regional Amazon store (BACKLOG.md #4)›
+		tone: 'cyan'
 	},
 	{
 		slug: 'systems-performance',
@@ -42,8 +49,7 @@ export const books: Book[] = [
 		summary: 'Making it fast. GPU architecture, CUDA and Triton kernels. Then CPU performance: profiling, SIMD, parallelism and memory. Ends with an end-to-end optimization.',
 		chapters: 20,
 		status: 'building',
-		tone: 'violet',
-		// buyHref: '<universal link>', // ‹store link when published. Use a universal link, not one regional Amazon store (BACKLOG.md #4)›
+		tone: 'violet'
 	},
 	{
 		slug: 'applied-ai-domains',
@@ -54,7 +60,6 @@ export const books: Book[] = [
 		summary: 'Three frontiers. Physical AI: perception, world models, VLAs and robot policies. Image models, from CNNs to diffusion. Knowledge graphs, GraphRAG and agentic reasoning.',
 		chapters: 26,
 		status: 'building',
-		tone: 'gold',
-		// buyHref: '<universal link>', // ‹store link when published. Use a universal link, not one regional Amazon store (BACKLOG.md #4)›
+		tone: 'gold'
 	}
 ];

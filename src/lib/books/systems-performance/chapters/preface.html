@@ -1,0 +1,30 @@
+<p><em>Systems &amp; Performance</em> is Volume 3, an optional add-on to the core two-volume series. It merges what were originally two separate tracks, GPU kernel programming and CPU-first performance engineering, into one volume, reflecting the dependency between them: the performance-engineering material leans on the GPU-kernel material for its final chapters, once a workload has been shown to genuinely need GPU offload rather than better CPU code.</p>
+<p>This volume assumes core Chapter 29 (Training a Transformer Model) and the capacity-estimation material in Chapters 29, 33, and 23.</p>
+<section id="sec-reference-rig" class="level2">
+<h2 class="anchored" data-anchor-id="sec-reference-rig">Reference Rig</h2>
+<p>Every measured number in this volume (timings, bandwidths, speedups) was taken on one specific machine, not a synthetic or vendor-quoted figure:</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Reference Rig
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>NVIDIA RTX 5090 (170 SMs, ~32GB memory, compute capability 12.0, <code>sm_120</code>) + AMD Ryzen 9 5950X, running CUDA 13.3 and PyTorch 2.11.0+cu128.</p>
+</div>
+</div>
+<p>Numbers pulled from this rig are marked with a footnote reference back to this box (e.g.&nbsp;“14.2 ms<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mrow></mrow><mo>†</mo></msup></mrow><annotation encoding="application/x-tex">^\dagger</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8491em;"></span><span class="mord"><span></span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8491em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mbin mtight">†</span></span></span></span></span></span></span></span></span></span></span>”) rather than repeating the disclaimer at every occurrence. Treat every such number as <em>this machine’s</em> measurement, not a universal constant. The qualitative conclusions (this pattern is faster than that one, this optimisation helps and by roughly this much) generalize far more reliably than the exact figures.</p>
+<section id="reproducing-these-numbers-on-your-own-hardware" class="level3">
+<h3 class="anchored" data-anchor-id="reproducing-these-numbers-on-your-own-hardware">Reproducing These Numbers on Your Own Hardware</h3>
+<p>Every chapter’s Worked Example section is backed by a companion notebook in <code>book-companion-notebooks</code> that includes the profiling code used to produce its numbers, not just the numbers themselves. Re-running that notebook on your own GPU/CPU is the intended way to get <em>your</em> reference numbers. The point of this volume is the profiling method, not this specific rig’s results. Where a chapter’s conclusion depends on a specific hardware feature (e.g.&nbsp;a particular SM count or cache size), that dependency is called out explicitly so you know when your numbers should diverge from the book’s.</p>
+</section>
+</section>
+<section id="how-to-read-this-book" class="level2">
+<h2 class="anchored" data-anchor-id="how-to-read-this-book">How to Read This Book</h2>
+<p>Same chapter anatomy as Volumes 1 and 2, with one addition: any in-chapter measured number carries a Reference Rig footnote as described above.</p>
+
+
+</section>

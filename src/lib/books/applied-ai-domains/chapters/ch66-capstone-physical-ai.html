@@ -1,0 +1,212 @@
+<p>Every chapter in this book’s Physical AI section, Chapters 58 through 65, taught one piece in isolation, on a task built to make that piece’s lesson land cleanly. <a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a>’s exercises assumed a clean observation to process. <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>’s policy-training exercises assumed perfect knowledge of the obstacle’s position. <a href="/books/applied-ai-domains/ch65-deployment-fleet-safety" class="quarto-xref"><span>Chapter 65</span></a>’s safety monitor was tested against that same perfect knowledge. Each isolation was the right pedagogical choice at the time, but a real deployment doesn’t get to make any of those simplifying assumptions, and the interactions between pieces are exactly where a project built module-by-module tends to break. This capstone exists to surface one of those interactions directly, with a measured number: what happens when the safety monitor from Chapter 65 has to act on Chapter 59-style noisy perception instead of ground truth?</p>
+<section id="motivation" class="level2" data-number="66.1">
+<h2 data-number="66.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">66.1</span> Motivation</h2>
+<p>The capstone combines this section’s pieces into one pipeline, perceive, decide, act, and be checked by an independent safety layer, on a single small task, and asks the question none of the earlier chapters were built to answer: does the whole thing still work when every piece is realistically imperfect at once, not just one piece at a time? The answer, measured directly: mostly. The safety monitor cut collisions from 11/40 to 2/40, a large, genuinely useful improvement. But it didn’t reach zero, the way it did in Chapter 65’s noiseless test. That gap between “the technique works in isolation” and “the technique works as part of a system with other imperfect parts” is the single most important thing a capstone can teach that no single-topic chapter can.</p>
+</section>
+<section id="exposition" class="level2" data-number="66.2">
+<h2 data-number="66.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">66.2</span> Exposition</h2>
+<section id="why-this-matters-more-than-a-clean-result-would" class="level3" data-number="66.2.1">
+<h3 data-number="66.2.1" class="anchored" data-anchor-id="why-this-matters-more-than-a-clean-result-would"><span class="header-section-number">66.2.1</span> Why This Matters More Than a Clean Result Would</h3>
+<p>A tutorial that showed 0/40 collisions with noisy perception would have been more satisfying to read and less useful to learn from. Real physical AI systems don’t get to assume their perception is perfect, their policy is perfect, or their safety layer’s input is perfect. They get to measure how imperfect each piece is, and design accordingly. The residual 2/40 collision rate isn’t a flaw in the demo; it’s the actual number a real deployment decision needs, and Worked Example 66’s deployment plan makes the corresponding decision explicit: given a nonzero residual risk, ship human-supervised, not fully autonomous, until the risk is reduced or the safety margin re-validated.</p>
+</section>
+<section id="a-safety-layers-guarantee-is-bounded-by-what-feeds-it" class="level3" data-number="66.2.2">
+<h3 data-number="66.2.2" class="anchored" data-anchor-id="a-safety-layers-guarantee-is-bounded-by-what-feeds-it"><span class="header-section-number">66.2.2</span> A Safety Layer’s Guarantee Is Bounded by What Feeds It</h3>
+<p>This generalises Chapter 65’s point about “a safety layer is not a fix” one level further: a safety layer’s guarantee is bounded by the quality of everything feeding it, not just by its own logic. A safety monitor’s logic can be proven correct and a system can still ship with a real residual failure rate, if the thing it’s protecting against is itself uncertain. Knowing that bound, measuring it, as this capstone does directly, is the difference between a safety claim that can be defended and one that can’t.</p>
+</section>
+<section id="what-a-real-capstone-project-looks-like" class="level3" data-number="66.2.3">
+<h3 data-number="66.2.3" class="anchored" data-anchor-id="what-a-real-capstone-project-looks-like"><span class="header-section-number">66.2.3</span> What a Real Capstone Project Looks Like</h3>
+<p>This chapter’s own worked pipeline is a small, fully-runnable example: read it, run it, understand the integration lesson. A reader’s own capstone project, if built, should be scoped like this chapter’s pipeline in shape (perception feeding a policy feeding a safety layer, with a written deployment plan) but chosen around a problem and environment actually cared about, at whatever scale available hardware or simulation access supports. Book 2’s capstone chapter’s own scoping guide applies here too: scope the project so every stage gets a real, if modest, version, rather than doing one stage impressively and skipping the rest. This chapter’s own pipeline follows exactly that discipline: a genuinely small task, but perception, policy, safety, and a deployment plan all present and real.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="66.3">
+<h2 data-number="66.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">66.3</span> Trade-offs and Limits</h2>
+<p>A capstone that only chains previous chapters’ code with no new measurement teaches nothing beyond what each chapter already taught individually. The value here is specifically in measuring what happens at the integration boundary, not in the chaining itself. A capstone scoped too ambitiously (perfect perception, a fully-tuned policy, a production-grade safety system, all at once) risks each piece being done shallowly under time pressure; a capstone scoped too safely (reusing every prior chapter’s exact clean setup with nothing combined or stressed) avoids the one question a capstone exists to answer. The right scope, as this chapter demonstrates, is small in absolute task complexity but complete in combining every piece, perception noise, policy imperfection, and a safety layer, at once.</p>
+</section>
+<section id="procedures" class="level2" data-number="66.4">
+<h2 data-number="66.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">66.4</span> Procedures</h2>
+<p id="proc-66-1"><strong>Procedure 66.1 (Characterise Real Perception Noise Before Combining Components).</strong> <em>When to use:</em> before feeding a noisy sensor’s output into a safety monitor or policy that was validated against clean data.</p>
+<div id="lst-capstone-physai-noise-check" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-physai-noise-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;66.1: Verify measured noise matches the assumed noise model
+</figcaption>
+<div aria-describedby="lst-capstone-physai-noise-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1">true_position <span class="op">=</span> get_ground_truth(obstacle)</span>
+<span id="cb1-2">sensor_estimate <span class="op">=</span> noisy_sensor_reading(obstacle, std<span class="op">=</span><span class="fl">0.15</span>)</span>
+<span id="cb1-3"><span class="co"># Compare estimate mean/std against ground truth and the assumed</span></span>
+<span id="cb1-4"><span class="co"># noise model</span></span>
+<span id="cb1-5"><span class="co"># BEFORE trusting any downstream component's behaviour on this</span></span>
+<span id="cb1-6"><span class="co"># input.</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming a sensor’s documented noise characteristics without measuring them in the actual pipeline. A mismatch between assumed and actual noise silently invalidates any downstream component (like a safety monitor) tuned against the assumed model.</p>
+<p id="proc-66-2"><strong>Procedure 66.2 (Measure the Integration Gap, Not Just Each Component).</strong> <em>When to use:</em> combining previously-isolated, individually-validated components into one pipeline.</p>
+<div id="lst-capstone-physai-integration" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-physai-integration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;66.2: Compare component-in-isolation results against the combined pipeline
+</figcaption>
+<div aria-describedby="lst-capstone-physai-integration-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="co"># Chapter 65's result</span></span>
+<span id="cb2-2">isolated_result <span class="op">=</span> evaluate(</span>
+<span id="cb2-3">    safety_monitor,</span>
+<span id="cb2-4">    perfect_perception,</span>
+<span id="cb2-5">    test_states,</span>
+<span id="cb2-6">)</span>
+<span id="cb2-7"><span class="co"># this chapter's result</span></span>
+<span id="cb2-8">combined_result <span class="op">=</span> evaluate(</span>
+<span id="cb2-9">    safety_monitor,</span>
+<span id="cb2-10">    noisy_perception,</span>
+<span id="cb2-11">    test_states,</span>
+<span id="cb2-12">)</span>
+<span id="cb2-13">integration_gap <span class="op">=</span> (</span>
+<span id="cb2-14">    combined_result.collision_rate</span>
+<span id="cb2-15">    <span class="op">-</span> isolated_result.collision_rate</span>
+<span id="cb2-16">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-66-3"><strong>Procedure 66.3 (Write a Deployment/Safety Plan Around a Measured Residual Risk).</strong> <em>When to use:</em> any capstone or real deployment with a nonzero measured failure rate, however small.</p>
+<div id="lst-capstone-physai-plan" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-physai-plan-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;66.3: The decision a measured residual risk actually requires
+</figcaption>
+<div aria-describedby="lst-capstone-physai-plan-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Measured residual collision rate: 2/40 (5%), with noisy
+  perception + safety monitor.
+Decision: ship human-supervised, not fully autonomous,
+  until risk is reduced or the safety margin is
+  re-validated at the actual deployment noise level.
+This is NOT the same decision Chapter 65's noiseless
+  result would have supported.</code></pre>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="66.5">
+<h2 data-number="66.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">66.5</span> Worked Example</h2>
+<p>A complete small pipeline, a noisy position sensor, a behaviour-cloned policy (training loss 0.01537, identical setup to <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>), and Chapter 65’s independent safety monitor, combined and tested together for the first time, rather than each validated separately as in earlier chapters:</p>
+<div id="lst-capstone-physai-worked-sensor" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-physai-worked-sensor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;66.4: Sensor noise verified before trusting downstream results
+</figcaption>
+<div aria-describedby="lst-capstone-physai-worked-sensor-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">true_position <span class="op">=</span> [<span class="fl">1.5</span>, <span class="fl">7.0</span>]</span>
+<span id="cb4-2">sensor_estimate_mean, sensor_estimate_std <span class="op">=</span> characterize_sensor(</span>
+<span id="cb4-3">    true_position,</span>
+<span id="cb4-4">    n_samples<span class="op">=</span><span class="dv">1000</span>,</span>
+<span id="cb4-5">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Quantity</th>
+<th>Measured value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>True obstacle position</td>
+<td>[1.5, 7.0]</td>
+</tr>
+<tr class="even">
+<td>Sensor estimate mean</td>
+<td>[1.49456, 6.99042]: close to true position</td>
+</tr>
+<tr class="odd">
+<td>Sensor estimate std</td>
+<td>[0.1509, 0.1451]: close to the assumed 0.15</td>
+</tr>
+</tbody>
+</table>
+<p>The sensor’s measured noise matches its assumed model closely enough to trust downstream results. Procedure 66.1’s check, passed, before anything else is evaluated.</p>
+<div id="lst-capstone-physai-worked-pipeline" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-physai-worked-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;66.5: Same 40 test states, three configurations
+</figcaption>
+<div aria-describedby="lst-capstone-physai-worked-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">result_no_monitor <span class="op">=</span> evaluate(</span>
+<span id="cb5-2">    policy,</span>
+<span id="cb5-3">    noisy_sensor,</span>
+<span id="cb5-4">    test_states,</span>
+<span id="cb5-5">    safety_monitor<span class="op">=</span><span class="va">None</span>,</span>
+<span id="cb5-6">)</span>
+<span id="cb5-7">result_with_monitor <span class="op">=</span> evaluate(</span>
+<span id="cb5-8">    policy,</span>
+<span id="cb5-9">    noisy_sensor,</span>
+<span id="cb5-10">    test_states,</span>
+<span id="cb5-11">    safety_monitor<span class="op">=</span>safety_monitor,</span>
+<span id="cb5-12">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Configuration</th>
+<th>Reached target</th>
+<th>Collisions</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Noisy perception, no safety monitor</td>
+<td>0/40</td>
+<td>11/40</td>
+</tr>
+<tr class="even">
+<td><strong>Noisy perception + safety monitor</strong></td>
+<td>0/40</td>
+<td><strong>2/40</strong></td>
+</tr>
+<tr class="odd">
+<td>Chapter 65’s result: perfect perception + safety monitor (for comparison)</td>
+<td>0/40</td>
+<td>0/40</td>
+</tr>
+</tbody>
+</table>
+<p>The safety monitor still delivers a large, genuinely useful improvement under realistic noisy perception. Collisions drop from 11/40 to 2/40, roughly the same proportional reduction Chapter 65 measured. But it does not reach zero the way it did against ground-truth position data. This 2/40 residual is Motivation’s central claim made numeric: the safety monitor’s own logic didn’t change between chapters, but its real-world guarantee is bounded by the quality of the perception feeding it, and that bound is only visible once the two components are tested together rather than each validated in isolation against its own best-case input.</p>
+<p>Per Procedure 66.3, this measured number drives a concrete deployment decision: a 2/40 (5%) residual collision rate under noisy perception, even with an independent safety monitor active, is not zero. This pipeline should ship human-supervised, not fully autonomous, until either the perception noise is reduced or the safety monitor’s margin is re-tuned and re-validated specifically against this measured noise level, not the noiseless assumption Chapter 65 tested under.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<p>This chapter’s integration-gap methodology (Procedure 66.2) maps directly onto a pre-production checklist for any SageMaker-hosted robotics pipeline: validate perception, policy, and safety-monitor components individually (as earlier chapters did, each a separate SageMaker endpoint or Training Job evaluation), but require one additional integration-test stage: running the full combined pipeline together, with each component’s <em>actual measured</em> noise/error characteristics, not its idealized isolated-test performance, before any staged rollout (Chapter 65’s canary pattern) begins.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="66.6">
+<h2 data-number="66.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">66.6</span> History and Further Reading</h2>
+<p>This section’s Chapters 59, 63, and 65 are the three pieces this capstone integrates. Revisit any one for depth on its individual technique. Book 1’s Data Science Lifecycle chapter provides the lifecycle framing this chapter’s deployment plan follows. Book 2’s capstone chapter provides the scoping discipline, “every stage gets a real, if modest, version,” this capstone follows.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="66.7">
+<h2 data-number="66.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">66.7</span> How This Connects</h2>
+<p>This chapter builds on every chapter in this book’s Physical AI section, specifically reusing <a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a>‘s sensor-noise framing, <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>’s behaviour-cloning setup, and <a href="/books/applied-ai-domains/ch65-deployment-fleet-safety" class="quarto-xref"><span>Chapter 65</span></a>’s safety monitor pattern, combined rather than repeated. It is the terminal chapter of this book’s Physical AI section: it enables nothing further in this section directly, though it sets up revisiting <a href="/books/applied-ai-domains/ch62-simulation-isaac-sim-lab" class="quarto-xref"><span>Chapter 62</span></a>’s and <a href="/books/applied-ai-domains/ch63-learning-robot-policies" class="quarto-xref"><span>Chapter 63</span></a>’s Isaac Lab reference material as the natural next step for rebuilding this scenario at production scale. It’s often confused with a simple “put it all together” demo that just chains previous chapters’ code with no new insight. The point of a capstone isn’t the chaining, it’s finding out what breaks, or degrades, or needs re-measuring, once the pieces are no longer tested in isolation.</p>
+</section>
+<section id="exercises" class="level2" data-number="66.8">
+<h2 data-number="66.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">66.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-66-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the specific integration question this capstone asks that no single earlier chapter was built to answer.</p></li>
+<li id="ex-66-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the three measured collision numbers from the Worked Example (no monitor, noisy+monitor, Chapter 65’s noiseless+monitor) and rank them from most to fewest collisions.</p></li>
+<li id="ex-66-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s measured residual (2/40 collisions with noisy perception + safety monitor, versus 0/40 with perfect perception + the same monitor), explain what this comparison proves about where the safety monitor’s guarantee actually comes from. Is it the monitor’s own logic alone, or something more?</p></li>
+<li id="ex-66-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 66.1’s sensor-characterisation check (measured std 0.1509/0.1451 vs.&nbsp;assumed 0.15), explain why this verification step had to happen BEFORE trusting the 2/40 collision result, not after.</p></li>
+<li id="ex-66-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team that individually validated their perception system, policy, and safety monitor separately, each performing well in isolation, wants to skip integration testing and ship directly, reasoning “each piece works, so the combination will too.” Using this chapter’s Worked Example, write the two or three sentences you’d say in response.</p></li>
+<li id="ex-66-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Using Procedure 66.3’s deployment-plan logic, explain concretely why “the safety monitor achieved 0/40 collisions in Chapter 65’s testing” would be the WRONG number to cite when writing a real deployment plan for this capstone’s pipeline.</p></li>
+<li id="ex-66-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Book 1’s Data Science Lifecycle chapter’s framing of iterative validation. Explain in your own words how this capstone’s finding (a safety guarantee degrading once combined with a realistic, imperfect upstream component) is an argument for validating a full pipeline repeatedly as components change, rather than validating each component once and assuming the combination is permanently safe.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="66.9">
+<h2 data-number="66.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">66.9</span> Mental Model</h2>
+<p>Every chapter in this book’s Physical AI section taught a tool. This capstone is the reminder that tools interact: a good perception system, a good policy, and a good safety monitor don’t automatically compose into a system whose combined guarantees are already known. The combination has to be measured, the same way this chapter measured 2/40, not assumed 0/40. That single number, not zero, not the noiseless best case, but a real, honestly-reported residual, is the actual number a deployment decision needs, and getting comfortable reporting an imperfect result honestly is as much a part of doing this work well as building the pipeline in the first place.</p>
+
+
+</section>

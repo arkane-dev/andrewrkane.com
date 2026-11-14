@@ -1,0 +1,209 @@
+<p>Every prior chapter of this book’s performance-engineering half isolated one lever: benchmarking discipline, cache/branch effects, profiling tools, algorithmic choice, vectorization, parallelism, memory/IO, and the CPU/GPU boundary. A real optimisation task never arrives pre-sorted into those categories. It arrives as “this pipeline is too slow,” and the discipline of finding out which lever applies, in which order, is itself the skill this capstone tests. This chapter builds one deliberately naive pipeline with problems from four different chapters stacked on top of each other, then fixes them the way a real investigation would: profile first, fix the biggest confirmed bottleneck, re-measure, repeat.</p>
+<section id="motivation" class="level2" data-number="57.1">
+<h2 data-number="57.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">57.1</span> Motivation</h2>
+<p>Never guess which fix to apply. Profile, fix the confirmed bottleneck, re-measure, and repeat, applying whichever of this book’s levers the evidence points to. The specific pipeline here (load a CSV, flag transactions against a watchlist, score them with a small model) is incidental. The sequence, measure, locate, fix one thing, re-measure, is the actual subject, and it is identical to <a href="/books/systems-performance/ch48-performance-engineering-mindset" class="quarto-xref"><span>Chapter 48</span></a>’s opening lesson, just applied at the scale of an entire multi-stage system instead of one function. Worked Example 57 below runs this exact sequence, with every number measured on real hardware, including a final trap that survives being taught explicitly earlier in this book and nearly produces a wrong conclusion here too.</p>
+</section>
+<section id="exposition" class="level2" data-number="57.2">
+<h2 data-number="57.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">57.2</span> Exposition</h2>
+<section id="the-naive-pipeline-profiled-before-anything-is-fixed" class="level3" data-number="57.2.1">
+<h3 data-number="57.2.1" class="anchored" data-anchor-id="the-naive-pipeline-profiled-before-anything-is-fixed"><span class="header-section-number">57.2.1</span> The Naive Pipeline, Profiled Before Anything Is Fixed</h3>
+<p>A large synthetic transaction dataset run through a naive pipeline, <code>csv.reader</code> building a list of dicts, a per-row watchlist check against a list (not a set), and a model-scoring loop calling a small MLP one row at a time, measures at several seconds end to end. Profiling a subset with <code>cProfile</code> before touching any code confirms where that time actually concentrates, rather than guessing: feature engineering and model scoring dominate, with data loading a clear but smaller third contributor, exactly <a href="/books/systems-performance/ch50-profiling-cpu-code" class="quarto-xref"><span>Chapter 50</span></a>’s discipline, applied here instead of skipped.</p>
+</section>
+<section id="fixing-each-stage-with-the-chapter-that-predicts-the-fix" class="level3" data-number="57.2.2">
+<h3 data-number="57.2.2" class="anchored" data-anchor-id="fixing-each-stage-with-the-chapter-that-predicts-the-fix"><span class="header-section-number">57.2.2</span> Fixing Each Stage With the Chapter That Predicts the Fix</h3>
+<p>Three CPU-side fixes, each following directly from a specific earlier chapter’s finding: replacing <code>csv.reader</code> with <code>pandas.read_csv</code> (<a href="/books/systems-performance/ch54-memory-io-optimization" class="quarto-xref"><span>Chapter 54</span></a>’s “let a C parser do the IO”), replacing an <code>id in list</code> scan with <code>.isin(set)</code> and vectorized string operations (<a href="/books/systems-performance/ch51-algorithmic-data-structure-optimization" class="quarto-xref"><span>Chapter 51</span></a>’s set-vs-list finding and <a href="/books/systems-performance/ch52-vectorization-simd" class="quarto-xref"><span>Chapter 52</span></a>’s vectorization), and replacing row-at-a-time model scoring with one batched forward pass over the entire dataset (<a href="/books/systems-performance/ch53-parallelism-on-cpu" class="quarto-xref"><span>Chapter 53</span></a>’s “amortise overhead across more work,” applied here via batching rather than multiprocessing). The ordering matters: the biggest win comes from removing Python per-row overhead entirely, not from any hardware change. <a href="/books/systems-performance/ch55-knowing-when-to-move-to-gpu" class="quarto-xref"><span>Chapter 55</span></a>’s question, “should this move to GPU?”, is only worth asking after CPU-side fixes are exhausted, exactly as this book’s chapter ordering implies.</p>
+</section>
+<section id="the-gpu-question-and-the-same-trap-one-more-time" class="level3" data-number="57.2.3">
+<h3 data-number="57.2.3" class="anchored" data-anchor-id="the-gpu-question-and-the-same-trap-one-more-time"><span class="header-section-number">57.2.3</span> The GPU Question, and the Same Trap One More Time</h3>
+<p>The scoring step’s matmul is a plausible GPU candidate under <a href="/books/systems-performance/ch55-knowing-when-to-move-to-gpu" class="quarto-xref"><span>Chapter 55</span></a>’s arithmetic-intensity reasoning, unlike the tiny elementwise operations that chapter measured GPU losing on outright. Testing it directly risks exactly <a href="/books/systems-performance/ch56-profiling-mixed-cpu-gpu-pipelines" class="quarto-xref"><span>Chapter 56</span></a>’s whole-process-timing trap, recurring verbatim at the very end of this book: the first CUDA call in a process pays for one-time context initialisation, making a cold-start measurement look like the operation itself is slow. The lesson isn’t “always warm up before judging GPU performance.” That’s already been covered twice. It’s that this specific trap survives being taught explicitly, twice, earlier in the same book, and still nearly produces a wrong conclusion when it recurs. Correct benchmarking discipline has to be applied every time, not just remembered as a fact. It’s a habit, not a checklist item completed once.</p>
+</section>
+<section id="confirming-the-real-fix-is-batching-not-the-gpu" class="level3" data-number="57.2.4">
+<h3 data-number="57.2.4" class="anchored" data-anchor-id="confirming-the-real-fix-is-batching-not-the-gpu"><span class="header-section-number">57.2.4</span> Confirming the Real Fix Is Batching, Not “the GPU”</h3>
+<p>A final Nsight Systems comparison (<a href="/books/systems-performance/ch56-profiling-mixed-cpu-gpu-pipelines" class="quarto-xref"><span>Chapter 56</span></a>’s technique) makes the mechanism explicit: scoring the same rows via many individual GPU calls versus one batched call shows the GPU was never the problem in the naive version. The number of times it was invoked was. This is the same “amortise fixed cost across more useful work” principle that has recurred at every scale examined in this book. A capstone doesn’t introduce a new idea here, it demonstrates that one idea recurring one final time.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="57.3">
+<h2 data-number="57.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">57.3</span> Trade-offs and Limits</h2>
+<p>Profile-fix-remeasure, one stage at a time, is worth the process overhead on any pipeline with more than one suspect bottleneck. Fixing the wrong stage first wastes real effort, as this chapter’s profiling step demonstrates by ranking stages before touching any of them. Whenever a “the GPU is slower” or “the fix barely helped” result seems to contradict a lever this book already established works, that contradiction is far more often a measurement artefact (cold start, whole-process timing, an un-isolated benchmark) than a genuine exception. A single end-to-end timing, without staged profiling, is acceptable as a first “is this even worth the effort” gut check, but never as the basis for deciding which stage to fix.</p>
+</section>
+<section id="procedures" class="level2" data-number="57.4">
+<h2 data-number="57.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">57.4</span> Procedures</h2>
+<p id="proc-57-1"><strong>Procedure 57.1 (Profile Before Fixing Anything).</strong> <em>When to use:</em> the first step of any real “this pipeline is too slow” investigation, without exception.</p>
+<div id="lst-e2e-profile-first" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-e2e-profile-first-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;57.1: cProfile on a representative subset, before any code changes
+</figcaption>
+<div aria-describedby="lst-e2e-profile-first-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> cProfile</span>
+<span id="cb1-2">cProfile.run(<span class="st">'run_naive_pipeline(sample_df)'</span>, sort<span class="op">=</span><span class="st">'cumulative'</span>)</span>
+<span id="cb1-3"><span class="co"># Rank stages by cumulative time BEFORE deciding which one to fix</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> guessing which stage is slow from intuition about the code’s structure, then optimising that stage first. The actual bottleneck, confirmed by profiling, is frequently not the stage that looks most suspicious from reading the source.</p>
+<p id="proc-57-2"><strong>Procedure 57.2 (Fix One Confirmed Bottleneck, Then Re-Measure).</strong> <em>When to use:</em> after profiling identifies the largest contributor. Never fix multiple stages before re-measuring.</p>
+<div id="lst-e2e-fix-remeasure" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-e2e-fix-remeasure-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;57.2: The loop this entire capstone runs
+</figcaption>
+<div aria-describedby="lst-e2e-fix-remeasure-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>1. Profile the current pipeline.
+2. Identify the single largest confirmed bottleneck.
+3. Apply the fix the evidence points to (data structure,
+   vectorization, batching, IO, or GPU offload:
+   whichever chapter's finding applies).
+4. Re-measure the WHOLE pipeline, not just the fixed stage.
+5. Repeat from step 1 until further fixes aren't worth the effort.</code></pre>
+</div>
+</figure>
+</div>
+<p id="proc-57-3"><strong>Procedure 57.3 (Warm Up Before Judging GPU Performance, Every Time).</strong> <em>When to use:</em> any GPU timing comparison, without exception, even by someone who already knows this rule.</p>
+<div id="lst-e2e-gpu-warmup" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-e2e-gpu-warmup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;57.3: Discard the first call; only trust warm timings
+</figcaption>
+<div aria-describedby="lst-e2e-gpu-warmup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># discard: pays one-time CUDA init cost</span></span>
+<span id="cb3-2">_ <span class="op">=</span> model(warmup_batch)</span>
+<span id="cb3-3">torch.cuda.synchronize()</span>
+<span id="cb3-4">start <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-5">end <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-6">start.record()</span>
+<span id="cb3-7"><span class="co"># this call is the one that counts</span></span>
+<span id="cb3-8">output <span class="op">=</span> model(real_batch)</span>
+<span id="cb3-9">end.record()<span class="op">;</span> torch.cuda.synchronize()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> treating this as a rule to remember rather than a step to always execute. This chapter’s own Worked Example shows the trap nearly producing a wrong conclusion despite being taught explicitly twice earlier in this book.</p>
+</section>
+<section id="worked-example" class="level2" data-number="57.5">
+<h2 data-number="57.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">57.5</span> Worked Example</h2>
+<p>A 300,000-row synthetic transaction dataset (load, watchlist-check, model-score), run naively and profiled with <code>cProfile</code> on a 5,000-row subset before any fix, all measured on this book’s reference rig<span class="ref-rig-mark">†</span>:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Naive time (300K rows, estimated from profiling)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Load (<code>csv.reader</code>)</td>
+<td>215.6ms<span class="ref-rig-mark">†</span></td>
+</tr>
+<tr class="even">
+<td>Feature engineering (list-scan watchlist check)</td>
+<td>773.2ms<span class="ref-rig-mark">†</span></td>
+</tr>
+<tr class="odd">
+<td>Model scoring (one row at a time)</td>
+<td>8,052.0ms<span class="ref-rig-mark">†</span> (extrapolated from a 20,000-row sample)</td>
+</tr>
+<tr class="even">
+<td><strong>Total (naive)</strong></td>
+<td><strong>9,040.8ms</strong><span class="ref-rig-mark">†</span></td>
+</tr>
+</tbody>
+</table>
+<p>Following Procedure 57.2’s loop, each stage fixed with the chapter its bottleneck predicts:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Stage</th>
+<th>Fix applied</th>
+<th>Result</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Load</td>
+<td><code>pandas.read_csv</code> (Ch. 54)</td>
+<td>215.6ms → 111.1ms<span class="ref-rig-mark">†</span></td>
+<td><strong>1.94x</strong></td>
+</tr>
+<tr class="even">
+<td>Feature engineering</td>
+<td><code>.isin(set)</code> + vectorized ops (Ch. 51, Ch. 52)</td>
+<td>773.2ms → 381.9ms<span class="ref-rig-mark">†</span></td>
+<td><strong>2.02x</strong></td>
+</tr>
+<tr class="odd">
+<td>Model scoring</td>
+<td>One batched forward pass (Ch. 53’s amortisation, via batching)</td>
+<td>~8,052ms → 232.1ms<span class="ref-rig-mark">†</span></td>
+<td><strong>34.7x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Combining all three CPU-side fixes: <strong>725.2ms</strong><span class="ref-rig-mark">†</span> total, a <strong>12.5x</strong> overall speedup, before GPU is even considered. The biggest win (scoring, 34.7x) came from removing Python per-row overhead entirely, not from any hardware change, confirming Exposition’s claim that the GPU question is only worth asking after CPU-side fixes are exhausted.</p>
+<p>Testing GPU offload for the scoring step’s matmul, following Procedure 57.3’s warm-up discipline, but first, deliberately, without it, to show what the trap looks like when it isn’t followed:</p>
+<div id="lst-e2e-worked-gpu-trap" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-e2e-worked-gpu-trap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;57.4: The first CUDA call in the process, un-warmed
+</figcaption>
+<div aria-describedby="lst-e2e-worked-gpu-trap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># includes one-time CUDA context init</span></span>
+<span id="cb4-2">result <span class="op">=</span> model_gpu(all_300k_rows)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The <strong>first</strong> CUDA call in the process measures <strong>443.9ms</strong><span class="ref-rig-mark">†</span>, making GPU look <strong>0.52x</strong> versus the 232.1ms CPU-batched version, i.e.&nbsp;<em>slower</em>. This is not a real result. It is <a href="/books/systems-performance/ch48-performance-engineering-mindset" class="quarto-xref"><span>Chapter 48</span></a>’s single-measurement trap and <a href="/books/systems-performance/ch56-profiling-mixed-cpu-gpu-pipelines" class="quarto-xref"><span>Chapter 56</span></a>’s whole-process-timing trap, recurring verbatim at the very end of this book. Repeating the identical call once CUDA is already warm measures <strong>3.7ms wall</strong><span class="ref-rig-mark">†</span> (<strong>1.923ms</strong><span class="ref-rig-mark">†</span> pure GPU compute, timed with <code>torch.cuda.synchronize()</code>), a genuine <strong>62.1x</strong> speedup over the batched-CPU version. The full pipeline with warm GPU scoring totals <strong>496.8ms</strong><span class="ref-rig-mark">†</span>, an <strong>18.2x</strong> overall speedup versus naive, better than the CPU-only fixed pipeline, but only once the cold-start trap is correctly excluded.</p>
+<p>Confirming the real mechanism with a final Nsight Systems comparison (<a href="/books/systems-performance/ch56-profiling-mixed-cpu-gpu-pipelines" class="quarto-xref"><span>Chapter 56</span></a>’s technique): scoring 2,000 rows via 2,000 individual GPU calls consumes <strong>12.740ms</strong><span class="ref-rig-mark">†</span> of genuine, measured GPU-side time across <strong>10,000 kernel launches</strong><span class="ref-rig-mark">†</span> and <strong>6,006 memory-op launches</strong><span class="ref-rig-mark">†</span>; the identical 2,000 rows scored in a single batched call consumes <strong>0.045ms</strong><span class="ref-rig-mark">†</span> across <strong>6 kernel launches</strong><span class="ref-rig-mark">†</span> and <strong>9 memory-op launches</strong><span class="ref-rig-mark">†</span>, <strong>283x less actual GPU-side time for identical output.</strong> The GPU was never the problem in the naive version. The number of times it was invoked was.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<p>This capstone’s full sequence maps directly onto a SageMaker migration decision: before moving a slow pipeline’s scoring stage to a GPU-backed <code>ml.g5</code> endpoint, this chapter’s evidence says to profile first (CloudWatch custom metrics or a local <code>cProfile</code> pass), fix CPU-side batching and vectorization issues on the existing instance type, and only then benchmark GPU with a warm-start comparison (never the endpoint’s first invocation after a cold deploy). The same 34.7x-before-any-hardware-change result this chapter measured locally is exactly the kind of win that would otherwise get mis-attributed to “we need a bigger/GPU instance” when the real fix was CPU-side batching.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="57.6">
+<h2 data-number="57.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">57.6</span> History and Further Reading</h2>
+<p>Huyen’s “Designing Machine Learning Systems” <span class="citation" data-cites="huyen2022designingml">(<a href="#ref-huyen2022designingml" role="doc-biblioref">Huyen 2022</a>)</span>, Chapter 10, covers exactly this kind of end-to-end pipeline profiling in a production ML context. Gregg’s “Systems Performance” <span class="citation" data-cites="gregg2020systemsperformance">(<a href="#ref-gregg2020systemsperformance" role="doc-biblioref">Gregg 2020</a>)</span> is the canonical reference for the profile-locate-fix-verify methodology this capstone follows at every level of a real system. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span> Appendix, a 175-item checklist opening with “optimise the expensive first” and “profile before and after,” is the same discipline this capstone runs by hand, scaled to a full AI system rather than one pipeline, worth keeping alongside Gregg’s methodology once this capstone’s own profile-fix-remeasure loop has been run to completion.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="57.7">
+<h2 data-number="57.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">57.7</span> How This Connects</h2>
+<p>This chapter builds on every chapter in this book’s performance-engineering half: <a href="/books/systems-performance/ch48-performance-engineering-mindset" class="quarto-xref"><span>Chapter 48</span></a>’s benchmarking discipline and single-measurement-trap warning, <a href="/books/systems-performance/ch50-profiling-cpu-code" class="quarto-xref"><span>Chapter 50</span></a>’s profile-before-you-fix method, <a href="/books/systems-performance/ch51-algorithmic-data-structure-optimization" class="quarto-xref"><span>Chapter 51</span></a> and <a href="/books/systems-performance/ch52-vectorization-simd" class="quarto-xref"><span>Chapter 52</span></a>’s data-structure and vectorization fixes, <a href="/books/systems-performance/ch53-parallelism-on-cpu" class="quarto-xref"><span>Chapter 53</span></a>’s overhead-amortisation principle applied here via batching, <a href="/books/systems-performance/ch54-memory-io-optimization" class="quarto-xref"><span>Chapter 54</span></a>’s IO fix, <a href="/books/systems-performance/ch55-knowing-when-to-move-to-gpu" class="quarto-xref"><span>Chapter 55</span></a>’s GPU-worth-it reasoning, and <a href="/books/systems-performance/ch56-profiling-mixed-cpu-gpu-pipelines" class="quarto-xref"><span>Chapter 56</span></a>’s whole-process-timing trap and Nsight-based utilisation confirmation. It is the terminal chapter of Book 3: it enables nothing further in this book. In practice, this exact sequence, profile, fix the confirmed bottleneck, re-measure, repeat, question GPU only once CPU fixes are exhausted, verify with a system-level profiler, is the reusable template for any future “this is too slow” investigation, in this curriculum’s core chapters or in production work. It’s often confused with “just move the slow part to the GPU.” The naive scoring loop was 34.7x too slow for reasons that had nothing to do with CPU-vs-GPU, and fixing the CPU-side batching problem first delivered nearly as much of the total win (12.5x of the eventual 18.2x) as the GPU move itself.</p>
+</section>
+<section id="exercises" class="level2" data-number="57.8">
+<h2 data-number="57.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">57.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-57-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State Procedure 57.1’s rule about the first step of any performance investigation, and name the tool this chapter uses to follow it.</p></li>
+<li id="ex-57-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> List the three CPU-side fixes applied in this chapter’s Worked Example (load, feature engineering, scoring) and state which chapter’s finding predicted each one.</p></li>
+<li id="ex-57-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s measured cold-start result (443.9ms, GPU looking 0.52x, slower than CPU) versus the warm result (3.7ms wall, 62.1x faster than CPU), compute how many times larger the cold-start measurement is than the warm one, and explain what this ratio represents physically.</p></li>
+<li id="ex-57-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the final Nsight comparison’s measured numbers (12.740ms across 10,000 kernel launches for individual calls vs.&nbsp;0.045ms across 6 kernel launches for one batched call), explain why “283x less actual GPU-side time for identical output” is stronger evidence that batching (not “the GPU”) was the real fix than the wall-clock comparison alone would have been.</p></li>
+<li id="ex-57-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team concludes “GPU scoring is slower than CPU for our model” after measuring their first-ever call to a newly loaded GPU model at 400ms against a 230ms CPU baseline. Using this chapter’s Worked Example, write the two or three sentences you’d say before accepting that conclusion.</p></li>
+<li id="ex-57-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s overall CPU-only speedup (12.5x) and GPU-inclusive speedup (18.2x) are both reported relative to the naive 9,040.8ms baseline. Explain why reporting the GPU speedup relative to the CPU-optimised version (232.1ms → 3.7ms, i.e.&nbsp;within-stage) AND relative to the naive baseline (9,040.8ms → 496.8ms, i.e.&nbsp;end-to-end) are both meaningful numbers that answer different questions.</p></li>
+<li id="ex-57-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Gregg’s USE method (Utilization, Saturation, Errors) referenced in “Systems Performance.” Explain how this chapter’s GPU utilisation measurement (from the prior chapter’s <code>nsys</code>-based technique) maps onto the “Utilization” component of the USE method, and what the “Saturation” component would add that raw utilisation alone doesn’t capture.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="57.9">
+<h2 data-number="57.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">57.9</span> Mental Model</h2>
+<p>A naive pipeline is a relay race where every runner also stops to re-tie their shoes before every step, and stops to ask a stranger “is this the right way?” before every turn: the per-row Python loop, the list scan. Fixing it isn’t about hiring faster runners (a GPU) first. It’s removing the shoe-retying and the wrong-turn questions (batching, vectorization, better data structures) so the runners already in place can actually run. Only once that’s done does it make sense to ask whether a faster runner is worth recruiting for the leg of the race that’s left, and even then, judge the faster runner’s real speed only after their warm-up lap, not their first, cold sprint out of the blocks. This chapter’s Worked Example is this book’s thesis, executed one final time, on a system rather than a single function: measure, don’t assume, and measure again after every single change.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+<div id="ref-gregg2020systemsperformance" class="csl-entry" role="listitem">
+Gregg, Brendan. 2020. <em>Systems Performance: Enterprise and the Cloud</em>. 2nd ed. Addison-Wesley.
+</div>
+<div id="ref-huyen2022designingml" class="csl-entry" role="listitem">
+Huyen, Chip. 2022. <em>Designing Machine Learning Systems: An Iterative Process for Production-Ready Applications</em>. O’Reilly Media.
+</div>
+</div>
+</section>

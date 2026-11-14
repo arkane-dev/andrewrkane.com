@@ -1,0 +1,259 @@
+<p>Every CUDA kernel written so far in this book has demanded C++, manual memory management, a separate <code>nvcc</code> compile step, and hand-tuned launch configuration swept by brute force. That is a real barrier: most ML engineers who need one fused operation that doesn’t exist in PyTorch are not C++ systems programmers and shouldn’t have to become one to get it. Triton, originally from OpenAI, now the kernel-authoring language underneath PyTorch’s <code>torch.compile</code>, vLLM, and most modern LLM inference engines, solves this by letting you write a kernel in a Python-embedded DSL at a higher level of abstraction than raw CUDA, while its compiler generates GPU code competitive with hand-tuned CUDA on real workloads. This chapter builds a numerically-stable softmax kernel from scratch and shows it matching PyTorch’s native implementation, then automates launch-configuration tuning with <code>@triton.autotune</code>, turning the previous chapter’s manual sweep into a one-line decorator.</p>
+<section id="motivation" class="level2" data-number="44.1">
+<h2 data-number="44.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">44.1</span> Motivation</h2>
+<p>The single biggest conceptual shift from CUDA to Triton is this: <strong>CUDA programs in terms of individual threads; Triton programs in terms of blocks of data.</strong> In CUDA, you write the body of what <em>one thread</em> does and reason explicitly about <code>threadIdx</code>, warps, and per-thread register usage. In Triton, you write the body of what happens to <em>one block</em> (a <code>BLOCK_SIZE</code>-sized chunk) at a time, using operations like <code>tl.load</code>, <code>tl.sum</code>, and <code>tl.max</code> that act on the whole block at once. Triton’s compiler handles the mapping onto individual threads, register allocation, and much of the memory-coalescing work automatically.</p>
+<p>This does not mean the hardware model from earlier chapters stops applying. It is still SMs, warps, shared memory, and the roofline underneath. It means Triton takes over a layer of the <em>mechanical</em> work of expressing that model against real hardware, freeing you to focus on the <em>algorithm</em> rather than the plumbing.</p>
+</section>
+<section id="exposition" class="level2" data-number="44.2">
+<h2 data-number="44.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">44.2</span> Exposition</h2>
+<section id="a-familiar-kernel-at-a-higher-level" class="level3" data-number="44.2.1">
+<h3 data-number="44.2.1" class="anchored" data-anchor-id="a-familiar-kernel-at-a-higher-level"><span class="header-section-number">44.2.1</span> A Familiar Kernel, at a Higher Level</h3>
+<p>A vector-add kernel makes the shift concrete:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="at">@triton.jit</span></span>
+<span id="cb1-2"><span class="kw">def</span> add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK_SIZE: tl.constexpr):</span>
+<span id="cb1-3">    pid <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="cb1-4">    offs <span class="op">=</span> pid <span class="op">*</span> BLOCK_SIZE <span class="op">+</span> tl.arange(<span class="dv">0</span>, BLOCK_SIZE)</span>
+<span id="cb1-5">    mask <span class="op">=</span> offs <span class="op">&lt;</span> n</span>
+<span id="cb1-6">    x <span class="op">=</span> tl.load(x_ptr <span class="op">+</span> offs, mask<span class="op">=</span>mask)</span>
+<span id="cb1-7">    y <span class="op">=</span> tl.load(y_ptr <span class="op">+</span> offs, mask<span class="op">=</span>mask)</span>
+<span id="cb1-8">    tl.store(out_ptr <span class="op">+</span> offs, x <span class="op">+</span> y, mask<span class="op">=</span>mask)</span></code></pre></div>
+<p>Compare this to the raw-CUDA equivalent from earlier chapters. The shape is recognisably the same: a <code>program_id</code>/<code>blockIdx</code> for identity, an offset computation, a bounds mask, load-compute-store. But <code>tl.arange(0, BLOCK_SIZE)</code> and the vectorised <code>tl.load</code>/<code>tl.store</code> operate on an entire block of <code>BLOCK_SIZE</code> elements as a single operation, not one element per thread. Triton’s compiler decides how to map that block-level operation onto actual warps and threads, including memory coalescing, and you get much of that optimisation for free for patterns Triton’s compiler recognises well.</p>
+</section>
+<section id="a-real-non-trivial-kernel-softmax" class="level3" data-number="44.2.2">
+<h3 data-number="44.2.2" class="anchored" data-anchor-id="a-real-non-trivial-kernel-softmax"><span class="header-section-number">44.2.2</span> A Real, Non-Trivial Kernel: Softmax</h3>
+<p>A numerically-stable row-wise softmax, subtracting the row max before exponentiating, the standard trick to prevent overflow, can be written using <code>tl.max</code>, <code>tl.exp</code>, and <code>tl.sum</code> as block-level reductions, with no explicit shared-memory tree reduction required. Triton generates that from the block-level <code>tl.max</code>/<code>tl.sum</code> calls itself.</p>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface. Measured on that hardware, a hand-written Triton softmax kernel matched PyTorch’s native <code>torch.softmax</code>: 0.0727 ms<span class="ref-rig-mark">†</span> versus 0.0735 ms<span class="ref-rig-mark">†</span>, a ratio of 0.99x<span class="ref-rig-mark">†</span> (Triton fractionally faster), a genuinely notable result for an introductory kernel. This is exactly why Triton has become the standard tool for writing custom fused operations in modern ML systems: the abstraction cost is low enough that hand-written kernels can compete with vendor-optimised libraries on real workloads.</p>
+</section>
+<section id="autotuning-automating-the-manual-sweep" class="level3" data-number="44.2.3">
+<h3 data-number="44.2.3" class="anchored" data-anchor-id="autotuning-automating-the-manual-sweep"><span class="header-section-number">44.2.3</span> Autotuning: Automating the Manual Sweep</h3>
+<p>The previous chapter swept block sizes by hand: launching, timing, and comparing manually. Triton automates exactly this with the <code>@triton.autotune</code> decorator:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="at">@triton.autotune</span>(</span>
+<span id="cb2-2">    configs<span class="op">=</span>[</span>
+<span id="cb2-3">        triton.Config({<span class="st">'BLOCK_SIZE'</span>: <span class="dv">256</span>}, num_warps<span class="op">=</span><span class="dv">2</span>),</span>
+<span id="cb2-4">        triton.Config({<span class="st">'BLOCK_SIZE'</span>: <span class="dv">1024</span>}, num_warps<span class="op">=</span><span class="dv">4</span>),</span>
+<span id="cb2-5">        triton.Config({<span class="st">'BLOCK_SIZE'</span>: <span class="dv">4096</span>}, num_warps<span class="op">=</span><span class="dv">8</span>),</span>
+<span id="cb2-6">        <span class="co"># ...</span></span>
+<span id="cb2-7">    ],</span>
+<span id="cb2-8">    key<span class="op">=</span>[<span class="st">'n_elements'</span>],</span>
+<span id="cb2-9">)</span>
+<span id="cb2-10"><span class="at">@triton.jit</span></span>
+<span id="cb2-11"><span class="kw">def</span> add_kernel_autotuned(...):</span>
+<span id="cb2-12">    ...</span></code></pre></div>
+<p>The first time the kernel runs for a given value of the <code>key</code> parameters (here, <code>n_elements</code>), Triton actually benchmarks every listed configuration and caches the winner. Subsequent calls with the same key skip straight to the fastest configuration found. This is the same kind of search the previous chapter did by hand, done automatically, and re-done automatically if hardware or input size changes.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="44.3">
+<h2 data-number="44.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">44.3</span> Trade-offs and Limits</h2>
+<p>Triton wins at custom fused operations not available in PyTorch or cuDNN, especially elementwise-plus-reduction patterns like normalisation, softmax, and activation-fused-with-something-else, at rapid iteration (no separate C++ compile step, ordinary Python debugging tools mostly work), and at portability across NVIDIA and AMD GPUs from the same source (not exercised on this book’s NVIDIA-only reference rig, but a real Triton advantage). Raw CUDA still wins at maximum control over every hardware detail, specific shared-memory bank layouts, warp-level primitives Triton doesn’t expose, at kernels Triton’s compiler doesn’t schedule well, typically highly irregular, non-block-structured algorithms, and in situations that need to call vendor libraries or hardware features with no Triton binding yet. Neither tool subsumes the other. The choice is a function of how regular the access pattern is and how much manual control the specific optimisation needs.</p>
+</section>
+<section id="procedures" class="level2" data-number="44.4">
+<h2 data-number="44.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">44.4</span> Procedures</h2>
+<p id="proc-44-1"><strong>Procedure 44.1 (Write and Launch a Basic Triton Kernel).</strong> <em>When to use:</em> any elementwise or simple block-parallel operation you’d otherwise write in raw CUDA.</p>
+<div id="lst-basic-triton" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-basic-triton-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;44.1: A minimal Triton elementwise kernel and its Python-side launcher
+</figcaption>
+<div aria-describedby="lst-basic-triton-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> torch</span>
+<span id="cb3-2"><span class="im">import</span> triton</span>
+<span id="cb3-3"><span class="im">import</span> triton.language <span class="im">as</span> tl</span>
+<span id="cb3-4"></span>
+<span id="cb3-5"><span class="at">@triton.jit</span></span>
+<span id="cb3-6"><span class="kw">def</span> add_kernel(x_ptr, y_ptr, out_ptr, n, BLOCK_SIZE: tl.constexpr):</span>
+<span id="cb3-7">    pid <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="cb3-8">    offs <span class="op">=</span> pid <span class="op">*</span> BLOCK_SIZE <span class="op">+</span> tl.arange(<span class="dv">0</span>, BLOCK_SIZE)</span>
+<span id="cb3-9">    mask <span class="op">=</span> offs <span class="op">&lt;</span> n</span>
+<span id="cb3-10">    x <span class="op">=</span> tl.load(x_ptr <span class="op">+</span> offs, mask<span class="op">=</span>mask)</span>
+<span id="cb3-11">    y <span class="op">=</span> tl.load(y_ptr <span class="op">+</span> offs, mask<span class="op">=</span>mask)</span>
+<span id="cb3-12">    tl.store(out_ptr <span class="op">+</span> offs, x <span class="op">+</span> y, mask<span class="op">=</span>mask)</span>
+<span id="cb3-13"></span>
+<span id="cb3-14"><span class="kw">def</span> add(x, y):</span>
+<span id="cb3-15">    n <span class="op">=</span> x.numel()</span>
+<span id="cb3-16">    out <span class="op">=</span> torch.empty_like(x)</span>
+<span id="cb3-17">    BLOCK_SIZE <span class="op">=</span> <span class="dv">1024</span></span>
+<span id="cb3-18">    grid <span class="op">=</span> (triton.cdiv(n, BLOCK_SIZE),)</span>
+<span id="cb3-19">    add_kernel[grid](x, y, out, n, BLOCK_SIZE<span class="op">=</span>BLOCK_SIZE)</span>
+<span id="cb3-20">    <span class="cf">return</span> out</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting the <code>mask</code> argument to <code>tl.load</code>/<code>tl.store</code>. Unlike raw CUDA, where you write an explicit <code>if (i &lt; n)</code> per thread, Triton’s block-level <code>tl.load</code> will read past the array boundary for the last block unless masked. This is usually a silent correctness bug (reading garbage or another array’s memory), not a crash.</p>
+<p id="proc-44-2"><strong>Procedure 44.2 (Write a Row-Wise Reduction Kernel).</strong> <em>When to use:</em> any operation that reduces across one dimension per row: softmax, layer norm, any per-row normalisation.</p>
+<div id="lst-softmax-kernel" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-softmax-kernel-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;44.2: Numerically-stable row-wise softmax as a Triton kernel
+</figcaption>
+<div aria-describedby="lst-softmax-kernel-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="at">@triton.jit</span></span>
+<span id="cb4-2"><span class="kw">def</span> softmax_kernel(</span>
+<span id="cb4-3">    out_ptr,</span>
+<span id="cb4-4">    in_ptr,</span>
+<span id="cb4-5">    in_row_stride,</span>
+<span id="cb4-6">    out_row_stride,</span>
+<span id="cb4-7">    n_cols,</span>
+<span id="cb4-8">    BLOCK_SIZE: tl.constexpr,</span>
+<span id="cb4-9">):</span>
+<span id="cb4-10">    <span class="co"># one program per row</span></span>
+<span id="cb4-11">    row_idx <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="cb4-12">    row_start_ptr <span class="op">=</span> in_ptr <span class="op">+</span> row_idx <span class="op">*</span> in_row_stride</span>
+<span id="cb4-13">    col_offsets <span class="op">=</span> tl.arange(<span class="dv">0</span>, BLOCK_SIZE)</span>
+<span id="cb4-14">    mask <span class="op">=</span> col_offsets <span class="op">&lt;</span> n_cols</span>
+<span id="cb4-15">    row <span class="op">=</span> tl.load(</span>
+<span id="cb4-16">        row_start_ptr <span class="op">+</span> col_offsets,</span>
+<span id="cb4-17">        mask<span class="op">=</span>mask,</span>
+<span id="cb4-18">        other<span class="op">=-</span><span class="bu">float</span>(<span class="st">'inf'</span>),</span>
+<span id="cb4-19">    )</span>
+<span id="cb4-20"></span>
+<span id="cb4-21">    <span class="co"># subtract max FIRST for numerical stability</span></span>
+<span id="cb4-22">    row_minus_max <span class="op">=</span> row <span class="op">-</span> tl.<span class="bu">max</span>(row, axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb4-23">    numerator <span class="op">=</span> tl.exp(row_minus_max)</span>
+<span id="cb4-24">    denominator <span class="op">=</span> tl.<span class="bu">sum</span>(numerator, axis<span class="op">=</span><span class="dv">0</span>)</span>
+<span id="cb4-25">    result <span class="op">=</span> numerator <span class="op">/</span> denominator</span>
+<span id="cb4-26"></span>
+<span id="cb4-27">    tl.store(</span>
+<span id="cb4-28">        out_ptr <span class="op">+</span> row_idx <span class="op">*</span> out_row_stride <span class="op">+</span> col_offsets,</span>
+<span id="cb4-29">        result,</span>
+<span id="cb4-30">        mask<span class="op">=</span>mask,</span>
+<span id="cb4-31">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> skipping the max-subtraction step. <code>exp()</code> of a large positive number overflows to <code>inf</code> in float32 well before you’d expect: <code>exp(89)</code> already overflows fp32, and real model logits can exceed that range. The “obvious” direct-exponentiate softmax is a genuine, easy-to-hit numerical bug, not just a theoretical concern.</p>
+<p id="proc-44-3"><strong>Procedure 44.3 (Autotune a Kernel’s Launch Configuration).</strong> <em>When to use:</em> any kernel where the best <code>BLOCK_SIZE</code>/<code>num_warps</code> isn’t obvious, or varies by input size or hardware.</p>
+<div id="lst-autotune" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-autotune-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;44.3: Autotuning decorator plus the grid-as-a-function-of-meta pattern it requires
+</figcaption>
+<div aria-describedby="lst-autotune-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="at">@triton.autotune</span>(</span>
+<span id="cb5-2">    configs<span class="op">=</span>[</span>
+<span id="cb5-3">        triton.Config({<span class="st">'BLOCK_SIZE'</span>: <span class="dv">256</span>}, num_warps<span class="op">=</span><span class="dv">2</span>),</span>
+<span id="cb5-4">        triton.Config({<span class="st">'BLOCK_SIZE'</span>: <span class="dv">1024</span>}, num_warps<span class="op">=</span><span class="dv">4</span>),</span>
+<span id="cb5-5">        triton.Config({<span class="st">'BLOCK_SIZE'</span>: <span class="dv">4096</span>}, num_warps<span class="op">=</span><span class="dv">8</span>),</span>
+<span id="cb5-6">    ],</span>
+<span id="cb5-7">    <span class="co"># re-benchmark if a new value of this changes the picture</span></span>
+<span id="cb5-8">    key<span class="op">=</span>[<span class="st">'n_elements'</span>],</span>
+<span id="cb5-9">)</span>
+<span id="cb5-10"><span class="at">@triton.jit</span></span>
+<span id="cb5-11"><span class="kw">def</span> my_kernel(</span>
+<span id="cb5-12">    x_ptr, out_ptr, n_elements, BLOCK_SIZE: tl.constexpr</span>
+<span id="cb5-13">):</span>
+<span id="cb5-14">    ...</span>
+<span id="cb5-15"></span>
+<span id="cb5-16"><span class="kw">def</span> my_op(x):</span>
+<span id="cb5-17">    n <span class="op">=</span> x.numel()</span>
+<span id="cb5-18">    out <span class="op">=</span> torch.empty_like(x)</span>
+<span id="cb5-19">    <span class="co"># MUST be a function of meta, not a fixed value</span></span>
+<span id="cb5-20">    grid <span class="op">=</span> <span class="kw">lambda</span> meta: (triton.cdiv(n, meta[<span class="st">'BLOCK_SIZE'</span>]),)</span>
+<span id="cb5-21">    my_kernel[grid](x, out, n)</span>
+<span id="cb5-22">    <span class="cf">return</span> out</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> using a fixed-size <code>grid</code> tuple (e.g.&nbsp;<code>grid = (64,)</code>) with an autotuned kernel. Since <code>BLOCK_SIZE</code> changes between configs, the grid size needed also changes. Always use a lambda that recomputes grid size from <code>meta['BLOCK_SIZE']</code> for autotuned kernels.</p>
+</section>
+<section id="worked-example" class="level2" data-number="44.5">
+<h2 data-number="44.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">44.5</span> Worked Example</h2>
+<p>The companion notebook opens by printing the software stack it ran on: PyTorch 2.11.0+cu128, Triton 3.6.0, on an NVIDIA GeForce RTX 5090<span class="ref-rig-mark">†</span>. This establishes that every number that follows is a real measurement, not an estimate.</p>
+<p>The softmax kernel from <a href="#lst-softmax-kernel" class="quarto-xref">Listing&nbsp;<span>44.2</span></a> is first checked for correctness on a deliberately non-round input shape, <code>(1823, 781)</code>, specifically to avoid accidentally exercising only the fast path for a power-of-two size:</p>
+<div id="lst-softmax-correctness" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-softmax-correctness-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;44.4: Verifying the Triton softmax kernel against torch.softmax on a non-round input shape
+</figcaption>
+<div aria-describedby="lst-softmax-correctness-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">torch.manual_seed(<span class="dv">0</span>)</span>
+<span id="cb6-2">x <span class="op">=</span> torch.randn(<span class="dv">1823</span>, <span class="dv">781</span>, device<span class="op">=</span><span class="st">'cuda'</span>)</span>
+<span id="cb6-3">y_triton <span class="op">=</span> triton_softmax(x)</span>
+<span id="cb6-4">y_torch <span class="op">=</span> torch.softmax(x, dim<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb6-5"></span>
+<span id="cb6-6">max_err <span class="op">=</span> (y_triton <span class="op">-</span> y_torch).<span class="bu">abs</span>().<span class="bu">max</span>().item()</span>
+<span id="cb6-7"><span class="bu">print</span>(<span class="ss">f'Max abs error vs torch.softmax: </span><span class="sc">{</span>max_err<span class="sc">:.2e}</span><span class="ss">'</span>)</span>
+<span id="cb6-8">row_min <span class="op">=</span> y_triton.<span class="bu">sum</span>(<span class="dv">1</span>).<span class="bu">min</span>().item()</span>
+<span id="cb6-9">row_max <span class="op">=</span> y_triton.<span class="bu">sum</span>(<span class="dv">1</span>).<span class="bu">max</span>().item()</span>
+<span id="cb6-10"><span class="bu">print</span>(</span>
+<span id="cb6-11">    <span class="ss">f'Row sums (should all be 1.0): '</span></span>
+<span id="cb6-12">    <span class="ss">f'min=</span><span class="sc">{</span>row_min<span class="sc">:.6f}</span><span class="ss">, max=</span><span class="sc">{</span>row_max<span class="sc">:.6f}</span><span class="ss">'</span></span>
+<span id="cb6-13">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This produces a maximum absolute error of 7.45e-09<span class="ref-rig-mark">†</span> against <code>torch.softmax</code>, with every row summing to exactly 1.000000<span class="ref-rig-mark">†</span>: correctness that is essentially floating-point-exact, not merely “close.”</p>
+<p>The speed comparison on a larger, square input then answers the question this chapter opened with:</p>
+<div id="lst-softmax-speed" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-softmax-speed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;44.5: Benchmarking the Triton softmax kernel against torch.softmax on a 4096x4096 input
+</figcaption>
+<div aria-describedby="lst-softmax-speed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1">x_big <span class="op">=</span> torch.randn(<span class="dv">4096</span>, <span class="dv">4096</span>, device<span class="op">=</span><span class="st">'cuda'</span>)</span>
+<span id="cb7-2">t_triton <span class="op">=</span> bench(triton_softmax, x_big)</span>
+<span id="cb7-3">t_torch <span class="op">=</span> bench(<span class="kw">lambda</span> x: torch.softmax(x, dim<span class="op">=</span><span class="dv">1</span>), x_big)</span>
+<span id="cb7-4"><span class="bu">print</span>(<span class="ss">f'Triton softmax: </span><span class="sc">{</span>t_triton<span class="sc">:.4f}</span><span class="ss"> ms'</span>)</span>
+<span id="cb7-5"><span class="bu">print</span>(<span class="ss">f'torch.softmax:  </span><span class="sc">{</span>t_torch<span class="sc">:.4f}</span><span class="ss"> ms'</span>)</span>
+<span id="cb7-6"><span class="bu">print</span>(<span class="ss">f'Ratio (triton/torch): </span><span class="sc">{</span>t_triton<span class="op">/</span>t_torch<span class="sc">:.2f}</span><span class="ss">x'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Output: 0.0727 ms<span class="ref-rig-mark">†</span> for the hand-written Triton kernel against 0.0735 ms<span class="ref-rig-mark">†</span> for <code>torch.softmax</code>, a ratio of 0.99x<span class="ref-rig-mark">†</span>. A roughly thirty-line kernel matches, and fractionally beats, a cuDNN-backed, heavily vendor-tuned library implementation.</p>
+<p>The autotuning example runs the vector-add kernel from <a href="#lst-autotune" class="quarto-xref">Listing&nbsp;<span>44.3</span></a>, instantiated with five configs, over 67,108,864 (<code>1 &lt;&lt; 26</code>) elements:</p>
+<div id="lst-autotune-run" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-autotune-run-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;44.6: Triggering autotuning and inspecting the winning configuration
+</figcaption>
+<div aria-describedby="lst-autotune-run-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1">out <span class="op">=</span> add_autotuned(x, y)</span>
+<span id="cb8-2">torch.cuda.synchronize()</span>
+<span id="cb8-3"><span class="bu">print</span>(<span class="st">'Correctness:'</span>, torch.allclose(out, x <span class="op">+</span> y))</span>
+<span id="cb8-4"><span class="bu">print</span>(</span>
+<span id="cb8-5">    <span class="st">'Best config found by autotuner:'</span>,</span>
+<span id="cb8-6">    add_kernel_autotuned.best_config,</span>
+<span id="cb8-7">)</span>
+<span id="cb8-8">steady_state_ms <span class="op">=</span> bench(add_autotuned, x, y, warmup<span class="op">=</span><span class="dv">5</span>, reps<span class="op">=</span><span class="dv">20</span>)</span>
+<span id="cb8-9"><span class="bu">print</span>(</span>
+<span id="cb8-10">    <span class="ss">f'Post-autotuning steady-state time: </span><span class="sc">{</span>steady_state_ms<span class="sc">:.4f}</span><span class="ss"> ms'</span></span>
+<span id="cb8-11">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The first call transparently benchmarks all five configs internally. The notebook then prints what the autotuner settled on: <code>BLOCK_SIZE: 1024, num_warps: 4, num_ctas: 1, num_stages: 3, maxnreg: None</code>, with a post-autotuning steady-state time of 0.5138 ms<span class="ref-rig-mark">†</span>. Re-running this same search on repeated invocations on this reference rig has selected <code>BLOCK_SIZE=1024</code> in one run and <code>BLOCK_SIZE=2048</code> in another: an honest reminder that for a purely memory-bound kernel like vector add, several mid-range configurations perform within noise of one another, and the exact config an autotuning run lands on shouldn’t be over-interpreted as a single stable “correct” answer.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="44.6">
+<h2 data-number="44.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">44.6</span> History and Further Reading</h2>
+<p>Triton originates from Tillet, Kung, and Cox’s paper, “Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations” <span class="citation" data-cites="tillet2019triton">(<a href="#ref-tillet2019triton" role="doc-biblioref">Tillet et al. 2019</a>)</span>, which introduced the tile-based programming model this chapter’s block-level operations are built on. The official Triton tutorials at triton-lang.org cover the softmax and matrix-multiplication kernels this chapter’s softmax example is based on, in more depth. PyTorch’s <code>torch.compile</code> documentation explains how Triton is invoked automatically inside modern PyTorch, which is worth reading against this chapter’s hand-written approach. For a sense of what production Triton kernels look like at scale, the attention kernels in vLLM’s source tree (<code>vllm/attention</code>) are a genuinely useful, if advanced, reference. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 14, covers Triton’s programming model in the context of <code>torch.compile</code> and TorchInductor, including <code>torch.library.triton_op</code> for registering a hand-written Triton kernel so the compiler can fuse it with surrounding operations, worth reading once this chapter’s own softmax kernel has been written and benchmarked directly.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="44.7">
+<h2 data-number="44.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">44.7</span> How This Connects</h2>
+<p>This chapter builds on every prior chapter in this book’s GPU-kernels sequence. Triton doesn’t replace the hardware model of SMs, warps, and memory coalescing. It’s a different way of expressing programs against that same model. It enables Chapter 45 (custom PyTorch CUDA extensions are the alternative path to a custom PyTorch op: these two chapters present competing answers to the same problem) and Chapter 47 (the capstone fused kernel is written in Triton). It is often confused with <code>torch.compile</code>: <code>torch.compile</code> can <em>generate</em> Triton kernels automatically from ordinary PyTorch code, whereas this chapter is about writing Triton kernels by hand for cases automatic generation doesn’t reach: novel fusions, algorithms <code>torch.compile</code> doesn’t recognise.</p>
+</section>
+<section id="exercises" class="level2" data-number="44.8">
+<h2 data-number="44.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">44.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-44-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In one or two sentences, explain the core difference between how CUDA and Triton assign work: what does “one thread” correspond to in Triton’s programming model?</p></li>
+<li id="ex-44-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In <a href="#lst-basic-triton" class="quarto-xref">Listing&nbsp;<span>44.1</span></a>, what would happen at runtime if the <code>mask</code> argument were removed from both <code>tl.load</code> calls, for an input whose length is not a multiple of <code>BLOCK_SIZE</code>? Be specific about which elements are affected.</p></li>
+<li id="ex-44-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-softmax-kernel" class="quarto-xref">Listing&nbsp;<span>44.2</span></a> as a base, sketch (in comments or pseudocode) the changes needed to turn it into a row-wise layer-norm kernel instead of softmax. You’ll need a mean and a variance reduction rather than a max and a sum.</p></li>
+<li id="ex-44-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> <a href="#lst-autotune-run" class="quarto-xref">Listing&nbsp;<span>44.6</span></a> shows the autotuner selecting <code>BLOCK_SIZE=1024</code> in one run and <code>BLOCK_SIZE=2048</code> in another, on identical hardware. Explain why this is not a bug, referencing the memory-bound nature of vector add.</p></li>
+<li id="ex-44-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Modify <a href="#lst-autotune" class="quarto-xref">Listing&nbsp;<span>44.3</span></a>’s <code>configs</code> list to add a <code>BLOCK_SIZE=8192, num_warps=16</code> option, and state one reason this configuration might perform worse than the existing options despite using more parallelism.</p></li>
+<li id="ex-44-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The chapter reports a Triton softmax kernel at 0.99x the speed of <code>torch.softmax</code>. Propose an experiment, using a different tensor shape or dtype, that might widen or close this gap, and explain your reasoning.</p></li>
+<li id="ex-44-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague argues that since Triton “does the hard work automatically,” the hardware model from earlier chapters (SMs, warps, coalescing) is no longer worth teaching. Write a rebuttal in three sentences or fewer, grounded in this chapter’s Trade-offs section.</p></li>
+<li id="ex-44-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Skim the original Triton paper’s abstract and introduction (Tillet, Kung, Cox, 2019). Identify one design goal stated in the paper that this chapter’s softmax example directly demonstrates, and one that it does not exercise.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="44.9">
+<h2 data-number="44.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">44.9</span> Mental Model</h2>
+<p>CUDA hands you a box of individual bricks and asks you to describe what one brick does. Triton hands you a pallet of bricks already organised into blocks and asks what happens to one pallet at a time. The same wall gets built, but you’re reasoning at the level the wall actually needs, and the compiler handles the brick-by-brick logistics of laying it down efficiently.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+<div id="ref-tillet2019triton" class="csl-entry" role="listitem">
+Tillet, Philippe, H. T. Kung, and David Cox. 2019. <span>“Triton: An Intermediate Language and Compiler for Tiled Neural Network Computations.”</span> <em>Proceedings of the 3rd ACM SIGPLAN International Workshop on Machine Learning and Programming Languages</em>, 10–19.
+</div>
+</div>
+</section>

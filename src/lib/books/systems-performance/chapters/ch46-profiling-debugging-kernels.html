@@ -1,0 +1,216 @@
+<p>Every measurement in this book’s GPU-kernels chapters so far came from hand-rolled <code>cudaEvent_t</code> timing wrapped around individual kernels already known to be suspect. Real GPU programs have many kernels, and the one that’s actually slow is often not the one intuition would pick. Real GPU bugs, out-of-bounds memory access, race conditions, frequently produce no visible symptom at all. The wrong answer looks plausible, or the corruption doesn’t crash anything until much later, in an unrelated part of the program. This chapter covers <strong><code>nvidia-smi</code></strong>, the free glance that costs nothing and comes before any other tool; <strong><code>torch.profiler</code></strong>, the natural starting point for a PyTorch pipeline; and the three standard NVIDIA tools that replace guessing with measurement below the PyTorch level: <strong>Nsight Systems</strong>, which shows where time goes across a whole program; <strong>Nsight Compute</strong>, which shows why one specific kernel is slow, in hardware-counter detail; and <strong><code>compute-sanitizer</code></strong>, which checks whether a kernel is even correct in the first place.</p>
+<section id="motivation" class="level2" data-number="46.1">
+<h2 data-number="46.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">46.1</span> Motivation</h2>
+<p>These three tools answer three different questions, and reaching for the wrong one wastes time. “Which kernel is the bottleneck?” is answered by Nsight Systems (<code>nsys</code>), a timeline-and-summary profiler across the whole program. “Why is this specific kernel slow?” is answered by Nsight Compute (<code>ncu</code>), which reports deep per-kernel hardware counters: occupancy, memory throughput, warp stall reasons. “Is this kernel’s output actually correct, or does it have a memory bug?” is answered by <code>compute-sanitizer</code>, a correctness checker, not a performance tool at all. Using <code>ncu</code> before <code>nsys</code> has found the actual bottleneck kernel wastes its far higher per-kernel profiling overhead on a kernel that might not matter. Assuming an algorithm is wrong before ruling out a memory bug with <code>compute-sanitizer</code> can cost days of misdirected debugging on a problem that turns out to be one off-by-one comparison.</p>
+</section>
+<section id="exposition" class="level2" data-number="46.2">
+<h2 data-number="46.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">46.2</span> Exposition</h2>
+<section id="nvidia-smi-the-free-glance-before-any-of-the-above" class="level3" data-number="46.2.1">
+<h3 data-number="46.2.1" class="anchored" data-anchor-id="nvidia-smi-the-free-glance-before-any-of-the-above"><span class="header-section-number">46.2.1</span> <code>nvidia-smi</code>: The Free Glance Before Any of the Above</h3>
+<p>Before <code>torch.profiler</code>, <code>nsys</code>, <code>ncu</code>, or <code>compute-sanitizer</code>, there’s a zero-cost, zero-code-change step: watching the GPU while the program runs. <code>nvidia-smi --query-gpu=utilization.gpu,memory.used --format=csv</code> is scriptable, ships with every CUDA install, and answers one question none of this chapter’s other four tools answer as cheaply: is the GPU doing anything at all, right now? It won’t say <em>why</em> a kernel is slow, only <em>whether</em> one is currently running. That’s still useful, and it’s the right first move for a program that looks like it’s hanging: confirm whether the GPU is idle (the problem is upstream, on the CPU side, before any kernel launch) or pegged at 100% (the problem is a real, running kernel, and the next four tools are what to reach for). Terminal-UI tools in this same category (<code>nvtop</code>, <code>nvitop</code>, <code>gpustat</code>) give a live, human-readable view but need a separate install and don’t capture cleanly in an automated script or notebook; <code>nvidia-smi</code>’s scriptable query flags do both jobs from one already-installed tool.</p>
+</section>
+<section id="torch.profiler-the-pytorch-level-starting-point" class="level3" data-number="46.2.2">
+<h3 data-number="46.2.2" class="anchored" data-anchor-id="torch.profiler-the-pytorch-level-starting-point"><span class="header-section-number">46.2.2</span> <code>torch.profiler</code>: The PyTorch-Level Starting Point</h3>
+<p>Every kernel measured so far in this book’s GPU-kernels chapters was hand-written CUDA, compiled and run directly with <code>nvcc</code>. Most real GPU work happens inside PyTorch, where the actual CUDA kernels a line of Python calls are not visible from the Python source at all. <code>torch.matmul(a, b)</code> might dispatch to a cuBLAS or CUTLASS kernel with a name nothing like <code>matmul</code>. <code>torch.profiler</code> answers the same “which operation dominates?” question as <code>nsys</code>, but at the PyTorch-op level, with zero extra tooling beyond the <code>torch</code> import already in the program: wrap the code under investigation in <code>with torch.profiler.profile(activities=[...]) as prof:</code>, then call <code>prof.key_averages().table(sort_by='cuda_time_total')</code> afterwards. It is the natural first tool for a PyTorch pipeline, before dropping down to <code>nsys</code>/<code>ncu</code> for compiled-kernel or hardware-counter detail <code>torch.profiler</code> cannot see inside.</p>
+</section>
+<section id="nsight-systems-finding-the-bottleneck-not-guessing-it" class="level3" data-number="46.2.3">
+<h3 data-number="46.2.3" class="anchored" data-anchor-id="nsight-systems-finding-the-bottleneck-not-guessing-it"><span class="header-section-number">46.2.3</span> Nsight Systems: Finding the Bottleneck, Not Guessing It</h3>
+<p><code>nsys profile</code> records a timeline of everything a program does on the CPU and GPU. <code>nsys stats --report cuda_gpu_kern_sum</code> summarizes that timeline into a per-kernel breakdown of total time, instance count, and average time per launch. The workflow is always the same: profile the whole program first, then look at which kernel actually dominates, before deciding what to optimize.</p>
+</section>
+<section id="nsight-compute-going-deeper-on-one-kernel" class="level3" data-number="46.2.4">
+<h3 data-number="46.2.4" class="anchored" data-anchor-id="nsight-compute-going-deeper-on-one-kernel"><span class="header-section-number">46.2.4</span> Nsight Compute: Going Deeper on One Kernel</h3>
+<p>Once <code>nsys</code> has identified which kernel matters, <code>ncu</code> explains why it runs at the speed it does: achieved occupancy (Chapter 43), memory throughput as a percentage of peak, warp stall reasons, register usage, and dozens of other hardware counters, all scoped to one specific kernel launch. Collecting these detailed hardware counters requires elevated permissions on most Linux NVIDIA driver installs. Running <code>ncu</code> as a normal user commonly produces <code>ERR_NVGPUCTRPERM: The user does not have permission to access NVIDIA GPU Performance Counters on the target device 0</code>. This is not specific to any one environment or a misconfiguration to be embarrassed about. It is the NVIDIA driver’s default security posture (<code>NVreg_RestrictProfilingToAdminUsers</code>) on most modern Linux distributions, adopted because unrestricted performance-counter access has historically been usable as a side-channel. The fix is either running <code>ncu</code> with <code>sudo</code>, or, for a persistent fix, a driver-level permission change requiring a reboot. Knowing this is a normal, expected speed bump rather than a sign of a broken kernel or setup is itself worth knowing before hitting it for the first time.</p>
+</section>
+<section id="compute-sanitizer-catching-what-doesnt-crash" class="level3" data-number="46.2.5">
+<h3 data-number="46.2.5" class="anchored" data-anchor-id="compute-sanitizer-catching-what-doesnt-crash"><span class="header-section-number">46.2.5</span> <code>compute-sanitizer</code>: Catching What Doesn’t Crash</h3>
+<p>A classic, realistic bug, an off-by-one bounds check, <code>i &lt;= n</code> instead of <code>i &lt; n</code>, illustrates exactly why correctness tooling exists separately from performance tooling. Running the buggy kernel normally produces <code>cudaGetLastError: no error</code>. The kernel launch “succeeds” from CUDA’s own error-checking perspective, because <code>cudaGetLastError()</code> only checks whether the launch itself was rejected (bad grid/block dimensions, resource limits exceeded), not whether the kernel’s individual memory accesses were valid. An out-of-bounds write into unrelated device memory can corrupt data used elsewhere in a program, non-deterministically, without CUDA itself ever flagging that anything went wrong. Running the identical binary under <code>compute-sanitizer --tool memcheck</code> instead reports the exact source line, the exact offending thread and block, and confirms the access lands exactly one element past the allocation boundary, turning a silent, non-deterministic corruption into a precisely located bug.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="46.3">
+<h2 data-number="46.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">46.3</span> Trade-offs and Limits</h2>
+<p>Reach for <code>torch.profiler</code> first, when the code under investigation is PyTorch. It needs no separate tool invocation and gives an op-level breakdown immediately. Reach for <code>nsys</code> when the code is hand-written CUDA, or once <code>torch.profiler</code> has identified a suspect PyTorch op and its actual compiled kernel needs to be seen in a whole-program timeline. It has no special permission requirements and comparatively low overhead. Reach for <code>ncu</code> once <code>nsys</code> has identified one specific kernel and hardware-counter-level detail is needed to know what to fix about it, accepting both its higher per-kernel overhead and the permissions speed bump. Reach for <code>compute-sanitizer</code> whenever output is wrong, inconsistent across runs, or crashes unpredictably, before assuming the algorithm itself is wrong, since ruling out a memory bug is often faster once a tool finds it than any amount of manual code review. None of the three substitutes for another: <code>nsys</code> will not explain why a kernel is slow in hardware terms, <code>ncu</code> will not tell you a kernel is memory-unsafe, and <code>compute-sanitizer</code> will not catch a pure logic error that never touches invalid memory. It only catches the memory/race/sync classes of bug, so a wrong answer with no sanitizer output still needs the algorithm’s math checked independently.</p>
+</section>
+<section id="procedures" class="level2" data-number="46.4">
+<h2 data-number="46.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">46.4</span> Procedures</h2>
+<p id="proc-46-1"><strong>Procedure 46.1 (Find the Bottleneck Kernel in a Multi-Kernel Program).</strong> <em>When to use:</em> a program has several kernels and it isn’t yet known which one is worth optimizing. Always the first profiling step, never guess.</p>
+<div id="lst-nsys-profile" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nsys-profile-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;46.1: Profiling a program with nsys and summarizing per-kernel time
+</figcaption>
+<div aria-describedby="lst-nsys-profile-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><span class="ex">nsys</span> profile <span class="at">-o</span> my_profile <span class="at">--force-overwrite</span><span class="op">=</span>true ./my_program</span>
+<span id="cb1-2"><span class="ex">nsys</span> stats <span class="at">--report</span> cuda_gpu_kern_sum my_profile.nsys-rep</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The <code>Time (%)</code> column gives the share of total GPU kernel time. Sort by this to find the bottleneck. <code>Instances</code> shows how many times a kernel was launched: a kernel launched many times can dominate even if each individual call is fast. <code>Avg (ns)</code> gives the per-launch average time, useful for distinguishing a cost that’s per-call from one that’s driven by call count. <strong>Common mistake:</strong> assuming the kernel that “sounds” most expensive, a transcendental-function-heavy kernel, say, is the bottleneck without checking. The Worked Example below found the opposite.</p>
+<p id="proc-46-2"><strong>Procedure 46.2 (Catch Memory Bugs Before They Cause Silent Corruption).</strong> <em>When to use:</em> output is wrong, inconsistent between runs, or “mostly right but sometimes not,” before spending time debugging the algorithm itself.</p>
+<div id="lst-compute-sanitizer" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-compute-sanitizer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;46.2: Running a compiled binary under compute-sanitizer’s memcheck tool
+</figcaption>
+<div aria-describedby="lst-compute-sanitizer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><span class="ex">compute-sanitizer</span> <span class="at">--tool</span> memcheck ./my_program</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>Invalid __global__ read/write of size N bytes</code> reports the access type and size that violated bounds. <code>at kernelName(...)+0xNN in file.cu:LINE</code> gives the exact kernel and source line. This only resolves to a real file:line reference, rather than a bare address, if the binary was compiled with <code>nvcc -lineinfo</code>. <code>by thread (x,y,z) in block (x,y,z)</code> identifies exactly which thread triggered the fault, useful for reasoning about which index computation is wrong. <code>N bytes after/before the nearest allocation</code> confirms whether it’s an overrun or underrun, and by how much. <strong>Common mistake:</strong> compiling without <code>-lineinfo</code> and then trying to debug from raw addresses alone. It costs nothing at runtime and turns opaque offsets into actual source references.</p>
+<p id="proc-46-3"><strong>Procedure 46.3 (Choose Which Tool to Reach For First).</strong> <em>When to use:</em> at the start of any performance or correctness investigation, before running anything.</p>
+<div id="lst-tool-choice" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-tool-choice-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;46.3: A decision function mirroring the diagnostic order this chapter argues for
+</figcaption>
+<div aria-describedby="lst-tool-choice-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">def</span> which_tool(symptom):</span>
+<span id="cb3-2">    <span class="cf">if</span> symptom <span class="op">==</span> <span class="st">'looks_hung_or_unresponsive'</span>:</span>
+<span id="cb3-3">        <span class="cf">return</span> <span class="st">'nvidia-smi (free glance: is the GPU doing anything at all?)'</span></span>
+<span id="cb3-4">    <span class="cf">if</span> symptom <span class="kw">in</span> (</span>
+<span id="cb3-5">        <span class="st">'wrong_output'</span>,</span>
+<span id="cb3-6">        <span class="st">'inconsistent_across_runs'</span>,</span>
+<span id="cb3-7">        <span class="st">'crashes_unpredictably'</span>,</span>
+<span id="cb3-8">    ):</span>
+<span id="cb3-9">        <span class="cf">return</span> <span class="st">'compute-sanitizer (rule out a memory bug FIRST)'</span></span>
+<span id="cb3-10">    <span class="cf">if</span> symptom <span class="op">==</span> <span class="st">'slow_pytorch_pipeline'</span>:</span>
+<span id="cb3-11">        <span class="cf">return</span> <span class="st">'torch.profiler (op-level breakdown, no extra tooling)'</span></span>
+<span id="cb3-12">    <span class="cf">if</span> symptom <span class="op">==</span> <span class="st">'slow_multi_kernel_program'</span>:</span>
+<span id="cb3-13">        <span class="cf">return</span> <span class="st">'nsys (find which kernel dominates total time)'</span></span>
+<span id="cb3-14">    <span class="cf">if</span> symptom <span class="op">==</span> <span class="st">'slow_specific_known_kernel'</span>:</span>
+<span id="cb3-15">        <span class="cf">return</span> <span class="st">'ncu (hardware-counter detail on that one kernel)'</span></span>
+<span id="cb3-16">    <span class="cf">return</span> (</span>
+<span id="cb3-17">        <span class="st">'Unclear symptom: start with nsys for a general '</span></span>
+<span id="cb3-18">        <span class="st">'overview'</span></span>
+<span id="cb3-19">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> reaching for <code>ncu</code>’s deep hardware counters before establishing, via <code>nsys</code>, that the kernel about to be deep-dived on is actually the one that matters. <code>ncu</code>’s per-kernel profiling overhead is much higher than <code>nsys</code>’s, so it’s worth spending only on a kernel already confirmed to matter.</p>
+<p id="proc-46-4"><strong>Procedure 46.4 (Get an Op-Level Breakdown of a PyTorch Pipeline).</strong> <em>When to use:</em> the code under investigation is PyTorch, not hand-written CUDA. The natural first step, before <code>nsys</code>/<code>ncu</code>.</p>
+<div id="lst-torch-profiler" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-torch-profiler-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;46.4: Profiling a PyTorch pipeline with torch.profiler
+</figcaption>
+<div aria-describedby="lst-torch-profiler-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> torch</span>
+<span id="cb4-2"><span class="im">from</span> torch.profiler <span class="im">import</span> profile, ProfilerActivity</span>
+<span id="cb4-3"></span>
+<span id="cb4-4"><span class="cf">with</span> profile(activities<span class="op">=</span>[ProfilerActivity.CUDA]) <span class="im">as</span> prof:</span>
+<span id="cb4-5">    result <span class="op">=</span> pipeline(a, b)   <span class="co"># any PyTorch code</span></span>
+<span id="cb4-6">    torch.cuda.synchronize()</span>
+<span id="cb4-7"></span>
+<span id="cb4-8"><span class="bu">print</span>(prof.key_averages().table(</span>
+<span id="cb4-9">    sort_by<span class="op">=</span><span class="st">'cuda_time_total'</span>, row_limit<span class="op">=</span><span class="dv">10</span>,</span>
+<span id="cb4-10">))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> profiling without a warm-up call first, or without <code>torch.cuda.synchronize()</code> before reading results. CUDA kernel launches are asynchronous from Python’s perspective. Timings taken without a synchronize point can attribute one op’s actual execution time to whatever op happened to be running on the CPU when the clock was read.</p>
+<p id="proc-46-5"><strong>Procedure 46.5 (Check Whether the GPU Is Doing Anything Before Reaching for Any Profiler).</strong> <em>When to use:</em> the very first step, even before Procedure 46.3’s decision tree, whenever a program looks stuck or its behaviour is unclear.</p>
+<div id="lst-nvidia-smi-glance" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nvidia-smi-glance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;46.5: Scriptable GPU utilisation glance, no code changes to the program under investigation
+</figcaption>
+<div aria-describedby="lst-nvidia-smi-glance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb5-1"><span class="ex">nvidia-smi</span> <span class="at">--query-gpu</span><span class="op">=</span>utilization.gpu,memory.used <span class="at">--format</span><span class="op">=</span>csv,noheader</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> treating a 0% reading as proof a kernel is slow. It only proves the GPU isn’t running anything <em>at this instant</em>: a fast kernel launched in a tight loop can be idle between launches even while the overall pipeline is GPU-bound, and a program stuck on a CPU-side lock or blocked I/O call will also read 0% forever, for a completely different reason <code>nvidia-smi</code> alone cannot distinguish. Poll repeatedly across the program’s runtime, not once.</p>
+</section>
+<section id="worked-example" class="level2" data-number="46.5">
+<h2 data-number="46.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">46.5</span> Worked Example</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface.</p>
+<p><strong><code>nvidia-smi</code>, the free glance.</strong> A single deliberately GPU-bound kernel, polled with <a href="#lst-nvidia-smi-glance" class="quarto-xref">Listing&nbsp;<span>46.5</span></a> every 0.5 seconds while it runs, following Procedure 46.5:</p>
+<pre class="text"><code>Before launch:    4 %, 937 MiB
+
+While busyKernel ran:
+  t=0.00s  4 %, 937 MiB
+  t=0.53s  100 %, 1457 MiB
+  t=1.05s  100 %, 1457 MiB
+  t=1.57s  100 %, 1457 MiB
+  t=2.08s  100 %, 1457 MiB
+  t=2.60s  100 %, 1457 MiB
+
+After completion: 1 %, 937 MiB</code></pre>
+<p>Idle before, pegged at 100%<span class="ref-rig-mark">†</span> for the entire runtime, idle again afterward: exactly the signature that confirms real GPU work is happening, and roughly when it starts and stops, all from one already-installed tool, no code instrumentation, no separate profiler run. This is a coarse signal on purpose: it says nothing about which kernel, or why. But it costs nothing to check first, and it’s the fastest way to rule in or rule out “is the GPU even doing anything” before spending time on any of the tools below.</p>
+<p><strong><code>torch.profiler</code>, PyTorch-level.</strong> A three-op PyTorch pipeline, a 4096x4096 matrix multiply, then <code>sigmoid</code>, then <code>sum</code>, run five times, following <a href="#lst-torch-profiler" class="quarto-xref">Listing&nbsp;<span>46.4</span></a>:</p>
+<pre class="text"><code>Name                  CUDA total (us)       %   Calls
+cutlass matmul kernel          10285.2   96.8%       5
+sigmoid kernel                   252.0    2.4%       5
+sum/reduce kernel                 81.4    0.8%       5
+
+Total CUDA time: 10.622 ms</code></pre>
+<p>Here the intuitive guess turns out right. The matmul dominates at 96.8%<span class="ref-rig-mark">†</span> of total GPU time, with <code>sigmoid</code> and <code>sum</code> both comparatively cheap. That is worth noting alongside the nsys result immediately below: sometimes intuition matches the measurement, sometimes it does not, and the entire point of profiling is finding out which, not assuming either direction. <code>torch.profiler</code> found this without leaving Python or invoking a separate tool, the natural first step for a PyTorch pipeline, before <code>nsys</code>/<code>ncu</code> are needed for compiled-kernel-level or hardware-counter detail.</p>
+<p><strong><code>nsys</code>, hand-written CUDA.</strong> The pipeline under test is three kernels run five times each: <code>vecAdd</code>, then <code>sigmoidKernel</code> (using <code>expf()</code>), then <code>sumTreeReduction</code> (Chapter 42’s tree-reduction pattern), over <code>1 &lt;&lt; 22</code> elements. Before running anything, a reasonable guess is that <code>sigmoidKernel</code>, the one doing an expensive-looking transcendental function, dominates. Following <a href="#lst-nsys-profile" class="quarto-xref">Listing&nbsp;<span>46.1</span></a>:</p>
+<div id="lst-nsys-output" class="bash listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-nsys-output-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;46.6: nsys stats output for the three-kernel pipeline
+</figcaption>
+<div aria-describedby="lst-nsys-output-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb8-1"><span class="ex">Time%</span>   Total<span class="er">(</span><span class="ex">ns</span><span class="kw">)</span>  <span class="ex">Inst</span>  Avg<span class="er">(</span><span class="ex">ns</span><span class="kw">)</span>   <span class="ex">Med</span><span class="er">(</span><span class="ex">ns</span><span class="kw">)</span>   <span class="ex">Name</span></span>
+<span id="cb8-2"><span class="ex">56.3</span>      109,567     5  21,913.4  21,920.0  sumTreeReduction<span class="er">(</span><span class="ex">...</span><span class="kw">)</span></span>
+<span id="cb8-3"><span class="ex">22.1</span>       43,103     5   8,620.6   8,480.0  vecAdd<span class="er">(</span><span class="ex">...</span><span class="kw">)</span></span>
+<span id="cb8-4"><span class="ex">21.6</span>       42,048     5   8,409.6   8,320.0  sigmoidKernel<span class="er">(</span><span class="ex">...</span><span class="kw">)</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The guess was wrong. <code>sumTreeReduction</code> took 56.3%<span class="ref-rig-mark">†</span> of total GPU time, more than <code>vecAdd</code> and <code>sigmoidKernel</code> combined, despite looking like the “simplest” operation in the pipeline. The cost comes from the reduction’s <code>__syncthreads()</code> barriers and final <code>atomicAdd</code> (Chapter 42), not from arithmetic complexity. <code>expf()</code> is comparatively cheap by contrast. This is the entire point of profiling instead of guessing, and it echoes Chapter 41’s stencil-tiling null result and Chapter 43’s occupancy curve: real measured answers are frequently not what intuition predicts.</p>
+<p>The correctness half of the Worked Example deliberately introduces the off-by-one bug from this chapter’s Exposition, in a kernel launched with <code>grid * block = 1024</code> threads over <code>n = 1000</code> elements, so 24 threads have <code>i &gt;= n</code>. Run normally:</p>
+<pre class="text"><code>Running BUGGY kernel (off-by-one bounds check)...
+cudaGetLastError: no error</code></pre>
+<p>No error is reported. The launch “succeeded.” The same binary under <code>compute-sanitizer --tool memcheck</code>:</p>
+<pre class="text"><code>========= Invalid __global__ read of size 4 bytes
+=========     at addOneBuggy(float *, int)+0xb0 in buggy.cu:8
+=========     by thread (232,0,0) in block (3,0,0)
+=========     Access to 0x7f7412400fa0 is out of bounds
+=========     and is 1 bytes after the nearest allocation
+=========     at 0x7f7412400000 of size 4,000 bytes</code></pre>
+<p>This pinpoints the exact source line, the exact thread (232 in block 3, global index 1000, precisely the first out-of-bounds index), and confirms the access lands exactly one byte after a 4,000-byte (1,000-float) allocation: precisely the bug. Compute-sanitizer’s instrumentation also surfaces a <code>cudaErrorLaunchFailure</code> on the subsequent <code>cudaDeviceSynchronize()</code> call, something the uninstrumented run never revealed. The fixed kernel, run through the same tool, reports <code>ERROR SUMMARY: 0 errors</code>.</p>
+<p>Finally, running <code>ncu --set basic</code> on this reference rig without elevated permissions reproduces the exact permission error described in the Exposition:</p>
+<pre class="text"><code>==PROF== Connected to process ...
+==ERROR== ERR_NVGPUCTRPERM - The user does not have
+permission to access NVIDIA GPU
+Performance Counters on the target device 0.</code></pre>
+<p><code>nsys</code> and <code>compute-sanitizer</code> are both unaffected by this restriction and remain usable without elevated access. On a shared cluster without root, they are the primary tools available.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="46.6">
+<h2 data-number="46.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">46.6</span> History and Further Reading</h2>
+<p>NVIDIA’s Nsight Systems documentation is the full CLI and GUI reference, and covers how to read the timeline view that <code>nsys stats</code> output summarizes numerically. NVIDIA’s Nsight Compute documentation covers the full metric reference, hundreds of countable hardware events, once permission to collect them is available, and the NVIDIA Developer Blog’s Nsight Compute profiling guide walks through worked examples of the occupancy and memory-throughput metrics this chapter refers back to from Chapter 43. The <code>compute-sanitizer</code> documentation’s “Memcheck Tool” section also covers the sanitizer tools not exercised in this chapter’s Worked Example: <code>racecheck</code> for shared-memory data races, <code>initcheck</code> for reads of uninitialized device memory, and <code>synccheck</code> for invalid <code>__syncthreads()</code> usage such as calls inside divergent branches. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 8, covers Nsight Systems and Nsight Compute in much greater depth, including the achieved-occupancy and occupancy-limiter metrics this chapter reports back to Chapter 43, worth reading once this chapter’s own <code>nsys</code>-then-<code>ncu</code> workflow has been run directly. Cautaerts and Ghorbanfekr’s <em>GPU-Accelerated Computing with Python 3 and CUDA</em> <span class="citation" data-cites="cautaerts2026gpuaccelerated">(<a href="#ref-cautaerts2026gpuaccelerated" role="doc-biblioref">Cautaerts and Ghorbanfekr 2026</a>)</span>, Chapter 4, covers the same Nsight Systems and Nsight Compute workflow from Numba-CUDA kernels, plus print-statement and CPU-emulation debugging techniques this chapter’s <code>compute-sanitizer</code> coverage doesn’t touch.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="46.7">
+<h2 data-number="46.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">46.7</span> How This Connects</h2>
+<p>This chapter builds on every prior chapter in this book’s GPU-kernels sequence. It is the tooling that would have let earlier results be observed directly rather than inferred, such as seeing memory-bandwidth-bound versus compute-bound behavior in <code>ncu</code>’s output rather than deriving it from timing sweeps in Chapter 43. It enables Chapter 47, whose capstone fused kernel is profiled with these same tools to confirm its expected win rather than trusting timing alone. It is often confused with <code>cudaGetLastError()</code>/<code>cudaPeekAtLastError()</code> as a substitute for correctness checking: those catch launch configuration errors (invalid grid or block dimensions, resource limits exceeded), not out-of-bounds memory access or races, which is exactly what this chapter’s bug demonstrated slipping through silently.</p>
+</section>
+<section id="exercises" class="level2" data-number="46.8">
+<h2 data-number="46.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">46.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-46-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State which of the three tools, <code>nsys</code>, <code>ncu</code>, <code>compute-sanitizer</code>, answers each question: (a) “which of my five kernels is slowest overall?”; (b) “is this kernel reading past the end of an allocation?”; (c) “why is this one kernel only achieving 40% memory throughput?”</p></li>
+<li id="ex-46-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain why <code>cudaGetLastError()</code> reported “no error” for the buggy kernel in this chapter’s Worked Example, even though the kernel performed an invalid memory access.</p></li>
+<li id="ex-46-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-nsys-output" class="quarto-xref">Listing&nbsp;<span>46.6</span></a>, compute what percentage of total pipeline time <code>sumTreeReduction</code> would need to drop to if it were optimized down to <code>vecAdd</code>’s average per-launch time, assuming <code>vecAdd</code> and <code>sigmoidKernel</code>’s times stay fixed.</p></li>
+<li id="ex-46-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> A colleague’s kernel is compiled without <code>-lineinfo</code> and <code>compute-sanitizer</code> reports an address instead of a file:line. Write the corrected <code>nvcc</code> command that would fix this, referencing Procedure 46.2.</p></li>
+<li id="ex-46-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-tool-choice" class="quarto-xref">Listing&nbsp;<span>46.3</span></a> as a model, extend <code>which_tool</code> with a new symptom string, <code>'high_kernel_launch_count'</code>, and decide which of the three tools (or a fourth answer) is the right response, justifying the choice.</p></li>
+<li id="ex-46-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate wants to skip <code>nsys</code> and go straight to <code>ncu --set full</code> on every kernel in a ten-kernel pipeline “to be thorough.” Using this chapter’s Trade-offs section, write the two-sentence case against this approach.</p></li>
+<li id="ex-46-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s <code>ncu</code> permission error is described as “not a sign of a broken setup.” Propose a one-sentence addition to a team’s onboarding documentation that would prevent a new engineer from wasting an afternoon debugging their CUDA install because of this error.</p></li>
+<li id="ex-46-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Skim the NVIDIA Nsight Compute documentation’s metric reference. Pick one hardware counter not named in this chapter (occupancy, memory throughput, and warp stall reasons were all mentioned) and explain in one or two sentences what question it would help answer.</p></li>
+<li id="ex-46-9"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A program that should take a few seconds appears to hang indefinitely, and <code>nvidia-smi</code> reads 0% GPU utilisation the entire time. Using this chapter’s Procedure 46.5, name two structurally different root causes consistent with that single reading, and state what a next step to distinguish them would be.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="46.9">
+<h2 data-number="46.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">46.9</span> Mental Model</h2>
+<p><code>nsys</code> is a building’s master electrician checking which floor is drawing too much power. <code>ncu</code> is that electrician opening the breaker panel on the one floor that’s a problem, testing individual circuits. <code>compute-sanitizer</code> is a structural inspector who doesn’t care about power usage at all, only whether the wiring is actually safe, because a fire, like a memory bug, doesn’t announce itself as a symptom the electrician would ever have measured.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-cautaerts2026gpuaccelerated" class="csl-entry" role="listitem">
+Cautaerts, Niels, and Hossein Ghorbanfekr. 2026. <em>GPU-Accelerated Computing with Python 3 and CUDA: From Low-Level Kernels to Real-World Applications in Scientific Computing and Machine Learning</em>. Packt Publishing.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+</div>
+</section>

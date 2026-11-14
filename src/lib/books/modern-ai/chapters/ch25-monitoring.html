@@ -1,0 +1,503 @@
+<p>A model that has just been deployed is, in one sense, already out of date. The moment training finishes, the world keeps moving and the model does not. Customers change, seasons change, competitors launch new products, upstream pipelines get “improved,” and fraud patterns adapt specifically <em>because</em> a model is now watching for them. None of this shows up as a bug. The code is correct, the infrastructure is healthy, the model is doing exactly what it was trained to do. The problem is that the world it was trained on no longer exists. Monitoring is the discipline of noticing that gap before it costs the business money. This chapter builds the statistical tools and decision rules that do the noticing.</p>
+<section id="motivation" class="level2" data-number="25.1">
+<h2 data-number="25.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">25.1</span> Motivation</h2>
+<p>A model learns a fixed function: a mapping from inputs to outputs, frozen at the moment training finished. Production traffic is not frozen. Every change that happens after deployment falls into one of three buckets. The distribution of inputs shifts while the true relationship between inputs and outputs stays the same (<strong>data drift</strong>). The relationship itself changes even though the inputs look normal (<strong>concept drift</strong>). Or the distribution of the model’s own outputs shifts, which can be a downstream symptom of either of the above, or of a silently broken input pipeline (<strong>label/prediction drift</strong>). These three failure modes require different detection strategies, arrive on different timescales, and demand different responses. Conflating them is one of the most common mistakes in production ML monitoring.</p>
+</section>
+<section id="exposition" class="level2" data-number="25.2">
+<h2 data-number="25.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">25.2</span> Exposition</h2>
+<section id="data-drift-covariate-shift" class="level3" data-number="25.2.1">
+<h3 data-number="25.2.1" class="anchored" data-anchor-id="data-drift-covariate-shift"><span class="header-section-number">25.2.1</span> Data Drift (Covariate Shift)</h3>
+<p>Formally, data drift is when <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> changes but <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mo>∣</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(y \mid X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> stays fixed. The features arriving in production no longer look like the features the model trained on, but the underlying relationship between those features and the label hasn’t moved. A loan approval model trained mostly on applicants aged 25-45 starts seeing a wave of applicants aged 60+ after a new partnership launches. The relationship between income, credit history, and default risk hasn’t changed, but the model is now extrapolating into a region of feature space it saw far less of during training, where its predictions are less reliable. Data drift is a leading indicator. It often shows up before performance visibly degrades, which is exactly what makes it useful. But it is not a guarantee of harm. If the model generalises well into the new region, performance might not move at all: a distinction this chapter’s Worked Example makes concrete with real numbers.</p>
+</section>
+<section id="concept-drift" class="level3" data-number="25.2.2">
+<h3 data-number="25.2.2" class="anchored" data-anchor-id="concept-drift"><span class="header-section-number">25.2.2</span> Concept Drift</h3>
+<p>Formally, concept drift is when <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mo>∣</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(y \mid X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> changes: the same input now maps to a different, real output. This is the dangerous failure mode, because the inputs can look completely normal while the model is silently wrong. A fraud model trained before a new fraud technique emerges will see the same transaction pattern that used to be safe now behaving as a common attack vector. A demand forecasting model trained before a competitor cuts prices will see the same seasonal pattern stop predicting the same sales volume. Concept drift cannot be detected by watching the inputs alone. There is nothing to see in <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>X</mi></mrow><annotation encoding="application/x-tex">X</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span></span></span></span>. It requires either ground-truth labels, usually lagged, or a strong proxy for correctness.</p>
+</section>
+<section id="label-prediction-drift" class="level3" data-number="25.2.3">
+<h3 data-number="25.2.3" class="anchored" data-anchor-id="label-prediction-drift"><span class="header-section-number">25.2.3</span> Label / Prediction Drift</h3>
+<p>This is drift in the distribution of what the model <em>outputs</em>. For example, the fraction of transactions flagged as fraud suddenly doubles. It is a symptom, not a root cause. It can be produced by data drift, by concept drift, or, very commonly in practice, by a broken upstream feature pipeline silently sending null or default values. Monitoring prediction distributions is cheap, requires no labels at all, and often catches pipeline bugs faster than it catches genuine drift.</p>
+</section>
+<section id="detecting-drift-without-labels" class="level3" data-number="25.2.4">
+<h3 data-number="25.2.4" class="anchored" data-anchor-id="detecting-drift-without-labels"><span class="header-section-number">25.2.4</span> Detecting Drift Without Labels</h3>
+<p>Because inputs are always available immediately, drift detection tests compare a <strong>reference distribution</strong>, usually the training set, or a recent known-good production window, against a <strong>current window</strong> of live traffic.</p>
+<p><strong>Population Stability Index (PSI)</strong> buckets both distributions using the same bin edges, usually deciles of the reference distribution, then measures how much probability mass has shifted between buckets:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mtext>PSI</mtext><mo>=</mo><munder><mo>∑</mo><mi>i</mi></munder><mo stretchy="false">(</mo><msub><mtext>actual_pct</mtext><mi>i</mi></msub><mo>−</mo><msub><mtext>expected_pct</mtext><mi>i</mi></msub><mo stretchy="false">)</mo><mo>×</mo><mi>ln</mi><mo>⁡</mo><mtext> ⁣</mtext><mrow><mo fence="true">(</mo><mfrac><msub><mtext>actual_pct</mtext><mi>i</mi></msub><msub><mtext>expected_pct</mtext><mi>i</mi></msub></mfrac><mo fence="true">)</mo></mrow></mrow><annotation encoding="application/x-tex">\text{PSI} = \sum_i (\text{actual\_pct}_i - \text{expected\_pct}_i) \times \ln\!\left(\frac{\text{actual\_pct}_i}{\text{expected\_pct}_i}\right)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord text"><span class="mord">PSI</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.3277em;vertical-align:-1.2777em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.05em;"><span style="top:-1.8723em;margin-left:0em;"><span class="pstrut" style="height:3.05em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span><span style="top:-3.05em;"><span class="pstrut" style="height:3.05em;"></span><span><span class="mop op-symbol large-op">∑</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.2777em;"><span></span></span></span></span></span><span class="mopen">(</span><span class="mord"><span class="mord text"><span class="mord">actual_pct</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.102em;"><span style="top:-2.3403em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3597em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.1097em;vertical-align:-0.3597em;"></span><span class="mord"><span class="mord text"><span class="mord">expected_pct</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.102em;"><span style="top:-2.3403em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3597em;"><span></span></span></span></span></span></span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:2.4957em;vertical-align:-1.0457em;"></span><span class="mop">ln</span><span class="mspace" style="margin-right:-0.1667em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;"><span class="delimsizing size3">(</span></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.4441em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord text"><span class="mord">expected_pct</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.102em;"><span style="top:-2.3403em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3597em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.7497em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord"><span class="mord text"><span class="mord">actual_pct</span></span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.102em;"><span style="top:-2.3403em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">i</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.3597em;"><span></span></span></span></span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:1.0457em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mclose delimcenter" style="top:0em;"><span class="delimsizing size3">)</span></span></span></span></span></span></span></p>
+<p>PSI is popular in industry, especially in credit risk where it originated, because it is simple, interpretable, and has widely agreed thresholds. Below 0.10 is no significant shift. 0.10-0.25 is a moderate shift worth logging. Above 0.25 is a significant shift worth investigating. Its main weakness is sensitivity to bucket choice. It is also less statistically rigorous than a proper hypothesis test. It has a deep connection to the KL divergence covered earlier in the course. PSI is a symmetrised, discretised cousin of KL divergence, both measuring “how far is this distribution from that one” with the same log-ratio-of-probabilities shape.</p>
+<p><strong>The Kolmogorov-Smirnov (KS) test</strong> is a nonparametric statistical test that measures the maximum distance between two empirical cumulative distribution functions, with a p-value indicating how likely that distance is under the null hypothesis that both samples come from the same distribution:</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><msub><mi>D</mi><mrow><mi>K</mi><mi>S</mi></mrow></msub><mo>=</mo><munder><mrow><mi>max</mi><mo>⁡</mo></mrow><mi>x</mi></munder><mrow><mo fence="true">∣</mo><msub><mi>F</mi><mtext>expected</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>−</mo><msub><mi>F</mi><mtext>actual</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo fence="true">∣</mo></mrow></mrow><annotation encoding="application/x-tex">D_{KS} = \max_x \left| F_{\text{expected}}(x) - F_{\text{actual}}(x) \right|</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8333em;vertical-align:-0.15em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0278em;">D</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3283em;"><span style="top:-2.55em;margin-left:-0.0278em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight" style="margin-right:0.0715em;">K</span><span class="mord mathnormal mtight" style="margin-right:0.0576em;">S</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.45em;vertical-align:-0.7em;"></span><span class="mop op-limits"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.4306em;"><span style="top:-2.4em;margin-left:0em;"><span class="pstrut" style="height:3em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mathnormal mtight">x</span></span></span><span style="top:-3em;"><span class="pstrut" style="height:3em;"></span><span><span class="mop">max</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.7em;"><span></span></span></span></span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="minner"><span class="mopen delimcenter" style="top:0em;">∣</span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">expected</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.2861em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.1389em;">F</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3361em;"><span style="top:-2.55em;margin-left:-0.1389em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord text mtight"><span class="mord mtight">actual</span></span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mopen">(</span><span class="mord mathnormal">x</span><span class="mclose">)</span><span class="mclose delimcenter" style="top:0em;">∣</span></span></span></span></span></span></p>
+<p>The KS test is more statistically principled than PSI. But the p-value shrinks automatically as window size grows. With enough production traffic, even trivially small, harmless shifts become “statistically significant.” In practice, teams often report the KS statistic itself, a plain effect-size number bounded between 0 and 1, rather than relying on the p-value once sample sizes get large.</p>
+<p><strong>The chi-squared test</strong> is the categorical-feature equivalent, comparing observed versus expected category frequencies between reference and current windows for features like <code>country</code>, <code>device_type</code>, or <code>plan_tier</code>. It carries the same interpretation caveat as KS at large sample sizes.</p>
+</section>
+<section id="performance-monitoring-when-you-have-labels" class="level3" data-number="25.2.5">
+<h3 data-number="25.2.5" class="anchored" data-anchor-id="performance-monitoring-when-you-have-labels"><span class="header-section-number">25.2.5</span> Performance Monitoring (When You Have Labels)</h3>
+<p>When ground-truth labels do become available, even weeks or months later, direct performance monitoring is the gold standard, because it measures the thing that actually matters rather than a proxy. The same evaluation metrics used at training time, accuracy, AUC, precision/recall, calibration, get tracked over a rolling window and compared against the model’s baseline performance at launch. The complication is <strong>label lag</strong>. A loan default model might not know whether a loan defaulted for 12-24 months. A fraud model’s confirmed chargeback might take 60-90 days. Performance monitoring is therefore inherently reactive. It tells you a problem existed some time ago, not that one exists right now. This is why input drift monitoring, fast but indirect, and performance monitoring, slow but direct, are used together rather than as substitutes for each other.</p>
+</section>
+<section id="retraining-trigger-strategies" class="level3" data-number="25.2.6">
+<h3 data-number="25.2.6" class="anchored" data-anchor-id="retraining-trigger-strategies"><span class="header-section-number">25.2.6</span> Retraining Trigger Strategies</h3>
+<p>Once drift can be detected and performance decay measured, a policy is needed for when to act. <strong>Scheduled retraining</strong> retrains on a fixed cadence regardless of detected drift. It’s simple and predictable in cost, but it wastes compute when nothing has changed and reacts too slowly when something has. <strong>Drift-triggered retraining</strong> fires automatically when a drift metric crosses a threshold. It’s fast to react, but it risks retraining on noise if thresholds are too sensitive, and cannot catch concept drift on its own, since concept drift produces no input-side signal at all. <strong>Performance-triggered retraining</strong> fires when a monitored performance metric drops below a threshold. It’s directly tied to business impact, but bottlenecked by label lag. The pattern most teams converge on in practice is <strong>hybrid</strong>. Drift signals trigger an investigation, not an automatic retrain. Confirmed performance drops, or a strong business-metric proxy, trigger the actual retrain.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="25.3">
+<h2 data-number="25.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">25.3</span> Trade-offs and Limits</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Approach</th>
+<th>Speed</th>
+<th>Directness</th>
+<th>Risk</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Input drift (PSI/KS)</td>
+<td>Fast (immediate)</td>
+<td>Indirect: proxy for harm</td>
+<td>Misses concept drift entirely; can false-alarm on harmless shifts</td>
+</tr>
+<tr class="even">
+<td>Performance monitoring</td>
+<td>Slow (label-lag bound)</td>
+<td>Direct: measures actual harm</td>
+<td>Confirms the problem only after it already happened</td>
+</tr>
+<tr class="odd">
+<td>Prediction distribution monitoring</td>
+<td>Fast (immediate)</td>
+<td>Indirect: symptom, not cause</td>
+<td>Can’t distinguish drift from a broken pipeline without further digging</td>
+</tr>
+<tr class="even">
+<td>Scheduled retraining</td>
+<td>N/A</td>
+<td>N/A</td>
+<td>Wastes compute on stable periods; too slow for sudden shifts</td>
+</tr>
+</tbody>
+</table>
+<p>The practical answer most teams converge on is to monitor everything cheaply and continuously, inputs, predictions, but gate expensive actions, retraining and paging on-call, behind confirmed performance signals wherever label lag allows it. Data drift and concept drift are frequently used interchangeably in casual conversation. But they require different detection strategies (input statistics versus labelled performance) and imply different fixes. Data drift might just need a wider training distribution. Concept drift means the old labels are no longer even true, and no amount of re-sampling the same relationship will fix it.</p>
+</section>
+<section id="procedures" class="level2" data-number="25.4">
+<h2 data-number="25.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">25.4</span> Procedures</h2>
+<p id="proc-25-1"><strong>Procedure 25.1 (Compute PSI for a Numeric Feature).</strong> <em>When to use:</em> comparing a live production window against a reference distribution, usually the training set, to check for data drift.</p>
+<div id="lst-compute-psi" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-compute-psi-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;25.1: Population Stability Index between two numeric samples, bucketed by the reference distribution’s deciles
+</figcaption>
+<div aria-describedby="lst-compute-psi-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb1-2"></span>
+<span id="cb1-3"><span class="kw">def</span> compute_psi(expected, actual, buckets<span class="op">=</span><span class="dv">10</span>):</span>
+<span id="cb1-4">    breakpoints <span class="op">=</span> np.linspace(<span class="dv">0</span>, <span class="dv">100</span>, buckets <span class="op">+</span> <span class="dv">1</span>)</span>
+<span id="cb1-5">    edges <span class="op">=</span> np.unique(np.percentile(expected, breakpoints))</span>
+<span id="cb1-6">    <span class="cf">if</span> <span class="bu">len</span>(edges) <span class="op">&lt;</span> <span class="dv">3</span>:</span>
+<span id="cb1-7">        <span class="co"># reference sample too narrow to bucket meaningfully</span></span>
+<span id="cb1-8">        <span class="cf">return</span> <span class="fl">0.0</span></span>
+<span id="cb1-9"></span>
+<span id="cb1-10">    expected_counts <span class="op">=</span> np.histogram(expected, edges)[<span class="dv">0</span>]</span>
+<span id="cb1-11">    expected_counts <span class="op">=</span> expected_counts.astype(<span class="bu">float</span>)</span>
+<span id="cb1-12">    actual_counts <span class="op">=</span> np.histogram(actual, edges)[<span class="dv">0</span>].astype(<span class="bu">float</span>)</span>
+<span id="cb1-13"></span>
+<span id="cb1-14">    expected_pct <span class="op">=</span> expected_counts <span class="op">/</span> expected_counts.<span class="bu">sum</span>()</span>
+<span id="cb1-15">    actual_pct <span class="op">=</span> actual_counts <span class="op">/</span> actual_counts.<span class="bu">sum</span>()</span>
+<span id="cb1-16"></span>
+<span id="cb1-17">    expected_pct <span class="op">=</span> np.where(expected_pct <span class="op">==</span> <span class="dv">0</span>, <span class="fl">1e-4</span>, expected_pct)</span>
+<span id="cb1-18">    actual_pct <span class="op">=</span> np.where(actual_pct <span class="op">==</span> <span class="dv">0</span>, <span class="fl">1e-4</span>, actual_pct)</span>
+<span id="cb1-19"></span>
+<span id="cb1-20">    <span class="cf">return</span> <span class="bu">float</span>(np.<span class="bu">sum</span>(</span>
+<span id="cb1-21">        (actual_pct <span class="op">-</span> expected_pct)</span>
+<span id="cb1-22">        <span class="op">*</span> np.log(actual_pct <span class="op">/</span> expected_pct)</span>
+<span id="cb1-23">    ))</span>
+<span id="cb1-24"></span>
+<span id="cb1-25">psi <span class="op">=</span> compute_psi(</span>
+<span id="cb1-26">    reference_df[<span class="st">'income'</span>].values,</span>
+<span id="cb1-27">    production_df[<span class="st">'income'</span>].values,</span>
+<span id="cb1-28">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> recomputing bucket edges from <code>actual</code> instead of always using <code>expected</code>’s edges. If both sides define their own bins, the two sides are no longer comparing the same buckets, and the PSI value becomes meaningless.</p>
+<p id="proc-25-2"><strong>Procedure 25.2 (Run a KS Test for Drift).</strong> <em>When to use:</em> a statistically principled alternative or complement to PSI for a continuous feature.</p>
+<div id="lst-compute-ks" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-compute-ks-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;25.2: Two-sample Kolmogorov-Smirnov test for distribution drift
+</figcaption>
+<div aria-describedby="lst-compute-ks-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> scipy <span class="im">import</span> stats</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="kw">def</span> compute_ks(expected, actual):</span>
+<span id="cb2-4">    result <span class="op">=</span> stats.ks_2samp(expected, actual)</span>
+<span id="cb2-5">    <span class="cf">return</span> result.statistic, result.pvalue</span>
+<span id="cb2-6"></span>
+<span id="cb2-7">ks_stat, ks_p <span class="op">=</span> compute_ks(</span>
+<span id="cb2-8">    reference_df[<span class="st">'income'</span>].values,</span>
+<span id="cb2-9">    production_df[<span class="st">'income'</span>].values,</span>
+<span id="cb2-10">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Watch out for large sample sizes:</strong> with tens of thousands of production rows or more, the p-value shrinks toward zero even for tiny, harmless distribution shifts. Track the statistic itself as the primary signal once windows get large, and treat the p-value as informational rather than as the alert trigger.</p>
+<p id="proc-25-3"><strong>Procedure 25.3 (Monitor Categorical Feature Drift).</strong> <em>When to use:</em> features like <code>country</code>, <code>device_type</code>, or <code>plan_tier</code>, anything that isn’t numeric.</p>
+<div id="lst-categorical-drift" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-categorical-drift-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;25.3: Chi-squared test for categorical feature drift, with unseen categories aligned rather than dropped
+</figcaption>
+<div aria-describedby="lst-categorical-drift-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> scipy.stats <span class="im">import</span> chisquare</span>
+<span id="cb3-2"></span>
+<span id="cb3-3"><span class="kw">def</span> compute_categorical_drift(expected_series, actual_series):</span>
+<span id="cb3-4">    expected_counts <span class="op">=</span> expected_series.value_counts(normalize<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-5">    actual_counts <span class="op">=</span> actual_series.value_counts(normalize<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-6"></span>
+<span id="cb3-7">    all_categories <span class="op">=</span> expected_counts.index.union(</span>
+<span id="cb3-8">        actual_counts.index</span>
+<span id="cb3-9">    )</span>
+<span id="cb3-10">    expected_aligned <span class="op">=</span> expected_counts.reindex(</span>
+<span id="cb3-11">        all_categories,</span>
+<span id="cb3-12">        fill_value<span class="op">=</span><span class="fl">1e-4</span>,</span>
+<span id="cb3-13">    )</span>
+<span id="cb3-14">    actual_aligned <span class="op">=</span> actual_counts.reindex(</span>
+<span id="cb3-15">        all_categories,</span>
+<span id="cb3-16">        fill_value<span class="op">=</span><span class="fl">1e-4</span>,</span>
+<span id="cb3-17">    )</span>
+<span id="cb3-18"></span>
+<span id="cb3-19">    n <span class="op">=</span> <span class="bu">len</span>(actual_series)</span>
+<span id="cb3-20">    expected_scaled <span class="op">=</span> expected_aligned <span class="op">*</span> n</span>
+<span id="cb3-21">    actual_scaled <span class="op">=</span> actual_aligned <span class="op">*</span> n</span>
+<span id="cb3-22"></span>
+<span id="cb3-23">    <span class="cf">return</span> chisquare(f_obs<span class="op">=</span>actual_scaled, f_exp<span class="op">=</span>expected_scaled)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> a brand-new category appearing in production, e.g.&nbsp;a new <code>plan_tier</code> launched last week, will always register as significant drift. That is often a real and useful signal that the feature encoding pipeline needs to handle it, not a false alarm to suppress.</p>
+<p id="proc-25-4"><strong>Procedure 25.4 (Track Performance With Label Lag).</strong> <em>When to use:</em> ground-truth labels exist, but arrive days, weeks, or months after the prediction was made.</p>
+<div id="lst-rolling-performance" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-rolling-performance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;25.4: A rolling performance window that only scores predictions with labels available so far
+</figcaption>
+<div aria-describedby="lst-rolling-performance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb4-2"><span class="im">from</span> sklearn.metrics <span class="im">import</span> accuracy_score, roc_auc_score</span>
+<span id="cb4-3"></span>
+<span id="cb4-4"><span class="kw">def</span> rolling_performance(</span>
+<span id="cb4-5">    predictions_df,</span>
+<span id="cb4-6">    label_lag_days,</span>
+<span id="cb4-7">    window_days<span class="op">=</span><span class="dv">7</span>,</span>
+<span id="cb4-8">):</span>
+<span id="cb4-9">    labelled <span class="op">=</span> predictions_df.dropna(subset<span class="op">=</span>[<span class="st">'y_true'</span>]).copy()</span>
+<span id="cb4-10">    labelled[<span class="st">'prediction_date'</span>] <span class="op">=</span> pd.to_datetime(</span>
+<span id="cb4-11">        labelled[<span class="st">'prediction_date'</span>]</span>
+<span id="cb4-12">    )</span>
+<span id="cb4-13"></span>
+<span id="cb4-14">    results <span class="op">=</span> []</span>
+<span id="cb4-15">    date_range <span class="op">=</span> pd.date_range(</span>
+<span id="cb4-16">        labelled[<span class="st">'prediction_date'</span>].<span class="bu">min</span>(),</span>
+<span id="cb4-17">        labelled[<span class="st">'prediction_date'</span>].<span class="bu">max</span>(),</span>
+<span id="cb4-18">        freq<span class="op">=</span><span class="ss">f'</span><span class="sc">{</span>window_days<span class="sc">}</span><span class="ss">D'</span>,</span>
+<span id="cb4-19">    )</span>
+<span id="cb4-20">    <span class="cf">for</span> window_end <span class="kw">in</span> date_range:</span>
+<span id="cb4-21">        window_start <span class="op">=</span> window_end <span class="op">-</span> pd.Timedelta(days<span class="op">=</span>window_days)</span>
+<span id="cb4-22">        in_window <span class="op">=</span> (</span>
+<span id="cb4-23">            (labelled[<span class="st">'prediction_date'</span>] <span class="op">&gt;=</span> window_start)</span>
+<span id="cb4-24">            <span class="op">&amp;</span> (labelled[<span class="st">'prediction_date'</span>] <span class="op">&lt;</span> window_end)</span>
+<span id="cb4-25">        )</span>
+<span id="cb4-26">        window <span class="op">=</span> labelled[in_window]</span>
+<span id="cb4-27">        <span class="cf">if</span> <span class="bu">len</span>(window) <span class="op">==</span> <span class="dv">0</span>:</span>
+<span id="cb4-28">            <span class="cf">continue</span></span>
+<span id="cb4-29">        results.append({</span>
+<span id="cb4-30">            <span class="st">'window_end'</span>: window_end,</span>
+<span id="cb4-31">            <span class="st">'n'</span>: <span class="bu">len</span>(window),</span>
+<span id="cb4-32">            <span class="st">'accuracy'</span>: accuracy_score(</span>
+<span id="cb4-33">                window[<span class="st">'y_true'</span>],</span>
+<span id="cb4-34">                window[<span class="st">'y_pred'</span>],</span>
+<span id="cb4-35">            ),</span>
+<span id="cb4-36">            <span class="st">'auc'</span>: roc_auc_score(</span>
+<span id="cb4-37">                window[<span class="st">'y_true'</span>],</span>
+<span id="cb4-38">                window[<span class="st">'y_proba'</span>],</span>
+<span id="cb4-39">            ),</span>
+<span id="cb4-40">        })</span>
+<span id="cb4-41">    <span class="cf">return</span> pd.DataFrame(results)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Two signs performance monitoring itself needs attention: a metric drops only in the most recent window (check <code>n</code> before reacting, it may just be a small-sample artifact), or metrics look fine but the <em>volume</em> of labelled feedback has dropped sharply, meaning the label pipeline may be broken and silently blinding the monitor.</p>
+<p id="proc-25-5"><strong>Procedure 25.5 (Set Layered Alert Thresholds and a Retraining Trigger).</strong> <em>When to use:</em> turning raw drift and performance numbers into actionable decisions without causing alert fatigue.</p>
+<div id="lst-alert-thresholds" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-alert-thresholds-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;25.5: Layered thresholds separating logging, investigation, and automatic retraining
+</figcaption>
+<div aria-describedby="lst-alert-thresholds-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># log it, no page</span></span>
+<span id="cb5-2">PSI_INVESTIGATE <span class="op">=</span> <span class="fl">0.10</span></span>
+<span id="cb5-3"><span class="co"># page on-call to investigate, don't auto-retrain</span></span>
+<span id="cb5-4">PSI_ALERT <span class="op">=</span> <span class="fl">0.25</span></span>
+<span id="cb5-5"><span class="co"># confirmed, kick off the retraining pipeline</span></span>
+<span id="cb5-6">ACCURACY_DROP_RETRAIN <span class="op">=</span> <span class="fl">0.05</span></span>
+<span id="cb5-7"></span>
+<span id="cb5-8"><span class="kw">def</span> classify(max_psi, accuracy_drop):</span>
+<span id="cb5-9">    confirmed_drop <span class="op">=</span> (</span>
+<span id="cb5-10">        accuracy_drop <span class="kw">is</span> <span class="kw">not</span> <span class="va">None</span></span>
+<span id="cb5-11">        <span class="kw">and</span> accuracy_drop <span class="op">&gt;</span> ACCURACY_DROP_RETRAIN</span>
+<span id="cb5-12">    )</span>
+<span id="cb5-13">    <span class="cf">if</span> confirmed_drop:</span>
+<span id="cb5-14">        <span class="cf">return</span> <span class="st">'RETRAIN'</span></span>
+<span id="cb5-15">    <span class="cf">if</span> max_psi <span class="op">&gt;</span> PSI_ALERT:</span>
+<span id="cb5-16">        <span class="cf">return</span> <span class="st">'INVESTIGATE'</span></span>
+<span id="cb5-17">    <span class="cf">if</span> max_psi <span class="op">&gt;</span> PSI_INVESTIGATE:</span>
+<span id="cb5-18">        <span class="cf">return</span> <span class="st">'LOG'</span></span>
+<span id="cb5-19">    <span class="cf">return</span> <span class="st">'OK'</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Rule of thumb:</strong> require an alert to persist across two consecutive windows before paging. This alone eliminates most single-window noise pages. Also alert on the <em>trend</em> (is PSI climbing steadily over the last several windows) in addition to the instantaneous value, to catch slow drift that never crosses a static threshold sharply. Before acting on any alert, triage in order. Did feature volume or nullness change abruptly? That’s a pipeline bug, not real drift: fix upstream, don’t retrain. Did the alert coincide with a known business event? That’s likely real drift, worth retraining. Is only one feature drifting while others are stable? Check that feature’s upstream source specifically. Has accuracy actually dropped, or only the input distribution? Input drift without a performance drop often needs no action at all.</p>
+</section>
+<section id="worked-example" class="level2" data-number="25.5">
+<h2 data-number="25.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">25.5</span> Worked Example</h2>
+<p>The tutorial trains a baseline logistic regression on three numeric features (<code>x1</code>, <code>x2</code>, <code>x3</code>) simulating a binary classifier, credit approval, churn, or fraud, then simulates six weeks of production traffic against it. Periods 0-2 are quiet weeks matching the training distribution. Periods 3-4 introduce <strong>data drift</strong>. The mean of <code>x1</code> and <code>x2</code> shifts by 0.8 and then 1.4 standard deviations, while <code>x3</code> never moves (a stable control feature) and the true coefficients relating features to label stay fixed. Period 5 introduces <strong>concept drift</strong>. The input distribution is untouched, but the sign of the <code>x1</code> and <code>x2</code> coefficients flips. The same inputs now genuinely map to a different label.</p>
+<p>The baseline model trained on 3,000 rows reaches accuracy 0.788 and AUC 0.862 on its own training data. Evaluated directly against each production period:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Period</th>
+<th>What happens</th>
+<th>Accuracy</th>
+<th>AUC</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>Launch week, matches training</td>
+<td>0.781</td>
+<td>0.857</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td>Quiet week</td>
+<td>0.762</td>
+<td>0.854</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td>Quiet week</td>
+<td>0.771</td>
+<td>0.862</td>
+</tr>
+<tr class="even">
+<td>3</td>
+<td>Data drift begins (shift = 0.8)</td>
+<td>0.776</td>
+<td>0.869</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>Data drift continues (shift = 1.4)</td>
+<td>0.777</td>
+<td>0.856</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td>Concept drift (coefficients flip)</td>
+<td>0.254</td>
+<td>0.170</td>
+</tr>
+</tbody>
+</table>
+<p>Periods 3-4 barely move accuracy or AUC at all, despite a substantial shift in the input distribution. The model is extrapolating into a less-familiar region, but the relationship it learned still holds there. Period 5 collapses to 0.254 accuracy and 0.170 AUC, worse than a coin flip, because the model is now confidently applying a relationship that has been inverted.</p>
+<p>Running <a href="#lst-compute-psi" class="quarto-xref">Listing&nbsp;<span>25.1</span></a> and <a href="#lst-compute-ks" class="quarto-xref">Listing&nbsp;<span>25.2</span></a> with period 0 as the reference distribution against all six periods produces:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Period</th>
+<th>x1 PSI</th>
+<th>x2 PSI</th>
+<th>x3 PSI (stable)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>0.000</td>
+<td>0.000</td>
+<td>0.000</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td>0.021</td>
+<td>0.015</td>
+<td>0.013</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td>0.028</td>
+<td>0.035</td>
+<td>0.004</td>
+</tr>
+<tr class="even">
+<td>3</td>
+<td>0.736</td>
+<td>0.640</td>
+<td>0.018</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>1.878</td>
+<td>1.935</td>
+<td>0.013</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td>0.016</td>
+<td>0.021</td>
+<td>0.019</td>
+</tr>
+</tbody>
+</table>
+<p>Periods 3-4 light up clearly on <code>x1</code>/<code>x2</code> PSI: 0.736 and 0.640 in period 3, climbing to 1.878 and 1.935 in period 4, both far past the 0.25 “significant shift” threshold, while <code>x3</code> stays flat throughout. Period 5’s PSI values (0.016, 0.021) are indistinguishable from the quiet periods 1-2, because the input distribution genuinely never moved. <strong>This is the core empirical result of this chapter: input drift detection is structurally blind to concept drift.</strong> A monitoring system watching only PSI would flag periods 3-4 loudly and period 5 not at all: exactly backwards from where the actual harm occurred.</p>
+<p>Simulating a two-period label lag (<a href="#lst-rolling-performance" class="quarto-xref">Listing&nbsp;<span>25.4</span></a>’s pattern) and applying Procedure 25.5’s decision rule to each period’s max PSI and confirmed accuracy drop:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Period</th>
+<th>Max PSI</th>
+<th>Accuracy</th>
+<th>Decision</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>0</td>
+<td>0.000</td>
+<td>0.781</td>
+<td>OK</td>
+</tr>
+<tr class="even">
+<td>1</td>
+<td>0.021</td>
+<td>0.762</td>
+<td>OK</td>
+</tr>
+<tr class="odd">
+<td>2</td>
+<td>0.035</td>
+<td>0.771</td>
+<td>OK</td>
+</tr>
+<tr class="even">
+<td>3</td>
+<td>0.736</td>
+<td>0.776</td>
+<td>INVESTIGATE: input drift, performance not yet confirmed</td>
+</tr>
+<tr class="odd">
+<td>4</td>
+<td>1.934</td>
+<td>0.778</td>
+<td>INVESTIGATE: input drift, performance not yet confirmed</td>
+</tr>
+<tr class="even">
+<td>5</td>
+<td>0.021</td>
+<td>0.254</td>
+<td>RETRAIN: confirmed performance drop</td>
+</tr>
+</tbody>
+</table>
+<p>Periods 3-4 land on INVESTIGATE rather than RETRAIN. PSI is elevated, but accuracy hasn’t confirmed real harm, and in this simulation it never will, because data drift alone didn’t break the relationship the model learned. An automatic retrain triggered by PSI alone would have burned compute and introduced retraining risk for no benefit. Period 5 escalates to RETRAIN once its lagged accuracy comes in, even though its PSI never crossed any threshold at all. The gap between the drift-score alarm (or lack of one) and the confirmed performance drop is exactly the two-period label lag built into the simulation. It is the central operational fact this chapter is about. What can be acted on <em>today</em> (input drift) is not the same as what confirms whether that action was needed (lagged performance).</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">import</span> boto3</span>
+<span id="cb6-2"><span class="im">from</span> sagemaker.model_monitor <span class="im">import</span> (</span>
+<span id="cb6-3">    DefaultModelMonitor,</span>
+<span id="cb6-4">    DataCaptureConfig,</span>
+<span id="cb6-5">    CronExpressionGenerator,</span>
+<span id="cb6-6">)</span>
+<span id="cb6-7"></span>
+<span id="cb6-8">sm_client <span class="op">=</span> boto3.client(<span class="st">'sagemaker'</span>)</span>
+<span id="cb6-9"></span>
+<span id="cb6-10"><span class="co"># 1. Capture live endpoint traffic (configured at deploy time,</span></span>
+<span id="cb6-11"><span class="co"># Chapter 23)</span></span>
+<span id="cb6-12">data_capture_config <span class="op">=</span> DataCaptureConfig(</span>
+<span id="cb6-13">    enable_capture<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb6-14">    sampling_percentage<span class="op">=</span><span class="dv">100</span>,</span>
+<span id="cb6-15">    destination_s3_uri<span class="op">=</span><span class="st">'s3://my-bucket/data-capture'</span>,</span>
+<span id="cb6-16">)</span>
+<span id="cb6-17"></span>
+<span id="cb6-18"><span class="co"># 2. Establish a baseline from training data</span></span>
+<span id="cb6-19">monitor <span class="op">=</span> DefaultModelMonitor(</span>
+<span id="cb6-20">    role<span class="op">=</span>role,</span>
+<span id="cb6-21">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb6-22">    instance_type<span class="op">=</span><span class="st">'ml.m5.xlarge'</span>,</span>
+<span id="cb6-23">)</span>
+<span id="cb6-24">monitor.suggest_baseline(</span>
+<span id="cb6-25">    baseline_dataset<span class="op">=</span><span class="st">'s3://my-bucket/train.csv'</span>,</span>
+<span id="cb6-26">    dataset_format<span class="op">=</span>{<span class="st">'csv'</span>: {<span class="st">'header'</span>: <span class="va">True</span>}},</span>
+<span id="cb6-27">    output_s3_uri<span class="op">=</span><span class="st">'s3://my-bucket/baseline'</span>,</span>
+<span id="cb6-28">)</span>
+<span id="cb6-29"></span>
+<span id="cb6-30"><span class="co"># 3. Schedule ongoing drift checks against that baseline</span></span>
+<span id="cb6-31">monitor.create_monitoring_schedule(</span>
+<span id="cb6-32">    monitor_schedule_name<span class="op">=</span><span class="st">'my-model-drift-check'</span>,</span>
+<span id="cb6-33">    endpoint_input<span class="op">=</span><span class="st">'my-endpoint'</span>,</span>
+<span id="cb6-34">    statistics<span class="op">=</span>monitor.baseline_statistics(),</span>
+<span id="cb6-35">    constraints<span class="op">=</span>monitor.suggested_constraints(),</span>
+<span id="cb6-36">    schedule_cron_expression<span class="op">=</span>CronExpressionGenerator.daily(),</span>
+<span id="cb6-37">)</span></code></pre></div>
+<p><strong>When to prefer SageMaker Model Monitor:</strong> once endpoints are already deployed on SageMaker. It handles capture, baselining, scheduling, and CloudWatch alerting without hand-writing the PSI/KS code above. Pair it with SageMaker Clarify when <em>bias</em> drift also needs watching: a subgroup’s feature distribution or performance shifting differently from the overall population, which none of this chapter’s PSI/KS machinery is designed to catch on its own.</p>
+</div>
+</section>
+<section id="aws-sagemaker-notes" class="level2" data-number="25.6">
+<h2 data-number="25.6" class="anchored" data-anchor-id="aws-sagemaker-notes"><span class="header-section-number">25.6</span> AWS SageMaker Notes</h2>
+<p>SageMaker Model Monitor is the managed version of everything built by hand in this chapter’s Procedures. <code>DataCaptureConfig</code> replaces manually logging production requests. <code>suggest_baseline</code> replaces manually computing reference statistics from the training set. <code>create_monitoring_schedule</code> replaces a cron job that recomputes PSI/KS on a schedule. CloudWatch alarms on the monitoring job’s emitted metrics replace the layered threshold logic in Procedure 25.5. The judgment calls this chapter teaches, which threshold to alert on, whether input drift alone should ever trigger a retrain, how to triage an alert before acting on it, remain identical whether the PSI computation happens in a hand-rolled function or inside a managed SageMaker job. An EventBridge rule on the CloudWatch alarm is the typical way to connect a confirmed drift or performance alert to the retraining pipeline built in Chapter 24.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="25.7">
+<h2 data-number="25.7" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">25.7</span> History and Further Reading</h2>
+<p>Murphy’s Introduction, Ch. 6, covers the KL divergence background that underlies PSI’s formula <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Chip Huyen’s <em>Designing Machine Learning Systems</em>, Chapter 8, is the definitive practitioner’s treatment of monitoring and drift in production ML systems, and is worth reading in full alongside this chapter <span class="citation" data-cites="huyen2022designingml">(<a href="#ref-huyen2022designingml" role="doc-biblioref">Huyen 2022</a>)</span>. The Evidently AI documentation is a useful open-source reference with worked examples of PSI, KS, and chi-squared drift detection outside of a managed cloud service. The AWS SageMaker Model Monitor documentation covers the managed equivalent of everything built by hand here.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="25.8">
+<h2 data-number="25.8" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">25.8</span> How This Connects</h2>
+<p>This chapter builds on Chapter 16’s evaluation metrics, which get reused verbatim for performance monitoring once labels arrive, and on Chapter 23, since a model can only be monitored once it is actually deployed behind an endpoint. It enables Chapter 24’s automated retraining pipeline, which a confirmed drift or performance alert from this chapter is what actually kicks off. It is often confused with anomaly detection on the model’s predictions alone. But monitoring in the sense of this chapter is specifically about comparing production behaviour against a <em>reference</em> distribution or baseline, not simply flagging individually unusual predictions.</p>
+</section>
+<section id="exercises" class="level2" data-number="25.9">
+<h2 data-number="25.9" class="anchored" data-anchor-id="exercises"><span class="header-section-number">25.9</span> Exercises</h2>
+<ol type="1">
+<li id="ex-25-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in your own words why data drift and concept drift require fundamentally different detection strategies, using the <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> versus <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>P</mi><mo stretchy="false">(</mo><mi>y</mi><mo>∣</mo><mi>X</mi><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">P(y \mid X)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.1389em;">P</span><span class="mopen">(</span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">∣</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0785em;">X</span><span class="mclose">)</span></span></span></span> formalism from this chapter.</p></li>
+<li id="ex-25-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Using the worked example’s period 3-4 results, explain why a monitoring system relying only on accuracy would have missed the input drift that PSI caught clearly.</p></li>
+<li id="ex-25-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Reproduce <a href="#lst-compute-psi" class="quarto-xref">Listing&nbsp;<span>25.1</span></a>’s logic on period 5’s <code>x1</code> feature against the period 0 reference. Given that the resulting PSI is near zero, explain in one sentence why this is exactly what the tutorial’s design predicts rather than a detection failure.</p></li>
+<li id="ex-25-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using Procedure 25.5’s <code>classify</code> function with <code>PSI_ALERT=0.25</code> and <code>ACCURACY_DROP_RETRAIN=0.05</code>, determine the decision for a hypothetical period with <code>max_psi=0.30</code> and <code>accuracy_drop=0.02</code>, and explain why that decision is the conservative choice rather than an aggressive one.</p></li>
+<li id="ex-25-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer’s fraud model shows PSI of 0.4 on the <code>transaction_amount</code> feature this week, with no confirmed labels yet due to a 60-day chargeback lag. Using this chapter’s triage checklist, list the two most likely explanations you’d rule out before recommending a retrain.</p></li>
+<li id="ex-25-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Propose a business-metric proxy (not a model metric) that a team could monitor to catch concept drift faster than waiting for the full label lag, for a churn model where “did they actually churn” isn’t known for 30 days. State one risk of relying on your proposed proxy.</p></li>
+<li id="ex-25-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> The chapter notes that a brand-new category appearing in a categorical feature always registers as chi-squared drift. Research (or reason from the formula) whether the same is true for PSI on a numeric feature when production values fall entirely outside the reference distribution’s range, and explain what the <code>compute_psi</code> implementation in <a href="#lst-compute-psi" class="quarto-xref">Listing&nbsp;<span>25.1</span></a> does in that case.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="25.10">
+<h2 data-number="25.10" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">25.10</span> Mental Model</h2>
+<p>A deployed model is a weather forecaster trained on last year’s climate and then locked in a room with no windows. Input drift monitoring is checking the barometric pressure readings coming into the room. If they look unusual compared to what the forecaster trained on, that’s a warning sign, even before knowing whether the forecasts themselves are wrong. Performance monitoring is checking the forecasts against what the weather actually did: the only way to know for certain, but often unavailable until the day is already over. Neither replaces the other. A good monitoring system runs both, all the time.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-huyen2022designingml" class="csl-entry" role="listitem">
+Huyen, Chip. 2022. <em>Designing Machine Learning Systems: An Iterative Process for Production-Ready Applications</em>. O’Reilly Media.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+</div>
+</section>

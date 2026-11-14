@@ -1,0 +1,217 @@
+<p>Chapter 44 covered Triton, the modern Python-first way to write custom GPU kernels. This chapter covers the other real path: writing raw CUDA in the style of Chapters 39-43, and wiring it into PyTorch as a first-class operation, complete with autograd support, so it works inside <code>.backward()</code> calls exactly like any built-in <code>torch</code> function. This is the path most existing custom CUDA operations in the PyTorch ecosystem actually use, including many inside PyTorch itself, and it gives full, unrestricted access to CUDA. Anything the earlier hand-written-kernel chapters could express, this chapter lets you plug directly into a training loop.</p>
+<section id="motivation" class="level2" data-number="45.1">
+<h2 data-number="45.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">45.1</span> Motivation</h2>
+<p>A PyTorch CUDA extension has three pieces: the <strong>CUDA kernel</strong> itself (unchanged from earlier chapters), a thin <strong>C++ wrapper</strong> that unpacks PyTorch <code>Tensor</code> objects into raw pointers the kernel can use, and a Python-side <strong><code>torch.autograd.Function</code></strong> that tells PyTorch how to call the forward kernel and, critically, the backward kernel, so gradients flow through the custom operation correctly during training. <code>torch.utils.cpp_extension.load_inline</code> is the fastest way to build this: pass CUDA and C++ source as Python strings, and PyTorch compiles them just-in-time via <code>nvcc</code> and the system C++ compiler, coordinated by <code>ninja</code>, caching the compiled <code>.so</code> for subsequent runs.</p>
+</section>
+<section id="exposition" class="level2" data-number="45.2">
+<h2 data-number="45.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">45.2</span> Exposition</h2>
+<section id="wiring-a-kernel-into-autograd" class="level3" data-number="45.2.1">
+<h3 data-number="45.2.1" class="anchored" data-anchor-id="wiring-a-kernel-into-autograd"><span class="header-section-number">45.2.1</span> Wiring a Kernel Into Autograd</h3>
+<p>The Worked Example below implements <strong>Squared ReLU</strong> (<code>f(x) = relu(x)^2</code>), an activation function used in some transformer feed-forward variants. It needs both directions: the forward pass, <code>y = relu(x)^2</code>, and the backward pass, <code>dy/dx = 2*relu(x)</code> (zero for <code>x &lt;= 0</code>, <code>2x</code> for <code>x &gt; 0</code>), the ordinary calculus derivative, computed in a second CUDA kernel.</p>
+<div id="lst-autograd-wiring" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-autograd-wiring-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;45.1: Wiring a compiled CUDA extension into torch.autograd.Function
+</figcaption>
+<div aria-describedby="lst-autograd-wiring-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">class</span> SquaredReLU(torch.autograd.Function):</span>
+<span id="cb1-2">    <span class="at">@staticmethod</span></span>
+<span id="cb1-3">    <span class="kw">def</span> forward(ctx, x):</span>
+<span id="cb1-4">        <span class="co"># keep x around for the backward pass</span></span>
+<span id="cb1-5">        ctx.save_for_backward(x)</span>
+<span id="cb1-6">        <span class="co"># calls the compiled CUDA kernel</span></span>
+<span id="cb1-7">        <span class="cf">return</span> ext.squared_relu_fwd(x)</span>
+<span id="cb1-8"></span>
+<span id="cb1-9">    <span class="at">@staticmethod</span></span>
+<span id="cb1-10">    <span class="kw">def</span> backward(ctx, grad_output):</span>
+<span id="cb1-11">        x, <span class="op">=</span> ctx.saved_tensors</span>
+<span id="cb1-12">        <span class="co"># the backward kernel</span></span>
+<span id="cb1-13">        <span class="cf">return</span> ext.squared_relu_bwd(grad_output.contiguous(), x)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>ctx.save_for_backward</code> is how information crosses from forward to backward. Without it, the backward pass would have no way to know what <code>x</code> was. A trustworthy custom op has to clear two correctness bars before it belongs in a real training loop: the forward output must match the native expression exactly, and the gradient must match PyTorch’s own autograd-computed gradient on that same native expression exactly. A subtly wrong gradient can silently degrade training for weeks before anyone notices, with no error thrown at any point.</p>
+</section>
+<section id="the-real-payoff-fusion" class="level3" data-number="45.2.2">
+<h3 data-number="45.2.2" class="anchored" data-anchor-id="the-real-payoff-fusion"><span class="header-section-number">45.2.2</span> The Real Payoff: Fusion</h3>
+<p>Computing <code>relu(x) ** 2</code> in native PyTorch is two separate kernel launches, one for <code>relu</code>, one for the square, with the intermediate <code>relu(x)</code> result written to and then read back from global memory between them. The custom kernel does both in one launch, one memory pass: read <code>x</code> once, compute both operations while the value is already in a register, write the result once. This is Chapter 43’s roofline model in action: fusing two memory-bound operations into one halves the memory traffic for the same total compute, and because both operations were memory-bound, that translates almost directly into a real speedup. This is the mechanism behind Chapter 47’s capstone, and behind why real ML systems (fused attention kernels, fused optimizer steps) invest in custom kernels specifically for fusion rather than raw compute.</p>
+</section>
+<section id="a-real-toolchain-lesson" class="level3" data-number="45.2.3">
+<h3 data-number="45.2.3" class="anchored" data-anchor-id="a-real-toolchain-lesson"><span class="header-section-number">45.2.3</span> A Real Toolchain Lesson</h3>
+<p>Building an extension of this kind on a very new Linux distribution with a bleeding-edge GCC compiler can trigger a genuine compile error inside PyTorch’s own headers: a template-handling incompatibility between PyTorch’s C++ code and a newer GCC than PyTorch’s headers were tested against. This is a real, documented class of problem with JIT-compiled PyTorch extensions. The compilation happens against the <em>system’s</em> C++ toolchain, not a toolchain PyTorch controls, so version mismatches between what PyTorch’s headers assume and what the compiler actually enforces are a genuine occupational hazard of this technique. On this book’s reference rig, this surfaced as a compile error inside <code>ATen/core/List_inl.h</code>, <code>error: need 'typename' before 'decltype(...)::difference_type'</code>, because the header’s <code>decltype(impl_-&gt;list)</code> expression is syntactically dependent (it involves <code>this</code>, whose type depends on a template parameter) even though <code>impl_-&gt;list</code> always resolves to the same concrete type, <code>std::vector&lt;c10::IValue&gt;</code>. A newer GCC’s stricter two-phase-lookup checking flags this in a way older GCC versions tolerated. The fix was a targeted, minimal patch to the one offending header line, isolated to the project’s own virtual environment rather than a system-wide change. It’s worth knowing this class of problem exists before assuming a compile failure inside <code>torch/include/</code> means the kernel code itself is at fault.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="45.3">
+<h2 data-number="45.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">45.3</span> Trade-offs and Limits</h2>
+<p>Custom CUDA extensions win at needing autograd-compatible custom operations with full control over both forward and backward CUDA code, at fusing multiple operations to eliminate intermediate memory traffic, and at situations needing CUDA features or libraries without a Triton binding. Triton wins at faster iteration (no C++/toolchain compilation step, no <code>ninja</code>, no host-compiler version sensitivity), at cross-vendor portability, and at most elementwise/reduction fusion patterns, where Triton’s compiler already gets close to hand-written CUDA performance, as Chapter 44’s softmax result showed. Neither approach subsumes the other. A Triton kernel called from PyTorch and a full C++/CUDA extension both end up callable as ordinary PyTorch operations, so the choice is about how the kernel itself needs to be authored and compiled, not about what it looks like from the calling code.</p>
+</section>
+<section id="procedures" class="level2" data-number="45.4">
+<h2 data-number="45.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">45.4</span> Procedures</h2>
+<p id="proc-45-1"><strong>Procedure 45.1 (Build and Call a Custom CUDA Extension).</strong> <em>When to use:</em> there is a CUDA kernel in the style of earlier chapters and a need to call it from ordinary PyTorch code.</p>
+<div id="lst-load-inline" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-load-inline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;45.2: Minimal load_inline extension: kernel, C++ wrapper, and Python-side call
+</figcaption>
+<div aria-describedby="lst-load-inline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> torch</span>
+<span id="cb2-2"><span class="im">from</span> torch.utils.cpp_extension <span class="im">import</span> load_inline</span>
+<span id="cb2-3"></span>
+<span id="cb2-4">cuda_source <span class="op">=</span> <span class="vs">r"""</span></span>
+<span id="cb2-5"><span class="co">#include &lt;torch/extension.h&gt;</span></span>
+<span id="cb2-6"></span>
+<span id="cb2-7"><span class="vs">__global__ void double_kernel</span><span class="kw">(</span><span class="vs">const float</span><span class="op">*</span><span class="vs"> x, float</span><span class="op">*</span><span class="vs"> out, int n</span><span class="kw">)</span><span class="vs"> {</span></span>
+<span id="cb2-8"><span class="vs">    int i = blockIdx</span><span class="dv">.</span><span class="vs">x </span><span class="op">*</span><span class="vs"> blockDim</span><span class="dv">.</span><span class="vs">x </span><span class="op">+</span><span class="vs"> threadIdx</span><span class="dv">.</span><span class="vs">x;</span></span>
+<span id="cb2-9"><span class="vs">    if </span><span class="kw">(</span><span class="vs">i &lt; n</span><span class="kw">)</span><span class="vs"> out</span><span class="pp">[i]</span><span class="vs"> = x</span><span class="pp">[i]</span><span class="vs"> </span><span class="op">*</span><span class="vs"> 2</span><span class="dv">.</span><span class="vs">0f;</span></span>
+<span id="cb2-10"><span class="vs">}</span></span>
+<span id="cb2-11"></span>
+<span id="cb2-12"><span class="vs">torch::Tensor double_tensor</span><span class="kw">(</span><span class="vs">torch::Tensor x</span><span class="kw">)</span><span class="vs"> {</span></span>
+<span id="cb2-13"><span class="vs">    auto out = torch::empty_like</span><span class="kw">(</span><span class="vs">x</span><span class="kw">)</span><span class="vs">;</span></span>
+<span id="cb2-14"><span class="vs">    int n = x</span><span class="dv">.</span><span class="vs">numel</span><span class="kw">()</span><span class="vs">;</span></span>
+<span id="cb2-15"><span class="vs">    int block = 256, grid = </span><span class="kw">(</span><span class="vs">n </span><span class="op">+</span><span class="vs"> block - 1</span><span class="kw">)</span><span class="vs"> / block;</span></span>
+<span id="cb2-16"><span class="vs">    double_kernel&lt;&lt;&lt;grid, block&gt;&gt;&gt;</span><span class="kw">(</span></span>
+<span id="cb2-17"><span class="vs">        x</span><span class="dv">.</span><span class="vs">data_ptr&lt;float&gt;</span><span class="kw">()</span><span class="vs">, out</span><span class="dv">.</span><span class="vs">data_ptr&lt;float&gt;</span><span class="kw">()</span><span class="vs">, n</span></span>
+<span id="cb2-18"><span class="vs">    </span><span class="kw">)</span><span class="vs">;</span></span>
+<span id="cb2-19"><span class="vs">    return out;</span></span>
+<span id="cb2-20"><span class="vs">}</span></span>
+<span id="cb2-21"><span class="vs">"""</span></span>
+<span id="cb2-22"></span>
+<span id="cb2-23">ext <span class="op">=</span> load_inline(</span>
+<span id="cb2-24">    name<span class="op">=</span><span class="st">"double_ext"</span>,</span>
+<span id="cb2-25">    cpp_sources<span class="op">=</span><span class="st">"torch::Tensor double_tensor(torch::Tensor x);"</span>,</span>
+<span id="cb2-26">    cuda_sources<span class="op">=</span>cuda_source,</span>
+<span id="cb2-27">    functions<span class="op">=</span>[<span class="st">"double_tensor"</span>],</span>
+<span id="cb2-28">)</span>
+<span id="cb2-29"></span>
+<span id="cb2-30">x <span class="op">=</span> torch.randn(<span class="dv">1000</span>, device<span class="op">=</span><span class="st">'cuda'</span>)</span>
+<span id="cb2-31">y <span class="op">=</span> ext.double_tensor(x)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting that <code>x.data_ptr&lt;float&gt;()</code> requires <code>x</code> to be contiguous and of the matching dtype. Calling the extension on a non-contiguous tensor (e.g.&nbsp;after a <code>.transpose()</code>) or a <code>float64</code> tensor when the kernel assumes <code>float32</code> produces silently wrong results or a crash, not a helpful error message. Validate dtype and contiguity explicitly for production code.</p>
+<p id="proc-45-2"><strong>Procedure 45.2 (Wire a Kernel Into Autograd, Forward and Backward).</strong> <em>When to use:</em> the custom operation needs to work inside a training loop, i.e.&nbsp;support <code>.backward()</code>.</p>
+<div id="lst-autograd-op" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-autograd-op-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;45.3: The general pattern: torch.autograd.Function wrapping compiled forward/backward kernels
+</figcaption>
+<div aria-describedby="lst-autograd-op-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">class</span> MyOp(torch.autograd.Function):</span>
+<span id="cb3-2">    <span class="at">@staticmethod</span></span>
+<span id="cb3-3">    <span class="kw">def</span> forward(ctx, x):</span>
+<span id="cb3-4">        <span class="co"># save whatever backward() will need</span></span>
+<span id="cb3-5">        ctx.save_for_backward(x)</span>
+<span id="cb3-6">        <span class="cf">return</span> ext.my_fwd(x)</span>
+<span id="cb3-7"></span>
+<span id="cb3-8">    <span class="at">@staticmethod</span></span>
+<span id="cb3-9">    <span class="kw">def</span> backward(ctx, grad_output):</span>
+<span id="cb3-10">        x, <span class="op">=</span> ctx.saved_tensors</span>
+<span id="cb3-11">        <span class="cf">return</span> ext.my_bwd(grad_output.contiguous(), x)</span>
+<span id="cb3-12"></span>
+<span id="cb3-13"><span class="kw">def</span> my_op(x):</span>
+<span id="cb3-14">    <span class="co"># ALWAYS call .apply(), never MyOp.forward() directly</span></span>
+<span id="cb3-15">    <span class="cf">return</span> MyOp.<span class="bu">apply</span>(x)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> calling <code>MyOp.forward(x)</code> directly instead of <code>MyOp.apply(x)</code>. Calling <code>.forward()</code> directly bypasses autograd’s bookkeeping entirely. The operation computes a correct result but silently produces no gradient, a bug that only surfaces later as “loss isn’t decreasing” or “gradients are <code>None</code>,” far from the actual mistake.</p>
+<p id="proc-45-3"><strong>Procedure 45.3 (Verify a Custom Op’s Gradient Is Correct).</strong> <em>When to use:</em> before trusting a custom backward kernel in a real training run. A wrong gradient can silently degrade training without ever throwing an error.</p>
+<div id="lst-gradient-check" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-gradient-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;45.4: Comparing a custom op’s gradient against autograd on the equivalent native expression
+</figcaption>
+<div aria-describedby="lst-gradient-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">x <span class="op">=</span> torch.randn(<span class="dv">500</span>, device<span class="op">=</span><span class="st">'cuda'</span>, requires_grad<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-2">y_custom <span class="op">=</span> my_op(x)</span>
+<span id="cb4-3">y_custom.<span class="bu">sum</span>().backward()</span>
+<span id="cb4-4">grad_custom <span class="op">=</span> x.grad.clone()</span>
+<span id="cb4-5"></span>
+<span id="cb4-6">x2 <span class="op">=</span> x.detach().clone().requires_grad_(<span class="va">True</span>)</span>
+<span id="cb4-7"><span class="co"># e.g. torch.relu(x2) ** 2</span></span>
+<span id="cb4-8">y_native <span class="op">=</span> native_equivalent_expression(x2)</span>
+<span id="cb4-9">y_native.<span class="bu">sum</span>().backward()</span>
+<span id="cb4-10">grad_native <span class="op">=</span> x2.grad</span>
+<span id="cb4-11"></span>
+<span id="cb4-12"><span class="co"># should be ~0</span></span>
+<span id="cb4-13"><span class="bu">print</span>((grad_custom <span class="op">-</span> grad_native).<span class="bu">abs</span>().<span class="bu">max</span>().item())</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> only checking forward correctness and assuming backward is “probably fine” because the math looks right on paper. A transcription error in the derivative, a dropped factor of 2, a wrong sign, forgetting the ReLU gate, is easy to make and easy to miss without an explicit check. Always verify both directions. <code>torch.autograd.gradcheck</code> is the more rigorous, numerical-differentiation-based version of this same check, and the standard tool for production custom ops.</p>
+</section>
+<section id="worked-example" class="level2" data-number="45.5">
+<h2 data-number="45.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">45.5</span> Worked Example</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface. The extension compiled in 32.1 seconds<span class="ref-rig-mark">†</span> on first run: a real, one-time <code>nvcc</code>-plus-C++-compiler invocation, not a cached or simulated cost, and exactly the kind of build step that pushes engineers toward Triton (Chapter 44) when rapid iteration matters more than raw control.</p>
+<p>Forward correctness was checked against the native expression directly:</p>
+<div id="lst-forward-check" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-forward-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;45.5: Verifying exact forward correctness against torch.relu(x) ** 2
+</figcaption>
+<div aria-describedby="lst-forward-check-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">x <span class="op">=</span> torch.randn(<span class="dv">1000</span>, device<span class="op">=</span><span class="st">'cuda'</span>, dtype<span class="op">=</span>torch.float32)</span>
+<span id="cb5-2">y_custom <span class="op">=</span> squared_relu(x)</span>
+<span id="cb5-3">y_ref <span class="op">=</span> torch.relu(x) <span class="op">**</span> <span class="dv">2</span></span>
+<span id="cb5-4"><span class="bu">print</span>(</span>
+<span id="cb5-5">    <span class="st">'Forward max abs error:'</span>,</span>
+<span id="cb5-6">    (y_custom <span class="op">-</span> y_ref).<span class="bu">abs</span>().<span class="bu">max</span>().item(),</span>
+<span id="cb5-7">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>This printed a forward max absolute error of exactly <code>0.0</code>. The gradient check, following <a href="#lst-gradient-check" class="quarto-xref">Listing&nbsp;<span>45.4</span></a>, printed a gradient max absolute error of exactly <code>0.0</code> as well: the custom kernel’s forward output and the custom backward kernel’s gradient are bit-for-bit identical, in this run, to what PyTorch’s own autograd computes on the mathematically equivalent native expression. This is the bar this chapter’s Exposition said a custom op has to clear before it is trustworthy in a real training loop.</p>
+<p>The fusion speedup was then measured with CUDA-event timing on 16,777,216 (<code>1 &lt;&lt; 24</code>) elements, following the warm-up-then-CUDA-events discipline used throughout this book:</p>
+<div id="lst-fusion-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-fusion-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;45.6: Benchmarking the fused custom kernel against native two-kernel relu(x) ** 2
+</figcaption>
+<div aria-describedby="lst-fusion-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">x_big <span class="op">=</span> torch.randn(<span class="dv">1</span> <span class="op">&lt;&lt;</span> <span class="dv">24</span>, device<span class="op">=</span><span class="st">'cuda'</span>)</span>
+<span id="cb6-2">t_custom <span class="op">=</span> bench(squared_relu, x_big)</span>
+<span id="cb6-3">t_native <span class="op">=</span> bench(<span class="kw">lambda</span> x: torch.relu(x) <span class="op">**</span> <span class="dv">2</span>, x_big)</span>
+<span id="cb6-4"></span>
+<span id="cb6-5"><span class="bu">print</span>(<span class="ss">f'Custom fused extension: </span><span class="sc">{</span>t_custom<span class="sc">:.4f}</span><span class="ss"> ms'</span>)</span>
+<span id="cb6-6"><span class="bu">print</span>(</span>
+<span id="cb6-7">    <span class="ss">f'Native torch.relu(x)**2 (2 kernel launches): '</span></span>
+<span id="cb6-8">    <span class="ss">f'</span><span class="sc">{</span>t_native<span class="sc">:.4f}</span><span class="ss"> ms'</span></span>
+<span id="cb6-9">)</span>
+<span id="cb6-10"><span class="bu">print</span>(<span class="ss">f'Speedup from fusion: </span><span class="sc">{</span>t_native <span class="op">/</span> t_custom<span class="sc">:.2f}</span><span class="ss">x'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The result: the custom fused extension ran in 0.0731 ms, native <code>torch.relu(x) ** 2</code> ran in 0.1386 ms, a 1.89x speedup from fusion alone. No new arithmetic capability was added. The GPU could always compute <code>relu</code> and the square. What changed is that the intermediate result never left registers to make a round-trip through global memory. Because both operations were memory-bound, halving the memory traffic translated almost directly into the observed speedup, a direct, measured instance of Chapter 43’s roofline model rather than an assertion about it.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="45.6">
+<h2 data-number="45.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">45.6</span> History and Further Reading</h2>
+<p>The official PyTorch documentation’s “Custom C++ and CUDA Extensions” tutorial is the canonical walkthrough this chapter’s pattern follows, and is worth reading end to end before writing a production extension. The <code>torch.autograd.Function</code> and <code>torch.autograd.gradcheck</code> API documentation cover the full mechanics of <code>forward</code>/<code>backward</code>/<code>ctx</code> and the rigorous numerical-gradient-checking approach only sketched in Procedure 45.3. For the toolchain-incompatibility class of problem this chapter’s Exposition describes, searching PyTorch’s GitHub issues for the exact error text (in this case, referencing <code>List_inl.h</code> and <code>typename</code>) is generally the fastest way to find out whether a newer PyTorch release already fixes it, before patching a header by hand. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 13, works through the same compiling-versus-custom-kernel decision in more depth, framing <code>torch.compile</code> as the first resort and a hand-written extension like this chapter’s as the fallback once a novel operation falls outside what TorchInductor’s automatic fusion can capture, worth reading once this chapter’s own extension has been wired into autograd.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="45.7">
+<h2 data-number="45.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">45.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 39 (the raw CUDA kernel) and Chapter 43 (fusion as an application of the roofline model), and on Chapter 44, which presents Triton as the alternative path to a custom PyTorch operation. These two chapters are competing answers to the same problem, and both end up callable as ordinary PyTorch operations. It enables Chapter 47, whose capstone fused kernel can legitimately be built either as a Triton kernel or as a custom extension of the kind built here, with this chapter’s fusion result serving as direct evidence for why the capstone is worth doing at all. It is often confused with a Triton kernel called from PyTorch: the difference is entirely in how the kernel itself is authored and compiled, not in how it’s called once it exists.</p>
+</section>
+<section id="exercises" class="level2" data-number="45.8">
+<h2 data-number="45.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">45.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-45-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three pieces of a PyTorch CUDA extension described in this chapter’s Motivation, and state in one sentence what each is responsible for.</p></li>
+<li id="ex-45-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain why calling <code>MyOp.forward(x)</code> directly instead of <code>MyOp.apply(x)</code> produces a correct forward result but a silently broken training run.</p></li>
+<li id="ex-45-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-autograd-op" class="quarto-xref">Listing&nbsp;<span>45.3</span></a> as a template, sketch the <code>forward</code> and <code>backward</code> staticmethods for a custom “cubed ReLU” operation, <code>f(x) = relu(x)^3</code>, including the correct derivative.</p></li>
+<li id="ex-45-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> <a href="#lst-fusion-bench" class="quarto-xref">Listing&nbsp;<span>45.6</span></a> measures a 1.89x speedup at 16,777,216 elements. Using this chapter’s memory-bound reasoning, predict qualitatively whether the speedup would grow, shrink, or stay roughly the same at 1,024 elements, and justify the answer.</p></li>
+<li id="ex-45-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Modify <a href="#lst-load-inline" class="quarto-xref">Listing&nbsp;<span>45.2</span></a>’s <code>double_kernel</code> to instead compute <code>out[i] = x[i] * x[i] + 1.0f</code>, and update the corresponding C++ declaration in <code>cpp_sources</code> to match.</p></li>
+<li id="ex-45-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate wants to skip Procedure 45.3’s gradient check because “the forward pass is exactly correct, so the backward pass is probably fine too.” Write a two-sentence rebuttal grounded in this chapter’s Exposition.</p></li>
+<li id="ex-45-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s toolchain incident was fixed by patching a PyTorch header inside a virtual environment. Explain why this fix “will NOT survive a <code>pip install --upgrade torch</code>,” and propose a more durable long-term fix.</p></li>
+<li id="ex-45-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the official PyTorch “Custom C++ and CUDA Extensions” tutorial referenced above. Identify one detail it covers that this chapter’s Procedures section did not (e.g.&nbsp;<code>setup.py</code>-based builds versus <code>load_inline</code>), and explain when it would matter.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="45.9">
+<h2 data-number="45.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">45.9</span> Mental Model</h2>
+<p>A raw CUDA kernel from earlier chapters is a specialist tool sitting outside the workshop. A PyTorch CUDA extension is that same tool, fitted with a standard-issue handle, <code>torch.autograd.Function</code>, so it slots into the same toolbelt as every other PyTorch operation: usable in a training loop, differentiable, indistinguishable from a built-in op to the rest of the code, while still being exactly the hand-written kernel built underneath.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+</div>
+</section>

@@ -1,0 +1,5002 @@
+{
+ "slug": "modern-ai",
+ "title": "Modern AI",
+ "subtitle": "A Solutions Architect's Field Guide, Volume 2",
+ "author": "Andrew R. Kane",
+ "chapters": [
+  {
+   "slug": "preface",
+   "file": "preface",
+   "number": null,
+   "title": "Preface",
+   "kind": "front",
+   "sections": [
+    {
+     "id": "how-to-read-this-book",
+     "number": "",
+     "title": "How to Read This Book",
+     "level": 2
+    },
+    {
+     "id": "notation-and-conventions",
+     "number": "",
+     "title": "Notation and Conventions",
+     "level": 2
+    },
+    {
+     "id": "prerequisites-map",
+     "number": "",
+     "title": "Prerequisites Map",
+     "level": 2
+    }
+   ],
+   "words": 223
+  },
+  {
+   "slug": "ch21-responsible-ai-data-governance",
+   "file": "ch21-responsible-ai-data-governance",
+   "number": "21",
+   "title": "Responsible AI & Data Governance",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "21.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "21.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "bias-in-ml-sources-and-types",
+     "number": "21.2.1",
+     "title": "Bias in ML: Sources and Types",
+     "level": 3
+    },
+    {
+     "id": "model-interpretability",
+     "number": "21.2.2",
+     "title": "Model Interpretability",
+     "level": 3
+    },
+    {
+     "id": "robustness",
+     "number": "21.2.3",
+     "title": "Robustness",
+     "level": 3
+    },
+    {
+     "id": "sustainability",
+     "number": "21.2.4",
+     "title": "Sustainability",
+     "level": 3
+    },
+    {
+     "id": "data-governance",
+     "number": "21.2.5",
+     "title": "Data Governance",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "21.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "21.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "21.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "21.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "21.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "21.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "21.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 3130
+  },
+  {
+   "slug": "ch22-ml-experiment-tracking",
+   "file": "ch22-ml-experiment-tracking",
+   "number": "22",
+   "title": "ML Experiment Tracking",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "22.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "22.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "what-to-track",
+     "number": "22.2.1",
+     "title": "What to Track",
+     "level": 3
+    },
+    {
+     "id": "mlflow-components",
+     "number": "22.2.2",
+     "title": "MLflow Components",
+     "level": 3
+    },
+    {
+     "id": "weights-biases",
+     "number": "22.2.3",
+     "title": "Weights & Biases",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "22.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "22.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "22.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "22.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "22.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "22.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "22.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 1619
+  },
+  {
+   "slug": "ch23-model-deployment-serving",
+   "file": "ch23-model-deployment-serving",
+   "number": "23",
+   "title": "Model Deployment & Serving",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "23.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "23.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "deployment-patterns",
+     "number": "23.2.1",
+     "title": "Deployment Patterns",
+     "level": 3
+    },
+    {
+     "id": "model-serialisation",
+     "number": "23.2.2",
+     "title": "Model Serialisation",
+     "level": 3
+    },
+    {
+     "id": "serving-frameworks",
+     "number": "23.2.3",
+     "title": "Serving Frameworks",
+     "level": 3
+    },
+    {
+     "id": "estimating-capacity-for-transformerllm-inference",
+     "number": "23.2.4",
+     "title": "Estimating Capacity for Transformer/LLM Inference",
+     "level": 3
+    },
+    {
+     "id": "shrinking-the-model-distillation-quantisation-pruning",
+     "number": "23.2.5",
+     "title": "Shrinking the Model: Distillation, Quantisation, Pruning",
+     "level": 3
+    },
+    {
+     "id": "containers-and-reproducibility",
+     "number": "23.2.6",
+     "title": "Containers and Reproducibility",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "23.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "23.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "23.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "23.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "23.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "23.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "23.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2716
+  },
+  {
+   "slug": "ch24-mlops-cicd",
+   "file": "ch24-mlops-cicd",
+   "number": "24",
+   "title": "MLOps & CI/CD for ML",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "24.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "24.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "the-model-registry-as-the-central-object",
+     "number": "24.2.1",
+     "title": "The Model Registry as the Central Object",
+     "level": 3
+    },
+    {
+     "id": "ci-for-ml-what-gets-tested",
+     "number": "24.2.2",
+     "title": "CI for ML: What Gets Tested",
+     "level": 3
+    },
+    {
+     "id": "cd-for-ml-deployment-strategies",
+     "number": "24.2.3",
+     "title": "CD for ML: Deployment Strategies",
+     "level": 3
+    },
+    {
+     "id": "the-training-pipeline-as-versioned-code",
+     "number": "24.2.4",
+     "title": "The Training Pipeline as Versioned Code",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "24.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "24.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "24.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "24.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "24.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "24.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "24.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 1990
+  },
+  {
+   "slug": "ch25-monitoring",
+   "file": "ch25-monitoring",
+   "number": "25",
+   "title": "Monitoring",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "25.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "25.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "data-drift-covariate-shift",
+     "number": "25.2.1",
+     "title": "Data Drift (Covariate Shift)",
+     "level": 3
+    },
+    {
+     "id": "concept-drift",
+     "number": "25.2.2",
+     "title": "Concept Drift",
+     "level": 3
+    },
+    {
+     "id": "label-prediction-drift",
+     "number": "25.2.3",
+     "title": "Label / Prediction Drift",
+     "level": 3
+    },
+    {
+     "id": "detecting-drift-without-labels",
+     "number": "25.2.4",
+     "title": "Detecting Drift Without Labels",
+     "level": 3
+    },
+    {
+     "id": "performance-monitoring-when-you-have-labels",
+     "number": "25.2.5",
+     "title": "Performance Monitoring (When You Have Labels)",
+     "level": 3
+    },
+    {
+     "id": "retraining-trigger-strategies",
+     "number": "25.2.6",
+     "title": "Retraining Trigger Strategies",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "25.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "25.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "25.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "aws-sagemaker-notes",
+     "number": "25.6",
+     "title": "AWS SageMaker Notes",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "25.7",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "25.8",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "25.9",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "25.10",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 3640
+  },
+  {
+   "slug": "ch26-cloud-ml-sagemaker",
+   "file": "ch26-cloud-ml-sagemaker",
+   "number": "26",
+   "title": "Cloud ML Platforms",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "26.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "26.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "s3-the-foundation",
+     "number": "26.2.1",
+     "title": "S3: The Foundation",
+     "level": 3
+    },
+    {
+     "id": "sagemaker-the-ml-compute-and-orchestration-layer",
+     "number": "26.2.2",
+     "title": "SageMaker: The ML Compute and Orchestration Layer",
+     "level": 3
+    },
+    {
+     "id": "bedrock-managed-foundation-models",
+     "number": "26.2.3",
+     "title": "Bedrock: Managed Foundation Models",
+     "level": 3
+    },
+    {
+     "id": "advising-a-customer-the-actual-sa-judgment-call",
+     "number": "26.2.4",
+     "title": "Advising a Customer: The Actual SA Judgment Call",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "26.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "26.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "26.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "26.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "26.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "26.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "26.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2042
+  },
+  {
+   "slug": "ch27-nlp-fundamentals",
+   "file": "ch27-nlp-fundamentals",
+   "number": "27",
+   "title": "NLP Fundamentals",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "27.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "27.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "tf-idf",
+     "number": "27.2.1",
+     "title": "TF-IDF",
+     "level": 3
+    },
+    {
+     "id": "word-embeddings-and-the-distributional-hypothesis",
+     "number": "27.2.2",
+     "title": "Word Embeddings and the Distributional Hypothesis",
+     "level": 3
+    },
+    {
+     "id": "subword-tokenization",
+     "number": "27.2.3",
+     "title": "Subword Tokenization",
+     "level": 3
+    },
+    {
+     "id": "the-bridge-to-transformers",
+     "number": "27.2.4",
+     "title": "The Bridge to Transformers",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "27.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "27.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "27.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "27.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "27.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "27.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "27.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2673
+  },
+  {
+   "slug": "ch28-intro-neural-networks",
+   "file": "ch28-intro-neural-networks",
+   "number": "28",
+   "title": "Intro to Neural Networks",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "28.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "28.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "why-nonlinearity-matters",
+     "number": "28.2.1",
+     "title": "Why Nonlinearity Matters",
+     "level": 3
+    },
+    {
+     "id": "forward-pass-loss-and-backpropagation",
+     "number": "28.2.2",
+     "title": "Forward Pass, Loss, and Backpropagation",
+     "level": 3
+    },
+    {
+     "id": "the-universal-approximation-theorem",
+     "number": "28.2.3",
+     "title": "The Universal Approximation Theorem",
+     "level": 3
+    },
+    {
+     "id": "overfitting-and-its-countermeasures",
+     "number": "28.2.4",
+     "title": "Overfitting and Its Countermeasures",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "28.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "28.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "28.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "28.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "28.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "28.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "28.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2201
+  },
+  {
+   "slug": "ch29-transformers",
+   "file": "ch29-transformers",
+   "number": "29",
+   "title": "Training a Transformer Model",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "29.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "29.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "self-attention-the-mechanism",
+     "number": "29.2.1",
+     "title": "Self-Attention: The Mechanism",
+     "level": 3
+    },
+    {
+     "id": "multi-head-attention-and-positional-encoding",
+     "number": "29.2.2",
+     "title": "Multi-Head Attention and Positional Encoding",
+     "level": 3
+    },
+    {
+     "id": "the-transformer-block-and-architecture-variants",
+     "number": "29.2.3",
+     "title": "The Transformer Block and Architecture Variants",
+     "level": 3
+    },
+    {
+     "id": "why-transformers-scale",
+     "number": "29.2.4",
+     "title": "Why Transformers Scale",
+     "level": 3
+    },
+    {
+     "id": "estimating-model-size",
+     "number": "29.2.5",
+     "title": "Estimating Model Size",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "29.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "29.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "29.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "29.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "29.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "29.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "29.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2125
+  },
+  {
+   "slug": "ch30-prompt-engineering",
+   "file": "ch30-prompt-engineering",
+   "number": "30",
+   "title": "Prompt Engineering",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "30.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "30.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "in-context-learning-zero-shot-vs.-few-shot",
+     "number": "30.2.1",
+     "title": "In-Context Learning: Zero-Shot vs. Few-Shot",
+     "level": 3
+    },
+    {
+     "id": "chain-of-thought-buying-the-model-time-to-think",
+     "number": "30.2.2",
+     "title": "Chain-of-Thought: Buying the Model Time to Think",
+     "level": 3
+    },
+    {
+     "id": "structured-output-constraining-a-fundamentally-unstructured-process",
+     "number": "30.2.3",
+     "title": "Structured Output: Constraining a Fundamentally Unstructured Process",
+     "level": 3
+    },
+    {
+     "id": "prompt-brittleness-and-prompt-injection",
+     "number": "30.2.4",
+     "title": "Prompt Brittleness and Prompt Injection",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "30.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "30.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "30.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "aws-sagemaker-notes",
+     "number": "30.6",
+     "title": "AWS SageMaker Notes",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "30.7",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "30.8",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "30.9",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "30.10",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 3361
+  },
+  {
+   "slug": "ch31-rag-vector-databases",
+   "file": "ch31-rag-vector-databases",
+   "number": "31",
+   "title": "Retrieval-Augmented Generation (RAG)",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "31.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "31.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "dense-embeddings-vs.-what-chapter-27-covered",
+     "number": "31.2.1",
+     "title": "Dense Embeddings vs. What Chapter 27 Covered",
+     "level": 3
+    },
+    {
+     "id": "similarity-search",
+     "number": "31.2.2",
+     "title": "Similarity Search",
+     "level": 3
+    },
+    {
+     "id": "chunking-strategy",
+     "number": "31.2.3",
+     "title": "Chunking Strategy",
+     "level": 3
+    },
+    {
+     "id": "failure-modes-to-expect",
+     "number": "31.2.4",
+     "title": "Failure Modes to Expect",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "31.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "31.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "31.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "31.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "31.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "31.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "31.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2283
+  },
+  {
+   "slug": "ch32-llm-evaluation",
+   "file": "ch32-llm-evaluation",
+   "number": "32",
+   "title": "LLM Evaluation",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "32.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "32.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "reference-based-metrics-bleu-and-rouge",
+     "number": "32.2.1",
+     "title": "Reference-Based Metrics: BLEU and ROUGE",
+     "level": 3
+    },
+    {
+     "id": "llm-as-judge-g-eval-style",
+     "number": "32.2.2",
+     "title": "LLM-as-Judge (G-Eval Style)",
+     "level": 3
+    },
+    {
+     "id": "rag-specific-evaluation-ragas-style",
+     "number": "32.2.3",
+     "title": "RAG-Specific Evaluation (RAGAS-Style)",
+     "level": 3
+    },
+    {
+     "id": "human-evaluation-and-inter-annotator-agreement",
+     "number": "32.2.4",
+     "title": "Human Evaluation and Inter-Annotator Agreement",
+     "level": 3
+    },
+    {
+     "id": "benchmark-suites",
+     "number": "32.2.5",
+     "title": "Benchmark Suites",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "32.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "32.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "32.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "32.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "32.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "32.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "32.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2455
+  },
+  {
+   "slug": "ch33-continuous-pretraining",
+   "file": "ch33-continuous-pretraining",
+   "number": "33",
+   "title": "Continuous Pretraining",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "33.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "33.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "why-the-pretraining-objective-transfers",
+     "number": "33.2.1",
+     "title": "Why the Pretraining Objective Transfers",
+     "level": 3
+    },
+    {
+     "id": "when-cpt-is-appropriate",
+     "number": "33.2.2",
+     "title": "When CPT Is Appropriate",
+     "level": 3
+    },
+    {
+     "id": "catastrophic-forgetting",
+     "number": "33.2.3",
+     "title": "Catastrophic Forgetting",
+     "level": 3
+    },
+    {
+     "id": "compute-requirements-flops-and-memory",
+     "number": "33.2.4",
+     "title": "Compute Requirements: FLOPs and Memory",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "33.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "33.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "33.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "33.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "33.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "33.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "33.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2184
+  },
+  {
+   "slug": "ch34-instruction-fine-tuning",
+   "file": "ch34-instruction-fine-tuning",
+   "number": "34",
+   "title": "Instruction Fine-Tuning",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "34.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "34.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "lora-training-efficiently",
+     "number": "34.2.1",
+     "title": "LoRA: Training Efficiently",
+     "level": 3
+    },
+    {
+     "id": "qlora-fine-tuning-on-one-gpu",
+     "number": "34.2.2",
+     "title": "QLoRA: Fine-Tuning on One GPU",
+     "level": 3
+    },
+    {
+     "id": "why-data-quality-dominates",
+     "number": "34.2.3",
+     "title": "Why Data Quality Dominates",
+     "level": 3
+    },
+    {
+     "id": "evaluating-an-ift-model",
+     "number": "34.2.4",
+     "title": "Evaluating an IFT Model",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "34.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "34.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "34.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "34.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "34.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "34.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "34.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2138
+  },
+  {
+   "slug": "ch35-reinforcement-learning-rlhf",
+   "file": "ch35-reinforcement-learning-rlhf",
+   "number": "35",
+   "title": "Reinforcement Learning & RLHF",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "35.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "35.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "a-minimal-rl-vocabulary",
+     "number": "35.2.1",
+     "title": "A Minimal RL Vocabulary",
+     "level": 3
+    },
+    {
+     "id": "the-three-stage-rlhf-pipeline",
+     "number": "35.2.2",
+     "title": "The Three-Stage RLHF Pipeline",
+     "level": 3
+    },
+    {
+     "id": "the-kl-penalty-why-reward-cant-be-maximised-directly",
+     "number": "35.2.3",
+     "title": "The KL Penalty: Why Reward Can’t Be Maximised Directly",
+     "level": 3
+    },
+    {
+     "id": "dpo-skipping-the-reward-model-and-the-rl-loop",
+     "number": "35.2.4",
+     "title": "DPO: Skipping the Reward Model and the RL Loop",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "35.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "35.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "35.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "aws-sagemaker-notes",
+     "number": "35.6",
+     "title": "AWS SageMaker Notes",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "35.7",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "35.8",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "35.9",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "35.10",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 3725
+  },
+  {
+   "slug": "ch36-agentic-ai",
+   "file": "ch36-agentic-ai",
+   "number": "36",
+   "title": "Agentic AI & Agent Patterns",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "36.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "36.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "the-react-pattern",
+     "number": "36.2.1",
+     "title": "The ReAct Pattern",
+     "level": 3
+    },
+    {
+     "id": "tool-use-as-the-only-way-an-agent-acts",
+     "number": "36.2.2",
+     "title": "Tool Use as the Only Way an Agent Acts",
+     "level": 3
+    },
+    {
+     "id": "memory-short-term-vs.-long-term",
+     "number": "36.2.3",
+     "title": "Memory: Short-Term vs. Long-Term",
+     "level": 3
+    },
+    {
+     "id": "planning-and-multi-agent-orchestration",
+     "number": "36.2.4",
+     "title": "Planning and Multi-Agent Orchestration",
+     "level": 3
+    },
+    {
+     "id": "failure-modes-to-expect",
+     "number": "36.2.5",
+     "title": "Failure Modes to Expect",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "36.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "36.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "36.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "36.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "36.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "36.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "36.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2370
+  },
+  {
+   "slug": "ch37-capstone",
+   "file": "ch37-capstone",
+   "number": "37",
+   "title": "Capstone Project",
+   "kind": "chapter",
+   "sections": [
+    {
+     "id": "motivation",
+     "number": "37.1",
+     "title": "Motivation",
+     "level": 2
+    },
+    {
+     "id": "exposition",
+     "number": "37.2",
+     "title": "Exposition",
+     "level": 2
+    },
+    {
+     "id": "scoping-the-skill-most-learners-underrate",
+     "number": "37.2.1",
+     "title": "Scoping: The Skill Most Learners Underrate",
+     "level": 3
+    },
+    {
+     "id": "why-a-capstone-deliberately-doesnt-specify-a-dataset",
+     "number": "37.2.2",
+     "title": "Why a Capstone Deliberately Doesn’t Specify a Dataset",
+     "level": 3
+    },
+    {
+     "id": "deployment-and-monitoring-are-not-optional-extensions",
+     "number": "37.2.3",
+     "title": "Deployment and Monitoring Are Not Optional Extensions",
+     "level": 3
+    },
+    {
+     "id": "an-optional-genai-extension",
+     "number": "37.2.4",
+     "title": "An Optional GenAI Extension",
+     "level": 3
+    },
+    {
+     "id": "trade-offs-and-limits",
+     "number": "37.3",
+     "title": "Trade-offs and Limits",
+     "level": 2
+    },
+    {
+     "id": "procedures",
+     "number": "37.4",
+     "title": "Procedures",
+     "level": 2
+    },
+    {
+     "id": "worked-example",
+     "number": "37.5",
+     "title": "Worked Example",
+     "level": 2
+    },
+    {
+     "id": "history-and-further-reading",
+     "number": "37.6",
+     "title": "History and Further Reading",
+     "level": 2
+    },
+    {
+     "id": "how-this-connects",
+     "number": "37.7",
+     "title": "How This Connects",
+     "level": 2
+    },
+    {
+     "id": "exercises",
+     "number": "37.8",
+     "title": "Exercises",
+     "level": 2
+    },
+    {
+     "id": "mental-model",
+     "number": "37.9",
+     "title": "Mental Model",
+     "level": 2
+    }
+   ],
+   "words": 2452
+  },
+  {
+   "slug": "appendix-a-quick-reference",
+   "file": "appendix-a-quick-reference",
+   "number": null,
+   "title": "Quick Reference",
+   "kind": "appendix",
+   "sections": [
+    {
+     "id": "chapter-21-responsible-ai-data-governance",
+     "number": "",
+     "title": "Chapter 21 — Responsible AI & Data Governance",
+     "level": 2
+    },
+    {
+     "id": "chapter-22-ml-experiment-tracking",
+     "number": "",
+     "title": "Chapter 22 — ML Experiment Tracking",
+     "level": 2
+    },
+    {
+     "id": "chapter-23-model-deployment-serving",
+     "number": "",
+     "title": "Chapter 23 — Model Deployment & Serving",
+     "level": 2
+    },
+    {
+     "id": "chapter-24-mlops-cicd-for-ml",
+     "number": "",
+     "title": "Chapter 24 — MLOps & CI/CD for ML",
+     "level": 2
+    },
+    {
+     "id": "chapter-25-monitoring",
+     "number": "",
+     "title": "Chapter 25 — Monitoring",
+     "level": 2
+    },
+    {
+     "id": "chapter-26-cloud-ml-platforms",
+     "number": "",
+     "title": "Chapter 26 — Cloud ML Platforms",
+     "level": 2
+    },
+    {
+     "id": "chapter-27-nlp-fundamentals",
+     "number": "",
+     "title": "Chapter 27 — NLP Fundamentals",
+     "level": 2
+    },
+    {
+     "id": "chapter-28-intro-to-neural-networks",
+     "number": "",
+     "title": "Chapter 28 — Intro to Neural Networks",
+     "level": 2
+    },
+    {
+     "id": "chapter-29-training-a-transformer-model",
+     "number": "",
+     "title": "Chapter 29 — Training a Transformer Model",
+     "level": 2
+    },
+    {
+     "id": "chapter-30-prompt-engineering",
+     "number": "",
+     "title": "Chapter 30 — Prompt Engineering",
+     "level": 2
+    },
+    {
+     "id": "chapter-31-retrieval-augmented-generation-rag",
+     "number": "",
+     "title": "Chapter 31 — Retrieval-Augmented Generation (RAG)",
+     "level": 2
+    },
+    {
+     "id": "chapter-32-llm-evaluation",
+     "number": "",
+     "title": "Chapter 32 — LLM Evaluation",
+     "level": 2
+    },
+    {
+     "id": "chapter-33-continuous-pretraining",
+     "number": "",
+     "title": "Chapter 33 — Continuous Pretraining",
+     "level": 2
+    },
+    {
+     "id": "chapter-34-instruction-fine-tuning",
+     "number": "",
+     "title": "Chapter 34 — Instruction Fine-Tuning",
+     "level": 2
+    },
+    {
+     "id": "chapter-35-reinforcement-learning-rlhf",
+     "number": "",
+     "title": "Chapter 35 — Reinforcement Learning & RLHF",
+     "level": 2
+    },
+    {
+     "id": "chapter-36-agentic-ai-agent-patterns",
+     "number": "",
+     "title": "Chapter 36 — Agentic AI & Agent Patterns",
+     "level": 2
+    },
+    {
+     "id": "chapter-37-capstone-project",
+     "number": "",
+     "title": "Chapter 37 — Capstone Project",
+     "level": 2
+    }
+   ],
+   "words": 4832
+  },
+  {
+   "slug": "appendix-b-answers",
+   "file": "appendix-b-answers",
+   "number": null,
+   "title": "Answers to Exercises",
+   "kind": "appendix",
+   "sections": [
+    {
+     "id": "chapter-21-responsible-ai-data-governance",
+     "number": "",
+     "title": "Chapter 21 — Responsible AI & Data Governance",
+     "level": 2
+    },
+    {
+     "id": "chapter-22-ml-experiment-tracking",
+     "number": "",
+     "title": "Chapter 22 — ML Experiment Tracking",
+     "level": 2
+    },
+    {
+     "id": "chapter-23-model-deployment-serving",
+     "number": "",
+     "title": "Chapter 23 — Model Deployment & Serving",
+     "level": 2
+    },
+    {
+     "id": "chapter-24-mlops-cicd-for-ml",
+     "number": "",
+     "title": "Chapter 24 — MLOps & CI/CD for ML",
+     "level": 2
+    },
+    {
+     "id": "chapter-25-monitoring",
+     "number": "",
+     "title": "Chapter 25 — Monitoring",
+     "level": 2
+    },
+    {
+     "id": "chapter-26-cloud-ml-platforms",
+     "number": "",
+     "title": "Chapter 26 — Cloud ML Platforms",
+     "level": 2
+    },
+    {
+     "id": "chapter-27-nlp-fundamentals",
+     "number": "",
+     "title": "Chapter 27 — NLP Fundamentals",
+     "level": 2
+    },
+    {
+     "id": "chapter-28-intro-to-neural-networks",
+     "number": "",
+     "title": "Chapter 28 — Intro to Neural Networks",
+     "level": 2
+    },
+    {
+     "id": "chapter-29-training-a-transformer-model",
+     "number": "",
+     "title": "Chapter 29 — Training a Transformer Model",
+     "level": 2
+    },
+    {
+     "id": "chapter-30-prompt-engineering",
+     "number": "",
+     "title": "Chapter 30 — Prompt Engineering",
+     "level": 2
+    },
+    {
+     "id": "chapter-31-retrieval-augmented-generation-rag",
+     "number": "",
+     "title": "Chapter 31 — Retrieval-Augmented Generation (RAG)",
+     "level": 2
+    },
+    {
+     "id": "chapter-32-llm-evaluation",
+     "number": "",
+     "title": "Chapter 32 — LLM Evaluation",
+     "level": 2
+    },
+    {
+     "id": "chapter-33-continuous-pretraining",
+     "number": "",
+     "title": "Chapter 33 — Continuous Pretraining",
+     "level": 2
+    },
+    {
+     "id": "chapter-34-instruction-fine-tuning",
+     "number": "",
+     "title": "Chapter 34 — Instruction Fine-Tuning",
+     "level": 2
+    },
+    {
+     "id": "chapter-35-reinforcement-learning-rlhf",
+     "number": "",
+     "title": "Chapter 35 — Reinforcement Learning & RLHF",
+     "level": 2
+    },
+    {
+     "id": "chapter-36-agentic-ai-agent-patterns",
+     "number": "",
+     "title": "Chapter 36 — Agentic AI & Agent Patterns",
+     "level": 2
+    },
+    {
+     "id": "chapter-37-capstone-project",
+     "number": "",
+     "title": "Chapter 37 — Capstone Project",
+     "level": 2
+    }
+   ],
+   "words": 10807
+  }
+ ],
+ "anchors": {
+  "preface:how to read this book": {
+   "href": "/books/modern-ai/preface#how-to-read-this-book",
+   "label": "How to Read This Book"
+  },
+  "preface:notation and conventions": {
+   "href": "/books/modern-ai/preface#notation-and-conventions",
+   "label": "Notation and Conventions"
+  },
+  "preface:prerequisites map": {
+   "href": "/books/modern-ai/preface#prerequisites-map",
+   "label": "Prerequisites Map"
+  },
+  "§21.1": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#motivation",
+   "label": "§21.1 Motivation"
+  },
+  "21:motivation": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#motivation",
+   "label": "Motivation"
+  },
+  "§21.2": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#exposition",
+   "label": "§21.2 Exposition"
+  },
+  "21:exposition": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#exposition",
+   "label": "Exposition"
+  },
+  "§21.2.1": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#bias-in-ml-sources-and-types",
+   "label": "§21.2.1 Bias in ML: Sources and Types"
+  },
+  "21:bias in ml: sources and types": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#bias-in-ml-sources-and-types",
+   "label": "Bias in ML: Sources and Types"
+  },
+  "§21.2.2": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#model-interpretability",
+   "label": "§21.2.2 Model Interpretability"
+  },
+  "21:model interpretability": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#model-interpretability",
+   "label": "Model Interpretability"
+  },
+  "§21.2.3": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#robustness",
+   "label": "§21.2.3 Robustness"
+  },
+  "21:robustness": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#robustness",
+   "label": "Robustness"
+  },
+  "§21.2.4": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#sustainability",
+   "label": "§21.2.4 Sustainability"
+  },
+  "21:sustainability": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#sustainability",
+   "label": "Sustainability"
+  },
+  "§21.2.5": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#data-governance",
+   "label": "§21.2.5 Data Governance"
+  },
+  "21:data governance": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#data-governance",
+   "label": "Data Governance"
+  },
+  "§21.3": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#trade-offs-and-limits",
+   "label": "§21.3 Trade-offs and Limits"
+  },
+  "21:trade-offs and limits": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§21.4": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#procedures",
+   "label": "§21.4 Procedures"
+  },
+  "21:procedures": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#procedures",
+   "label": "Procedures"
+  },
+  "§21.5": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#worked-example",
+   "label": "§21.5 Worked Example"
+  },
+  "21:worked example": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#worked-example",
+   "label": "Worked Example"
+  },
+  "§21.6": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#history-and-further-reading",
+   "label": "§21.6 History and Further Reading"
+  },
+  "21:history and further reading": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§21.7": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#how-this-connects",
+   "label": "§21.7 How This Connects"
+  },
+  "21:how this connects": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§21.8": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#exercises",
+   "label": "§21.8 Exercises"
+  },
+  "21:exercises": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#exercises",
+   "label": "Exercises"
+  },
+  "§21.9": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#mental-model",
+   "label": "§21.9 Mental Model"
+  },
+  "21:mental model": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 21.1": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#lst-fairness-audit-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 21.1"
+  },
+  "Listing 21.2": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#lst-shap-values-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 21.2"
+  },
+  "Listing 21.3": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#lst-pii-scan-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 21.3"
+  },
+  "Listing 21.4": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#lst-hiring-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 21.4"
+  },
+  "Listing 21.5": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#lst-hiring-no-proxies-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 21.5"
+  },
+  "Procedure 21.1": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#proc-21-1",
+   "label": "Procedure 21.1"
+  },
+  "Procedure 21.2": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#proc-21-2",
+   "label": "Procedure 21.2"
+  },
+  "Procedure 21.3": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#proc-21-3",
+   "label": "Procedure 21.3"
+  },
+  "Exercise 21.1": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#ex-21-1",
+   "label": "Exercise 21.1"
+  },
+  "Exercise 21.2": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#ex-21-2",
+   "label": "Exercise 21.2"
+  },
+  "Exercise 21.3": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#ex-21-3",
+   "label": "Exercise 21.3"
+  },
+  "Exercise 21.4": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#ex-21-4",
+   "label": "Exercise 21.4"
+  },
+  "Exercise 21.5": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#ex-21-5",
+   "label": "Exercise 21.5"
+  },
+  "Exercise 21.6": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#ex-21-6",
+   "label": "Exercise 21.6"
+  },
+  "Exercise 21.7": {
+   "href": "/books/modern-ai/ch21-responsible-ai-data-governance#ex-21-7",
+   "label": "Exercise 21.7"
+  },
+  "§22.1": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#motivation",
+   "label": "§22.1 Motivation"
+  },
+  "22:motivation": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#motivation",
+   "label": "Motivation"
+  },
+  "§22.2": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#exposition",
+   "label": "§22.2 Exposition"
+  },
+  "22:exposition": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#exposition",
+   "label": "Exposition"
+  },
+  "§22.2.1": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#what-to-track",
+   "label": "§22.2.1 What to Track"
+  },
+  "22:what to track": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#what-to-track",
+   "label": "What to Track"
+  },
+  "§22.2.2": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#mlflow-components",
+   "label": "§22.2.2 MLflow Components"
+  },
+  "22:mlflow components": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#mlflow-components",
+   "label": "MLflow Components"
+  },
+  "§22.2.3": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#weights-biases",
+   "label": "§22.2.3 Weights & Biases"
+  },
+  "22:weights & biases": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#weights-biases",
+   "label": "Weights & Biases"
+  },
+  "§22.3": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#trade-offs-and-limits",
+   "label": "§22.3 Trade-offs and Limits"
+  },
+  "22:trade-offs and limits": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§22.4": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#procedures",
+   "label": "§22.4 Procedures"
+  },
+  "22:procedures": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#procedures",
+   "label": "Procedures"
+  },
+  "§22.5": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#worked-example",
+   "label": "§22.5 Worked Example"
+  },
+  "22:worked example": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#worked-example",
+   "label": "Worked Example"
+  },
+  "§22.6": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#history-and-further-reading",
+   "label": "§22.6 History and Further Reading"
+  },
+  "22:history and further reading": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§22.7": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#how-this-connects",
+   "label": "§22.7 How This Connects"
+  },
+  "22:how this connects": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§22.8": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#exercises",
+   "label": "§22.8 Exercises"
+  },
+  "22:exercises": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#exercises",
+   "label": "Exercises"
+  },
+  "§22.9": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#mental-model",
+   "label": "§22.9 Mental Model"
+  },
+  "22:mental model": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 22.1": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#lst-mlflow-start-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 22.1"
+  },
+  "Listing 22.2": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#lst-mlflow-log-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 22.2"
+  },
+  "Listing 22.3": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#lst-mlflow-autolog-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 22.3"
+  },
+  "Listing 22.4": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#lst-mlflow-search-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 22.4"
+  },
+  "Listing 22.5": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#lst-mlflow-register-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 22.5"
+  },
+  "Listing 22.6": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#lst-mlflow-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 22.6"
+  },
+  "Listing 22.7": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#lst-mlflow-query-result-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 22.7"
+  },
+  "Procedure 22.1": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#proc-22-1",
+   "label": "Procedure 22.1"
+  },
+  "Procedure 22.2": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#proc-22-2",
+   "label": "Procedure 22.2"
+  },
+  "Procedure 22.3": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#proc-22-3",
+   "label": "Procedure 22.3"
+  },
+  "Procedure 22.4": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#proc-22-4",
+   "label": "Procedure 22.4"
+  },
+  "Procedure 22.5": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#proc-22-5",
+   "label": "Procedure 22.5"
+  },
+  "Exercise 22.1": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#ex-22-1",
+   "label": "Exercise 22.1"
+  },
+  "Exercise 22.2": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#ex-22-2",
+   "label": "Exercise 22.2"
+  },
+  "Exercise 22.3": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#ex-22-3",
+   "label": "Exercise 22.3"
+  },
+  "Exercise 22.4": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#ex-22-4",
+   "label": "Exercise 22.4"
+  },
+  "Exercise 22.5": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#ex-22-5",
+   "label": "Exercise 22.5"
+  },
+  "Exercise 22.6": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#ex-22-6",
+   "label": "Exercise 22.6"
+  },
+  "Exercise 22.7": {
+   "href": "/books/modern-ai/ch22-ml-experiment-tracking#ex-22-7",
+   "label": "Exercise 22.7"
+  },
+  "§23.1": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#motivation",
+   "label": "§23.1 Motivation"
+  },
+  "23:motivation": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#motivation",
+   "label": "Motivation"
+  },
+  "§23.2": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#exposition",
+   "label": "§23.2 Exposition"
+  },
+  "23:exposition": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#exposition",
+   "label": "Exposition"
+  },
+  "§23.2.1": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#deployment-patterns",
+   "label": "§23.2.1 Deployment Patterns"
+  },
+  "23:deployment patterns": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#deployment-patterns",
+   "label": "Deployment Patterns"
+  },
+  "§23.2.2": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#model-serialisation",
+   "label": "§23.2.2 Model Serialisation"
+  },
+  "23:model serialisation": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#model-serialisation",
+   "label": "Model Serialisation"
+  },
+  "§23.2.3": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#serving-frameworks",
+   "label": "§23.2.3 Serving Frameworks"
+  },
+  "23:serving frameworks": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#serving-frameworks",
+   "label": "Serving Frameworks"
+  },
+  "§23.2.4": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#estimating-capacity-for-transformerllm-inference",
+   "label": "§23.2.4 Estimating Capacity for Transformer/LLM Inference"
+  },
+  "23:estimating capacity for transformer/llm inference": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#estimating-capacity-for-transformerllm-inference",
+   "label": "Estimating Capacity for Transformer/LLM Inference"
+  },
+  "§23.2.5": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#shrinking-the-model-distillation-quantisation-pruning",
+   "label": "§23.2.5 Shrinking the Model: Distillation, Quantisation, Pruning"
+  },
+  "23:shrinking the model: distillation, quantisation, pruning": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#shrinking-the-model-distillation-quantisation-pruning",
+   "label": "Shrinking the Model: Distillation, Quantisation, Pruning"
+  },
+  "§23.2.6": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#containers-and-reproducibility",
+   "label": "§23.2.6 Containers and Reproducibility"
+  },
+  "23:containers and reproducibility": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#containers-and-reproducibility",
+   "label": "Containers and Reproducibility"
+  },
+  "§23.3": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#trade-offs-and-limits",
+   "label": "§23.3 Trade-offs and Limits"
+  },
+  "23:trade-offs and limits": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§23.4": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#procedures",
+   "label": "§23.4 Procedures"
+  },
+  "23:procedures": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#procedures",
+   "label": "Procedures"
+  },
+  "§23.5": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#worked-example",
+   "label": "§23.5 Worked Example"
+  },
+  "23:worked example": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#worked-example",
+   "label": "Worked Example"
+  },
+  "§23.6": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#history-and-further-reading",
+   "label": "§23.6 History and Further Reading"
+  },
+  "23:history and further reading": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§23.7": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#how-this-connects",
+   "label": "§23.7 How This Connects"
+  },
+  "23:how this connects": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§23.8": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#exercises",
+   "label": "§23.8 Exercises"
+  },
+  "23:exercises": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#exercises",
+   "label": "Exercises"
+  },
+  "§23.9": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#mental-model",
+   "label": "§23.9 Mental Model"
+  },
+  "23:mental model": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 23.1": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#lst-serialize-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 23.1"
+  },
+  "Listing 23.2": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#lst-fastapi-endpoint-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 23.2"
+  },
+  "Listing 23.3": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#lst-pattern-choice-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 23.3"
+  },
+  "Listing 23.4": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#lst-llm-capacity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 23.4"
+  },
+  "Listing 23.5": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#lst-load-test-run-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 23.5"
+  },
+  "Procedure 23.1": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#proc-23-1",
+   "label": "Procedure 23.1"
+  },
+  "Procedure 23.2": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#proc-23-2",
+   "label": "Procedure 23.2"
+  },
+  "Procedure 23.3": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#proc-23-3",
+   "label": "Procedure 23.3"
+  },
+  "Procedure 23.4": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#proc-23-4",
+   "label": "Procedure 23.4"
+  },
+  "Exercise 23.1": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#ex-23-1",
+   "label": "Exercise 23.1"
+  },
+  "Exercise 23.2": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#ex-23-2",
+   "label": "Exercise 23.2"
+  },
+  "Exercise 23.3": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#ex-23-3",
+   "label": "Exercise 23.3"
+  },
+  "Exercise 23.4": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#ex-23-4",
+   "label": "Exercise 23.4"
+  },
+  "Exercise 23.5": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#ex-23-5",
+   "label": "Exercise 23.5"
+  },
+  "Exercise 23.6": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#ex-23-6",
+   "label": "Exercise 23.6"
+  },
+  "Exercise 23.7": {
+   "href": "/books/modern-ai/ch23-model-deployment-serving#ex-23-7",
+   "label": "Exercise 23.7"
+  },
+  "§24.1": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#motivation",
+   "label": "§24.1 Motivation"
+  },
+  "24:motivation": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#motivation",
+   "label": "Motivation"
+  },
+  "§24.2": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#exposition",
+   "label": "§24.2 Exposition"
+  },
+  "24:exposition": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#exposition",
+   "label": "Exposition"
+  },
+  "§24.2.1": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#the-model-registry-as-the-central-object",
+   "label": "§24.2.1 The Model Registry as the Central Object"
+  },
+  "24:the model registry as the central object": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#the-model-registry-as-the-central-object",
+   "label": "The Model Registry as the Central Object"
+  },
+  "§24.2.2": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ci-for-ml-what-gets-tested",
+   "label": "§24.2.2 CI for ML: What Gets Tested"
+  },
+  "24:ci for ml: what gets tested": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ci-for-ml-what-gets-tested",
+   "label": "CI for ML: What Gets Tested"
+  },
+  "§24.2.3": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#cd-for-ml-deployment-strategies",
+   "label": "§24.2.3 CD for ML: Deployment Strategies"
+  },
+  "24:cd for ml: deployment strategies": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#cd-for-ml-deployment-strategies",
+   "label": "CD for ML: Deployment Strategies"
+  },
+  "§24.2.4": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#the-training-pipeline-as-versioned-code",
+   "label": "§24.2.4 The Training Pipeline as Versioned Code"
+  },
+  "24:the training pipeline as versioned code": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#the-training-pipeline-as-versioned-code",
+   "label": "The Training Pipeline as Versioned Code"
+  },
+  "§24.3": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#trade-offs-and-limits",
+   "label": "§24.3 Trade-offs and Limits"
+  },
+  "24:trade-offs and limits": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§24.4": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#procedures",
+   "label": "§24.4 Procedures"
+  },
+  "24:procedures": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#procedures",
+   "label": "Procedures"
+  },
+  "§24.5": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#worked-example",
+   "label": "§24.5 Worked Example"
+  },
+  "24:worked example": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#worked-example",
+   "label": "Worked Example"
+  },
+  "§24.6": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#history-and-further-reading",
+   "label": "§24.6 History and Further Reading"
+  },
+  "24:history and further reading": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§24.7": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#how-this-connects",
+   "label": "§24.7 How This Connects"
+  },
+  "24:how this connects": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§24.8": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#exercises",
+   "label": "§24.8 Exercises"
+  },
+  "24:exercises": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#exercises",
+   "label": "Exercises"
+  },
+  "§24.9": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#mental-model",
+   "label": "§24.9 Mental Model"
+  },
+  "24:mental model": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 24.1": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#lst-mlflow-registry-setup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 24.1"
+  },
+  "Listing 24.2": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#lst-data-validation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 24.2"
+  },
+  "Listing 24.3": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#lst-performance-gate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 24.3"
+  },
+  "Listing 24.4": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#lst-gate-sweep-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 24.4"
+  },
+  "Procedure 24.1": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#proc-24-1",
+   "label": "Procedure 24.1"
+  },
+  "Procedure 24.2": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#proc-24-2",
+   "label": "Procedure 24.2"
+  },
+  "Procedure 24.3": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#proc-24-3",
+   "label": "Procedure 24.3"
+  },
+  "Exercise 24.1": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ex-24-1",
+   "label": "Exercise 24.1"
+  },
+  "Exercise 24.2": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ex-24-2",
+   "label": "Exercise 24.2"
+  },
+  "Exercise 24.3": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ex-24-3",
+   "label": "Exercise 24.3"
+  },
+  "Exercise 24.4": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ex-24-4",
+   "label": "Exercise 24.4"
+  },
+  "Exercise 24.5": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ex-24-5",
+   "label": "Exercise 24.5"
+  },
+  "Exercise 24.6": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ex-24-6",
+   "label": "Exercise 24.6"
+  },
+  "Exercise 24.7": {
+   "href": "/books/modern-ai/ch24-mlops-cicd#ex-24-7",
+   "label": "Exercise 24.7"
+  },
+  "§25.1": {
+   "href": "/books/modern-ai/ch25-monitoring#motivation",
+   "label": "§25.1 Motivation"
+  },
+  "25:motivation": {
+   "href": "/books/modern-ai/ch25-monitoring#motivation",
+   "label": "Motivation"
+  },
+  "§25.2": {
+   "href": "/books/modern-ai/ch25-monitoring#exposition",
+   "label": "§25.2 Exposition"
+  },
+  "25:exposition": {
+   "href": "/books/modern-ai/ch25-monitoring#exposition",
+   "label": "Exposition"
+  },
+  "§25.2.1": {
+   "href": "/books/modern-ai/ch25-monitoring#data-drift-covariate-shift",
+   "label": "§25.2.1 Data Drift (Covariate Shift)"
+  },
+  "25:data drift (covariate shift)": {
+   "href": "/books/modern-ai/ch25-monitoring#data-drift-covariate-shift",
+   "label": "Data Drift (Covariate Shift)"
+  },
+  "§25.2.2": {
+   "href": "/books/modern-ai/ch25-monitoring#concept-drift",
+   "label": "§25.2.2 Concept Drift"
+  },
+  "25:concept drift": {
+   "href": "/books/modern-ai/ch25-monitoring#concept-drift",
+   "label": "Concept Drift"
+  },
+  "§25.2.3": {
+   "href": "/books/modern-ai/ch25-monitoring#label-prediction-drift",
+   "label": "§25.2.3 Label / Prediction Drift"
+  },
+  "25:label / prediction drift": {
+   "href": "/books/modern-ai/ch25-monitoring#label-prediction-drift",
+   "label": "Label / Prediction Drift"
+  },
+  "§25.2.4": {
+   "href": "/books/modern-ai/ch25-monitoring#detecting-drift-without-labels",
+   "label": "§25.2.4 Detecting Drift Without Labels"
+  },
+  "25:detecting drift without labels": {
+   "href": "/books/modern-ai/ch25-monitoring#detecting-drift-without-labels",
+   "label": "Detecting Drift Without Labels"
+  },
+  "§25.2.5": {
+   "href": "/books/modern-ai/ch25-monitoring#performance-monitoring-when-you-have-labels",
+   "label": "§25.2.5 Performance Monitoring (When You Have Labels)"
+  },
+  "25:performance monitoring (when you have labels)": {
+   "href": "/books/modern-ai/ch25-monitoring#performance-monitoring-when-you-have-labels",
+   "label": "Performance Monitoring (When You Have Labels)"
+  },
+  "§25.2.6": {
+   "href": "/books/modern-ai/ch25-monitoring#retraining-trigger-strategies",
+   "label": "§25.2.6 Retraining Trigger Strategies"
+  },
+  "25:retraining trigger strategies": {
+   "href": "/books/modern-ai/ch25-monitoring#retraining-trigger-strategies",
+   "label": "Retraining Trigger Strategies"
+  },
+  "§25.3": {
+   "href": "/books/modern-ai/ch25-monitoring#trade-offs-and-limits",
+   "label": "§25.3 Trade-offs and Limits"
+  },
+  "25:trade-offs and limits": {
+   "href": "/books/modern-ai/ch25-monitoring#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§25.4": {
+   "href": "/books/modern-ai/ch25-monitoring#procedures",
+   "label": "§25.4 Procedures"
+  },
+  "25:procedures": {
+   "href": "/books/modern-ai/ch25-monitoring#procedures",
+   "label": "Procedures"
+  },
+  "§25.5": {
+   "href": "/books/modern-ai/ch25-monitoring#worked-example",
+   "label": "§25.5 Worked Example"
+  },
+  "25:worked example": {
+   "href": "/books/modern-ai/ch25-monitoring#worked-example",
+   "label": "Worked Example"
+  },
+  "§25.6": {
+   "href": "/books/modern-ai/ch25-monitoring#aws-sagemaker-notes",
+   "label": "§25.6 AWS SageMaker Notes"
+  },
+  "25:aws sagemaker notes": {
+   "href": "/books/modern-ai/ch25-monitoring#aws-sagemaker-notes",
+   "label": "AWS SageMaker Notes"
+  },
+  "§25.7": {
+   "href": "/books/modern-ai/ch25-monitoring#history-and-further-reading",
+   "label": "§25.7 History and Further Reading"
+  },
+  "25:history and further reading": {
+   "href": "/books/modern-ai/ch25-monitoring#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§25.8": {
+   "href": "/books/modern-ai/ch25-monitoring#how-this-connects",
+   "label": "§25.8 How This Connects"
+  },
+  "25:how this connects": {
+   "href": "/books/modern-ai/ch25-monitoring#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§25.9": {
+   "href": "/books/modern-ai/ch25-monitoring#exercises",
+   "label": "§25.9 Exercises"
+  },
+  "25:exercises": {
+   "href": "/books/modern-ai/ch25-monitoring#exercises",
+   "label": "Exercises"
+  },
+  "§25.10": {
+   "href": "/books/modern-ai/ch25-monitoring#mental-model",
+   "label": "§25.10 Mental Model"
+  },
+  "25:mental model": {
+   "href": "/books/modern-ai/ch25-monitoring#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 25.1": {
+   "href": "/books/modern-ai/ch25-monitoring#lst-compute-psi-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 25.1"
+  },
+  "Listing 25.2": {
+   "href": "/books/modern-ai/ch25-monitoring#lst-compute-ks-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 25.2"
+  },
+  "Listing 25.3": {
+   "href": "/books/modern-ai/ch25-monitoring#lst-categorical-drift-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 25.3"
+  },
+  "Listing 25.4": {
+   "href": "/books/modern-ai/ch25-monitoring#lst-rolling-performance-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 25.4"
+  },
+  "Listing 25.5": {
+   "href": "/books/modern-ai/ch25-monitoring#lst-alert-thresholds-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 25.5"
+  },
+  "Procedure 25.1": {
+   "href": "/books/modern-ai/ch25-monitoring#proc-25-1",
+   "label": "Procedure 25.1"
+  },
+  "Procedure 25.2": {
+   "href": "/books/modern-ai/ch25-monitoring#proc-25-2",
+   "label": "Procedure 25.2"
+  },
+  "Procedure 25.3": {
+   "href": "/books/modern-ai/ch25-monitoring#proc-25-3",
+   "label": "Procedure 25.3"
+  },
+  "Procedure 25.4": {
+   "href": "/books/modern-ai/ch25-monitoring#proc-25-4",
+   "label": "Procedure 25.4"
+  },
+  "Procedure 25.5": {
+   "href": "/books/modern-ai/ch25-monitoring#proc-25-5",
+   "label": "Procedure 25.5"
+  },
+  "Exercise 25.1": {
+   "href": "/books/modern-ai/ch25-monitoring#ex-25-1",
+   "label": "Exercise 25.1"
+  },
+  "Exercise 25.2": {
+   "href": "/books/modern-ai/ch25-monitoring#ex-25-2",
+   "label": "Exercise 25.2"
+  },
+  "Exercise 25.3": {
+   "href": "/books/modern-ai/ch25-monitoring#ex-25-3",
+   "label": "Exercise 25.3"
+  },
+  "Exercise 25.4": {
+   "href": "/books/modern-ai/ch25-monitoring#ex-25-4",
+   "label": "Exercise 25.4"
+  },
+  "Exercise 25.5": {
+   "href": "/books/modern-ai/ch25-monitoring#ex-25-5",
+   "label": "Exercise 25.5"
+  },
+  "Exercise 25.6": {
+   "href": "/books/modern-ai/ch25-monitoring#ex-25-6",
+   "label": "Exercise 25.6"
+  },
+  "Exercise 25.7": {
+   "href": "/books/modern-ai/ch25-monitoring#ex-25-7",
+   "label": "Exercise 25.7"
+  },
+  "§26.1": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#motivation",
+   "label": "§26.1 Motivation"
+  },
+  "26:motivation": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#motivation",
+   "label": "Motivation"
+  },
+  "§26.2": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#exposition",
+   "label": "§26.2 Exposition"
+  },
+  "26:exposition": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#exposition",
+   "label": "Exposition"
+  },
+  "§26.2.1": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#s3-the-foundation",
+   "label": "§26.2.1 S3: The Foundation"
+  },
+  "26:s3: the foundation": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#s3-the-foundation",
+   "label": "S3: The Foundation"
+  },
+  "§26.2.2": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#sagemaker-the-ml-compute-and-orchestration-layer",
+   "label": "§26.2.2 SageMaker: The ML Compute and Orchestration Layer"
+  },
+  "26:sagemaker: the ml compute and orchestration layer": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#sagemaker-the-ml-compute-and-orchestration-layer",
+   "label": "SageMaker: The ML Compute and Orchestration Layer"
+  },
+  "§26.2.3": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#bedrock-managed-foundation-models",
+   "label": "§26.2.3 Bedrock: Managed Foundation Models"
+  },
+  "26:bedrock: managed foundation models": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#bedrock-managed-foundation-models",
+   "label": "Bedrock: Managed Foundation Models"
+  },
+  "§26.2.4": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#advising-a-customer-the-actual-sa-judgment-call",
+   "label": "§26.2.4 Advising a Customer: The Actual SA Judgment Call"
+  },
+  "26:advising a customer: the actual sa judgment call": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#advising-a-customer-the-actual-sa-judgment-call",
+   "label": "Advising a Customer: The Actual SA Judgment Call"
+  },
+  "§26.3": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#trade-offs-and-limits",
+   "label": "§26.3 Trade-offs and Limits"
+  },
+  "26:trade-offs and limits": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§26.4": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#procedures",
+   "label": "§26.4 Procedures"
+  },
+  "26:procedures": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#procedures",
+   "label": "Procedures"
+  },
+  "§26.5": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#worked-example",
+   "label": "§26.5 Worked Example"
+  },
+  "26:worked example": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#worked-example",
+   "label": "Worked Example"
+  },
+  "§26.6": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#history-and-further-reading",
+   "label": "§26.6 History and Further Reading"
+  },
+  "26:history and further reading": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§26.7": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#how-this-connects",
+   "label": "§26.7 How This Connects"
+  },
+  "26:how this connects": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§26.8": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#exercises",
+   "label": "§26.8 Exercises"
+  },
+  "26:exercises": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#exercises",
+   "label": "Exercises"
+  },
+  "§26.9": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#mental-model",
+   "label": "§26.9 Mental Model"
+  },
+  "26:mental model": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 26.1": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#lst-iam-role-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 26.1"
+  },
+  "Listing 26.2": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#lst-training-job-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 26.2"
+  },
+  "Listing 26.3": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#lst-endpoint-deploy-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 26.3"
+  },
+  "Listing 26.4": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#lst-bedrock-call-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 26.4"
+  },
+  "Procedure 26.1": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#proc-26-1",
+   "label": "Procedure 26.1"
+  },
+  "Procedure 26.2": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#proc-26-2",
+   "label": "Procedure 26.2"
+  },
+  "Procedure 26.3": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#proc-26-3",
+   "label": "Procedure 26.3"
+  },
+  "Procedure 26.4": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#proc-26-4",
+   "label": "Procedure 26.4"
+  },
+  "Exercise 26.1": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#ex-26-1",
+   "label": "Exercise 26.1"
+  },
+  "Exercise 26.2": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#ex-26-2",
+   "label": "Exercise 26.2"
+  },
+  "Exercise 26.3": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#ex-26-3",
+   "label": "Exercise 26.3"
+  },
+  "Exercise 26.4": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#ex-26-4",
+   "label": "Exercise 26.4"
+  },
+  "Exercise 26.5": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#ex-26-5",
+   "label": "Exercise 26.5"
+  },
+  "Exercise 26.6": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#ex-26-6",
+   "label": "Exercise 26.6"
+  },
+  "Exercise 26.7": {
+   "href": "/books/modern-ai/ch26-cloud-ml-sagemaker#ex-26-7",
+   "label": "Exercise 26.7"
+  },
+  "§27.1": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#motivation",
+   "label": "§27.1 Motivation"
+  },
+  "27:motivation": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#motivation",
+   "label": "Motivation"
+  },
+  "§27.2": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#exposition",
+   "label": "§27.2 Exposition"
+  },
+  "27:exposition": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#exposition",
+   "label": "Exposition"
+  },
+  "§27.2.1": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#tf-idf",
+   "label": "§27.2.1 TF-IDF"
+  },
+  "27:tf-idf": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#tf-idf",
+   "label": "TF-IDF"
+  },
+  "§27.2.2": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#word-embeddings-and-the-distributional-hypothesis",
+   "label": "§27.2.2 Word Embeddings and the Distributional Hypothesis"
+  },
+  "27:word embeddings and the distributional hypothesis": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#word-embeddings-and-the-distributional-hypothesis",
+   "label": "Word Embeddings and the Distributional Hypothesis"
+  },
+  "§27.2.3": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#subword-tokenization",
+   "label": "§27.2.3 Subword Tokenization"
+  },
+  "27:subword tokenization": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#subword-tokenization",
+   "label": "Subword Tokenization"
+  },
+  "§27.2.4": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#the-bridge-to-transformers",
+   "label": "§27.2.4 The Bridge to Transformers"
+  },
+  "27:the bridge to transformers": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#the-bridge-to-transformers",
+   "label": "The Bridge to Transformers"
+  },
+  "§27.3": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#trade-offs-and-limits",
+   "label": "§27.3 Trade-offs and Limits"
+  },
+  "27:trade-offs and limits": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§27.4": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#procedures",
+   "label": "§27.4 Procedures"
+  },
+  "27:procedures": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#procedures",
+   "label": "Procedures"
+  },
+  "§27.5": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#worked-example",
+   "label": "§27.5 Worked Example"
+  },
+  "27:worked example": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#worked-example",
+   "label": "Worked Example"
+  },
+  "§27.6": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#history-and-further-reading",
+   "label": "§27.6 History and Further Reading"
+  },
+  "27:history and further reading": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§27.7": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#how-this-connects",
+   "label": "§27.7 How This Connects"
+  },
+  "27:how this connects": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§27.8": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#exercises",
+   "label": "§27.8 Exercises"
+  },
+  "27:exercises": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#exercises",
+   "label": "Exercises"
+  },
+  "§27.9": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#mental-model",
+   "label": "§27.9 Mental Model"
+  },
+  "27:mental model": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 27.1": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#lst-nlp-preprocess-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 27.1"
+  },
+  "Listing 27.2": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#lst-nlp-tfidf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 27.2"
+  },
+  "Listing 27.3": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#lst-nlp-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 27.3"
+  },
+  "Listing 27.4": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#lst-nlp-embed-load-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 27.4"
+  },
+  "Listing 27.5": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#lst-nlp-doc-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 27.5"
+  },
+  "Listing 27.6": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#lst-nlp-worked-tfidf-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 27.6"
+  },
+  "Listing 27.7": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#lst-nlp-worked-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 27.7"
+  },
+  "Listing 27.8": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#lst-nlp-worked-analogy-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 27.8"
+  },
+  "Procedure 27.1": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#proc-27-1",
+   "label": "Procedure 27.1"
+  },
+  "Procedure 27.2": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#proc-27-2",
+   "label": "Procedure 27.2"
+  },
+  "Procedure 27.3": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#proc-27-3",
+   "label": "Procedure 27.3"
+  },
+  "Procedure 27.4": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#proc-27-4",
+   "label": "Procedure 27.4"
+  },
+  "Procedure 27.5": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#proc-27-5",
+   "label": "Procedure 27.5"
+  },
+  "Exercise 27.1": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#ex-27-1",
+   "label": "Exercise 27.1"
+  },
+  "Exercise 27.2": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#ex-27-2",
+   "label": "Exercise 27.2"
+  },
+  "Exercise 27.3": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#ex-27-3",
+   "label": "Exercise 27.3"
+  },
+  "Exercise 27.4": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#ex-27-4",
+   "label": "Exercise 27.4"
+  },
+  "Exercise 27.5": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#ex-27-5",
+   "label": "Exercise 27.5"
+  },
+  "Exercise 27.6": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#ex-27-6",
+   "label": "Exercise 27.6"
+  },
+  "Exercise 27.7": {
+   "href": "/books/modern-ai/ch27-nlp-fundamentals#ex-27-7",
+   "label": "Exercise 27.7"
+  },
+  "§28.1": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#motivation",
+   "label": "§28.1 Motivation"
+  },
+  "28:motivation": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#motivation",
+   "label": "Motivation"
+  },
+  "§28.2": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#exposition",
+   "label": "§28.2 Exposition"
+  },
+  "28:exposition": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#exposition",
+   "label": "Exposition"
+  },
+  "§28.2.1": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#why-nonlinearity-matters",
+   "label": "§28.2.1 Why Nonlinearity Matters"
+  },
+  "28:why nonlinearity matters": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#why-nonlinearity-matters",
+   "label": "Why Nonlinearity Matters"
+  },
+  "§28.2.2": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#forward-pass-loss-and-backpropagation",
+   "label": "§28.2.2 Forward Pass, Loss, and Backpropagation"
+  },
+  "28:forward pass, loss, and backpropagation": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#forward-pass-loss-and-backpropagation",
+   "label": "Forward Pass, Loss, and Backpropagation"
+  },
+  "§28.2.3": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#the-universal-approximation-theorem",
+   "label": "§28.2.3 The Universal Approximation Theorem"
+  },
+  "28:the universal approximation theorem": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#the-universal-approximation-theorem",
+   "label": "The Universal Approximation Theorem"
+  },
+  "§28.2.4": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#overfitting-and-its-countermeasures",
+   "label": "§28.2.4 Overfitting and Its Countermeasures"
+  },
+  "28:overfitting and its countermeasures": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#overfitting-and-its-countermeasures",
+   "label": "Overfitting and Its Countermeasures"
+  },
+  "§28.3": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#trade-offs-and-limits",
+   "label": "§28.3 Trade-offs and Limits"
+  },
+  "28:trade-offs and limits": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§28.4": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#procedures",
+   "label": "§28.4 Procedures"
+  },
+  "28:procedures": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#procedures",
+   "label": "Procedures"
+  },
+  "§28.5": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#worked-example",
+   "label": "§28.5 Worked Example"
+  },
+  "28:worked example": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#worked-example",
+   "label": "Worked Example"
+  },
+  "§28.6": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#history-and-further-reading",
+   "label": "§28.6 History and Further Reading"
+  },
+  "28:history and further reading": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§28.7": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#how-this-connects",
+   "label": "§28.7 How This Connects"
+  },
+  "28:how this connects": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§28.8": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#exercises",
+   "label": "§28.8 Exercises"
+  },
+  "28:exercises": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#exercises",
+   "label": "Exercises"
+  },
+  "§28.9": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#mental-model",
+   "label": "§28.9 Mental Model"
+  },
+  "28:mental model": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 28.1": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#lst-nn-define-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 28.1"
+  },
+  "Listing 28.2": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#lst-nn-train-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 28.2"
+  },
+  "Listing 28.3": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#lst-nn-device-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 28.3"
+  },
+  "Listing 28.4": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#lst-nn-save-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 28.4"
+  },
+  "Listing 28.5": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#lst-nn-worked-configs-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 28.5"
+  },
+  "Procedure 28.1": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#proc-28-1",
+   "label": "Procedure 28.1"
+  },
+  "Procedure 28.2": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#proc-28-2",
+   "label": "Procedure 28.2"
+  },
+  "Procedure 28.3": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#proc-28-3",
+   "label": "Procedure 28.3"
+  },
+  "Procedure 28.4": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#proc-28-4",
+   "label": "Procedure 28.4"
+  },
+  "Exercise 28.1": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#ex-28-1",
+   "label": "Exercise 28.1"
+  },
+  "Exercise 28.2": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#ex-28-2",
+   "label": "Exercise 28.2"
+  },
+  "Exercise 28.3": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#ex-28-3",
+   "label": "Exercise 28.3"
+  },
+  "Exercise 28.4": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#ex-28-4",
+   "label": "Exercise 28.4"
+  },
+  "Exercise 28.5": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#ex-28-5",
+   "label": "Exercise 28.5"
+  },
+  "Exercise 28.6": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#ex-28-6",
+   "label": "Exercise 28.6"
+  },
+  "Exercise 28.7": {
+   "href": "/books/modern-ai/ch28-intro-neural-networks#ex-28-7",
+   "label": "Exercise 28.7"
+  },
+  "§29.1": {
+   "href": "/books/modern-ai/ch29-transformers#motivation",
+   "label": "§29.1 Motivation"
+  },
+  "29:motivation": {
+   "href": "/books/modern-ai/ch29-transformers#motivation",
+   "label": "Motivation"
+  },
+  "§29.2": {
+   "href": "/books/modern-ai/ch29-transformers#exposition",
+   "label": "§29.2 Exposition"
+  },
+  "29:exposition": {
+   "href": "/books/modern-ai/ch29-transformers#exposition",
+   "label": "Exposition"
+  },
+  "§29.2.1": {
+   "href": "/books/modern-ai/ch29-transformers#self-attention-the-mechanism",
+   "label": "§29.2.1 Self-Attention: The Mechanism"
+  },
+  "29:self-attention: the mechanism": {
+   "href": "/books/modern-ai/ch29-transformers#self-attention-the-mechanism",
+   "label": "Self-Attention: The Mechanism"
+  },
+  "§29.2.2": {
+   "href": "/books/modern-ai/ch29-transformers#multi-head-attention-and-positional-encoding",
+   "label": "§29.2.2 Multi-Head Attention and Positional Encoding"
+  },
+  "29:multi-head attention and positional encoding": {
+   "href": "/books/modern-ai/ch29-transformers#multi-head-attention-and-positional-encoding",
+   "label": "Multi-Head Attention and Positional Encoding"
+  },
+  "§29.2.3": {
+   "href": "/books/modern-ai/ch29-transformers#the-transformer-block-and-architecture-variants",
+   "label": "§29.2.3 The Transformer Block and Architecture Variants"
+  },
+  "29:the transformer block and architecture variants": {
+   "href": "/books/modern-ai/ch29-transformers#the-transformer-block-and-architecture-variants",
+   "label": "The Transformer Block and Architecture Variants"
+  },
+  "§29.2.4": {
+   "href": "/books/modern-ai/ch29-transformers#why-transformers-scale",
+   "label": "§29.2.4 Why Transformers Scale"
+  },
+  "29:why transformers scale": {
+   "href": "/books/modern-ai/ch29-transformers#why-transformers-scale",
+   "label": "Why Transformers Scale"
+  },
+  "§29.2.5": {
+   "href": "/books/modern-ai/ch29-transformers#estimating-model-size",
+   "label": "§29.2.5 Estimating Model Size"
+  },
+  "29:estimating model size": {
+   "href": "/books/modern-ai/ch29-transformers#estimating-model-size",
+   "label": "Estimating Model Size"
+  },
+  "§29.3": {
+   "href": "/books/modern-ai/ch29-transformers#trade-offs-and-limits",
+   "label": "§29.3 Trade-offs and Limits"
+  },
+  "29:trade-offs and limits": {
+   "href": "/books/modern-ai/ch29-transformers#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§29.4": {
+   "href": "/books/modern-ai/ch29-transformers#procedures",
+   "label": "§29.4 Procedures"
+  },
+  "29:procedures": {
+   "href": "/books/modern-ai/ch29-transformers#procedures",
+   "label": "Procedures"
+  },
+  "§29.5": {
+   "href": "/books/modern-ai/ch29-transformers#worked-example",
+   "label": "§29.5 Worked Example"
+  },
+  "29:worked example": {
+   "href": "/books/modern-ai/ch29-transformers#worked-example",
+   "label": "Worked Example"
+  },
+  "§29.6": {
+   "href": "/books/modern-ai/ch29-transformers#history-and-further-reading",
+   "label": "§29.6 History and Further Reading"
+  },
+  "29:history and further reading": {
+   "href": "/books/modern-ai/ch29-transformers#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§29.7": {
+   "href": "/books/modern-ai/ch29-transformers#how-this-connects",
+   "label": "§29.7 How This Connects"
+  },
+  "29:how this connects": {
+   "href": "/books/modern-ai/ch29-transformers#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§29.8": {
+   "href": "/books/modern-ai/ch29-transformers#exercises",
+   "label": "§29.8 Exercises"
+  },
+  "29:exercises": {
+   "href": "/books/modern-ai/ch29-transformers#exercises",
+   "label": "Exercises"
+  },
+  "§29.9": {
+   "href": "/books/modern-ai/ch29-transformers#mental-model",
+   "label": "§29.9 Mental Model"
+  },
+  "29:mental model": {
+   "href": "/books/modern-ai/ch29-transformers#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 29.1": {
+   "href": "/books/modern-ai/ch29-transformers#lst-tf-attention-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 29.1"
+  },
+  "Listing 29.2": {
+   "href": "/books/modern-ai/ch29-transformers#lst-tf-posenc-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 29.2"
+  },
+  "Listing 29.3": {
+   "href": "/books/modern-ai/ch29-transformers#lst-tf-hf-load-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 29.3"
+  },
+  "Listing 29.4": {
+   "href": "/books/modern-ai/ch29-transformers#lst-tf-extract-attn-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 29.4"
+  },
+  "Listing 29.5": {
+   "href": "/books/modern-ai/ch29-transformers#lst-tf-worked-attn-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 29.5"
+  },
+  "Listing 29.6": {
+   "href": "/books/modern-ai/ch29-transformers#lst-tf-worked-params-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 29.6"
+  },
+  "Procedure 29.1": {
+   "href": "/books/modern-ai/ch29-transformers#proc-29-1",
+   "label": "Procedure 29.1"
+  },
+  "Procedure 29.2": {
+   "href": "/books/modern-ai/ch29-transformers#proc-29-2",
+   "label": "Procedure 29.2"
+  },
+  "Procedure 29.3": {
+   "href": "/books/modern-ai/ch29-transformers#proc-29-3",
+   "label": "Procedure 29.3"
+  },
+  "Procedure 29.4": {
+   "href": "/books/modern-ai/ch29-transformers#proc-29-4",
+   "label": "Procedure 29.4"
+  },
+  "Exercise 29.1": {
+   "href": "/books/modern-ai/ch29-transformers#ex-29-1",
+   "label": "Exercise 29.1"
+  },
+  "Exercise 29.2": {
+   "href": "/books/modern-ai/ch29-transformers#ex-29-2",
+   "label": "Exercise 29.2"
+  },
+  "Exercise 29.3": {
+   "href": "/books/modern-ai/ch29-transformers#ex-29-3",
+   "label": "Exercise 29.3"
+  },
+  "Exercise 29.4": {
+   "href": "/books/modern-ai/ch29-transformers#ex-29-4",
+   "label": "Exercise 29.4"
+  },
+  "Exercise 29.5": {
+   "href": "/books/modern-ai/ch29-transformers#ex-29-5",
+   "label": "Exercise 29.5"
+  },
+  "Exercise 29.6": {
+   "href": "/books/modern-ai/ch29-transformers#ex-29-6",
+   "label": "Exercise 29.6"
+  },
+  "Exercise 29.7": {
+   "href": "/books/modern-ai/ch29-transformers#ex-29-7",
+   "label": "Exercise 29.7"
+  },
+  "§30.1": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#motivation",
+   "label": "§30.1 Motivation"
+  },
+  "30:motivation": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#motivation",
+   "label": "Motivation"
+  },
+  "§30.2": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#exposition",
+   "label": "§30.2 Exposition"
+  },
+  "30:exposition": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#exposition",
+   "label": "Exposition"
+  },
+  "§30.2.1": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#in-context-learning-zero-shot-vs.-few-shot",
+   "label": "§30.2.1 In-Context Learning: Zero-Shot vs. Few-Shot"
+  },
+  "30:in-context learning: zero-shot vs. few-shot": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#in-context-learning-zero-shot-vs.-few-shot",
+   "label": "In-Context Learning: Zero-Shot vs. Few-Shot"
+  },
+  "§30.2.2": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#chain-of-thought-buying-the-model-time-to-think",
+   "label": "§30.2.2 Chain-of-Thought: Buying the Model Time to Think"
+  },
+  "30:chain-of-thought: buying the model time to think": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#chain-of-thought-buying-the-model-time-to-think",
+   "label": "Chain-of-Thought: Buying the Model Time to Think"
+  },
+  "§30.2.3": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#structured-output-constraining-a-fundamentally-unstructured-process",
+   "label": "§30.2.3 Structured Output: Constraining a Fundamentally Unstructured Process"
+  },
+  "30:structured output: constraining a fundamentally unstructured process": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#structured-output-constraining-a-fundamentally-unstructured-process",
+   "label": "Structured Output: Constraining a Fundamentally Unstructured Process"
+  },
+  "§30.2.4": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#prompt-brittleness-and-prompt-injection",
+   "label": "§30.2.4 Prompt Brittleness and Prompt Injection"
+  },
+  "30:prompt brittleness and prompt injection": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#prompt-brittleness-and-prompt-injection",
+   "label": "Prompt Brittleness and Prompt Injection"
+  },
+  "§30.3": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#trade-offs-and-limits",
+   "label": "§30.3 Trade-offs and Limits"
+  },
+  "30:trade-offs and limits": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§30.4": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#procedures",
+   "label": "§30.4 Procedures"
+  },
+  "30:procedures": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#procedures",
+   "label": "Procedures"
+  },
+  "§30.5": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#worked-example",
+   "label": "§30.5 Worked Example"
+  },
+  "30:worked example": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#worked-example",
+   "label": "Worked Example"
+  },
+  "§30.6": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#aws-sagemaker-notes",
+   "label": "§30.6 AWS SageMaker Notes"
+  },
+  "30:aws sagemaker notes": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#aws-sagemaker-notes",
+   "label": "AWS SageMaker Notes"
+  },
+  "§30.7": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#history-and-further-reading",
+   "label": "§30.7 History and Further Reading"
+  },
+  "30:history and further reading": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§30.8": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#how-this-connects",
+   "label": "§30.8 How This Connects"
+  },
+  "30:how this connects": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§30.9": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#exercises",
+   "label": "§30.9 Exercises"
+  },
+  "30:exercises": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#exercises",
+   "label": "Exercises"
+  },
+  "§30.10": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#mental-model",
+   "label": "§30.10 Mental Model"
+  },
+  "30:mental model": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 30.1": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#lst-zero-shot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 30.1"
+  },
+  "Listing 30.2": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#lst-few-shot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 30.2"
+  },
+  "Listing 30.3": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#lst-cot-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 30.3"
+  },
+  "Listing 30.4": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#lst-structured-json-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 30.4"
+  },
+  "Listing 30.5": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#lst-tool-calling-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 30.5"
+  },
+  "Listing 30.6": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#lst-prompt-versioning-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 30.6"
+  },
+  "Procedure 30.1": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#proc-30-1",
+   "label": "Procedure 30.1"
+  },
+  "Procedure 30.2": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#proc-30-2",
+   "label": "Procedure 30.2"
+  },
+  "Procedure 30.3": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#proc-30-3",
+   "label": "Procedure 30.3"
+  },
+  "Procedure 30.4": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#proc-30-4",
+   "label": "Procedure 30.4"
+  },
+  "Procedure 30.5": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#proc-30-5",
+   "label": "Procedure 30.5"
+  },
+  "Procedure 30.6": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#proc-30-6",
+   "label": "Procedure 30.6"
+  },
+  "Exercise 30.1": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#ex-30-1",
+   "label": "Exercise 30.1"
+  },
+  "Exercise 30.2": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#ex-30-2",
+   "label": "Exercise 30.2"
+  },
+  "Exercise 30.3": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#ex-30-3",
+   "label": "Exercise 30.3"
+  },
+  "Exercise 30.4": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#ex-30-4",
+   "label": "Exercise 30.4"
+  },
+  "Exercise 30.5": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#ex-30-5",
+   "label": "Exercise 30.5"
+  },
+  "Exercise 30.6": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#ex-30-6",
+   "label": "Exercise 30.6"
+  },
+  "Exercise 30.7": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#ex-30-7",
+   "label": "Exercise 30.7"
+  },
+  "Exercise 30.8": {
+   "href": "/books/modern-ai/ch30-prompt-engineering#ex-30-8",
+   "label": "Exercise 30.8"
+  },
+  "§31.1": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#motivation",
+   "label": "§31.1 Motivation"
+  },
+  "31:motivation": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#motivation",
+   "label": "Motivation"
+  },
+  "§31.2": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#exposition",
+   "label": "§31.2 Exposition"
+  },
+  "31:exposition": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#exposition",
+   "label": "Exposition"
+  },
+  "§31.2.1": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#dense-embeddings-vs.-what-chapter-27-covered",
+   "label": "§31.2.1 Dense Embeddings vs. What Chapter 27 Covered"
+  },
+  "31:dense embeddings vs. what chapter 27 covered": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#dense-embeddings-vs.-what-chapter-27-covered",
+   "label": "Dense Embeddings vs. What Chapter 27 Covered"
+  },
+  "§31.2.2": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#similarity-search",
+   "label": "§31.2.2 Similarity Search"
+  },
+  "31:similarity search": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#similarity-search",
+   "label": "Similarity Search"
+  },
+  "§31.2.3": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#chunking-strategy",
+   "label": "§31.2.3 Chunking Strategy"
+  },
+  "31:chunking strategy": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#chunking-strategy",
+   "label": "Chunking Strategy"
+  },
+  "§31.2.4": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#failure-modes-to-expect",
+   "label": "§31.2.4 Failure Modes to Expect"
+  },
+  "31:failure modes to expect": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#failure-modes-to-expect",
+   "label": "Failure Modes to Expect"
+  },
+  "§31.3": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#trade-offs-and-limits",
+   "label": "§31.3 Trade-offs and Limits"
+  },
+  "31:trade-offs and limits": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§31.4": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#procedures",
+   "label": "§31.4 Procedures"
+  },
+  "31:procedures": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#procedures",
+   "label": "Procedures"
+  },
+  "§31.5": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#worked-example",
+   "label": "§31.5 Worked Example"
+  },
+  "31:worked example": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#worked-example",
+   "label": "Worked Example"
+  },
+  "§31.6": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#history-and-further-reading",
+   "label": "§31.6 History and Further Reading"
+  },
+  "31:history and further reading": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§31.7": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#how-this-connects",
+   "label": "§31.7 How This Connects"
+  },
+  "31:how this connects": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§31.8": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#exercises",
+   "label": "§31.8 Exercises"
+  },
+  "31:exercises": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#exercises",
+   "label": "Exercises"
+  },
+  "§31.9": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#mental-model",
+   "label": "§31.9 Mental Model"
+  },
+  "31:mental model": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 31.1": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#lst-rag-chunk-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 31.1"
+  },
+  "Listing 31.2": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#lst-rag-embed-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 31.2"
+  },
+  "Listing 31.3": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#lst-rag-vectorstore-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 31.3"
+  },
+  "Listing 31.4": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#lst-rag-augment-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 31.4"
+  },
+  "Listing 31.5": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#lst-rag-worked-compare-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 31.5"
+  },
+  "Procedure 31.1": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#proc-31-1",
+   "label": "Procedure 31.1"
+  },
+  "Procedure 31.2": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#proc-31-2",
+   "label": "Procedure 31.2"
+  },
+  "Procedure 31.3": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#proc-31-3",
+   "label": "Procedure 31.3"
+  },
+  "Procedure 31.4": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#proc-31-4",
+   "label": "Procedure 31.4"
+  },
+  "Exercise 31.1": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#ex-31-1",
+   "label": "Exercise 31.1"
+  },
+  "Exercise 31.2": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#ex-31-2",
+   "label": "Exercise 31.2"
+  },
+  "Exercise 31.3": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#ex-31-3",
+   "label": "Exercise 31.3"
+  },
+  "Exercise 31.4": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#ex-31-4",
+   "label": "Exercise 31.4"
+  },
+  "Exercise 31.5": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#ex-31-5",
+   "label": "Exercise 31.5"
+  },
+  "Exercise 31.6": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#ex-31-6",
+   "label": "Exercise 31.6"
+  },
+  "Exercise 31.7": {
+   "href": "/books/modern-ai/ch31-rag-vector-databases#ex-31-7",
+   "label": "Exercise 31.7"
+  },
+  "§32.1": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#motivation",
+   "label": "§32.1 Motivation"
+  },
+  "32:motivation": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#motivation",
+   "label": "Motivation"
+  },
+  "§32.2": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#exposition",
+   "label": "§32.2 Exposition"
+  },
+  "32:exposition": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#exposition",
+   "label": "Exposition"
+  },
+  "§32.2.1": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#reference-based-metrics-bleu-and-rouge",
+   "label": "§32.2.1 Reference-Based Metrics: BLEU and ROUGE"
+  },
+  "32:reference-based metrics: bleu and rouge": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#reference-based-metrics-bleu-and-rouge",
+   "label": "Reference-Based Metrics: BLEU and ROUGE"
+  },
+  "§32.2.2": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#llm-as-judge-g-eval-style",
+   "label": "§32.2.2 LLM-as-Judge (G-Eval Style)"
+  },
+  "32:llm-as-judge (g-eval style)": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#llm-as-judge-g-eval-style",
+   "label": "LLM-as-Judge (G-Eval Style)"
+  },
+  "§32.2.3": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#rag-specific-evaluation-ragas-style",
+   "label": "§32.2.3 RAG-Specific Evaluation (RAGAS-Style)"
+  },
+  "32:rag-specific evaluation (ragas-style)": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#rag-specific-evaluation-ragas-style",
+   "label": "RAG-Specific Evaluation (RAGAS-Style)"
+  },
+  "§32.2.4": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#human-evaluation-and-inter-annotator-agreement",
+   "label": "§32.2.4 Human Evaluation and Inter-Annotator Agreement"
+  },
+  "32:human evaluation and inter-annotator agreement": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#human-evaluation-and-inter-annotator-agreement",
+   "label": "Human Evaluation and Inter-Annotator Agreement"
+  },
+  "§32.2.5": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#benchmark-suites",
+   "label": "§32.2.5 Benchmark Suites"
+  },
+  "32:benchmark suites": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#benchmark-suites",
+   "label": "Benchmark Suites"
+  },
+  "§32.3": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#trade-offs-and-limits",
+   "label": "§32.3 Trade-offs and Limits"
+  },
+  "32:trade-offs and limits": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§32.4": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#procedures",
+   "label": "§32.4 Procedures"
+  },
+  "32:procedures": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#procedures",
+   "label": "Procedures"
+  },
+  "§32.5": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#worked-example",
+   "label": "§32.5 Worked Example"
+  },
+  "32:worked example": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#worked-example",
+   "label": "Worked Example"
+  },
+  "§32.6": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#history-and-further-reading",
+   "label": "§32.6 History and Further Reading"
+  },
+  "32:history and further reading": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§32.7": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#how-this-connects",
+   "label": "§32.7 How This Connects"
+  },
+  "32:how this connects": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§32.8": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#exercises",
+   "label": "§32.8 Exercises"
+  },
+  "32:exercises": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#exercises",
+   "label": "Exercises"
+  },
+  "§32.9": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#mental-model",
+   "label": "§32.9 Mental Model"
+  },
+  "32:mental model": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 32.1": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#lst-eval-rubric-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 32.1"
+  },
+  "Listing 32.2": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#lst-eval-debias-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 32.2"
+  },
+  "Listing 32.3": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#lst-eval-verbosity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 32.3"
+  },
+  "Listing 32.4": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#lst-eval-ragas-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 32.4"
+  },
+  "Listing 32.5": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#lst-eval-worked-rouge-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 32.5"
+  },
+  "Procedure 32.1": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#proc-32-1",
+   "label": "Procedure 32.1"
+  },
+  "Procedure 32.2": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#proc-32-2",
+   "label": "Procedure 32.2"
+  },
+  "Procedure 32.3": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#proc-32-3",
+   "label": "Procedure 32.3"
+  },
+  "Procedure 32.4": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#proc-32-4",
+   "label": "Procedure 32.4"
+  },
+  "Exercise 32.1": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#ex-32-1",
+   "label": "Exercise 32.1"
+  },
+  "Exercise 32.2": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#ex-32-2",
+   "label": "Exercise 32.2"
+  },
+  "Exercise 32.3": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#ex-32-3",
+   "label": "Exercise 32.3"
+  },
+  "Exercise 32.4": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#ex-32-4",
+   "label": "Exercise 32.4"
+  },
+  "Exercise 32.5": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#ex-32-5",
+   "label": "Exercise 32.5"
+  },
+  "Exercise 32.6": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#ex-32-6",
+   "label": "Exercise 32.6"
+  },
+  "Exercise 32.7": {
+   "href": "/books/modern-ai/ch32-llm-evaluation#ex-32-7",
+   "label": "Exercise 32.7"
+  },
+  "§33.1": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#motivation",
+   "label": "§33.1 Motivation"
+  },
+  "33:motivation": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#motivation",
+   "label": "Motivation"
+  },
+  "§33.2": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#exposition",
+   "label": "§33.2 Exposition"
+  },
+  "33:exposition": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#exposition",
+   "label": "Exposition"
+  },
+  "§33.2.1": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#why-the-pretraining-objective-transfers",
+   "label": "§33.2.1 Why the Pretraining Objective Transfers"
+  },
+  "33:why the pretraining objective transfers": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#why-the-pretraining-objective-transfers",
+   "label": "Why the Pretraining Objective Transfers"
+  },
+  "§33.2.2": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#when-cpt-is-appropriate",
+   "label": "§33.2.2 When CPT Is Appropriate"
+  },
+  "33:when cpt is appropriate": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#when-cpt-is-appropriate",
+   "label": "When CPT Is Appropriate"
+  },
+  "§33.2.3": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#catastrophic-forgetting",
+   "label": "§33.2.3 Catastrophic Forgetting"
+  },
+  "33:catastrophic forgetting": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#catastrophic-forgetting",
+   "label": "Catastrophic Forgetting"
+  },
+  "§33.2.4": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#compute-requirements-flops-and-memory",
+   "label": "§33.2.4 Compute Requirements: FLOPs and Memory"
+  },
+  "33:compute requirements: flops and memory": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#compute-requirements-flops-and-memory",
+   "label": "Compute Requirements: FLOPs and Memory"
+  },
+  "§33.3": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#trade-offs-and-limits",
+   "label": "§33.3 Trade-offs and Limits"
+  },
+  "33:trade-offs and limits": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§33.4": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#procedures",
+   "label": "§33.4 Procedures"
+  },
+  "33:procedures": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#procedures",
+   "label": "Procedures"
+  },
+  "§33.5": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#worked-example",
+   "label": "§33.5 Worked Example"
+  },
+  "33:worked example": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#worked-example",
+   "label": "Worked Example"
+  },
+  "§33.6": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#history-and-further-reading",
+   "label": "§33.6 History and Further Reading"
+  },
+  "33:history and further reading": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§33.7": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#how-this-connects",
+   "label": "§33.7 How This Connects"
+  },
+  "33:how this connects": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§33.8": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#exercises",
+   "label": "§33.8 Exercises"
+  },
+  "33:exercises": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#exercises",
+   "label": "Exercises"
+  },
+  "§33.9": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#mental-model",
+   "label": "§33.9 Mental Model"
+  },
+  "33:mental model": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 33.1": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#lst-cpt-gap-test-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 33.1"
+  },
+  "Listing 33.2": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#lst-cpt-capacity-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 33.2"
+  },
+  "Listing 33.3": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#lst-cpt-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 33.3"
+  },
+  "Listing 33.4": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#lst-cpt-worked-gap-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 33.4"
+  },
+  "Listing 33.5": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#lst-cpt-worked-cost-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 33.5"
+  },
+  "Procedure 33.1": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#proc-33-1",
+   "label": "Procedure 33.1"
+  },
+  "Procedure 33.2": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#proc-33-2",
+   "label": "Procedure 33.2"
+  },
+  "Procedure 33.3": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#proc-33-3",
+   "label": "Procedure 33.3"
+  },
+  "Exercise 33.1": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#ex-33-1",
+   "label": "Exercise 33.1"
+  },
+  "Exercise 33.2": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#ex-33-2",
+   "label": "Exercise 33.2"
+  },
+  "Exercise 33.3": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#ex-33-3",
+   "label": "Exercise 33.3"
+  },
+  "Exercise 33.4": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#ex-33-4",
+   "label": "Exercise 33.4"
+  },
+  "Exercise 33.5": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#ex-33-5",
+   "label": "Exercise 33.5"
+  },
+  "Exercise 33.6": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#ex-33-6",
+   "label": "Exercise 33.6"
+  },
+  "Exercise 33.7": {
+   "href": "/books/modern-ai/ch33-continuous-pretraining#ex-33-7",
+   "label": "Exercise 33.7"
+  },
+  "§34.1": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#motivation",
+   "label": "§34.1 Motivation"
+  },
+  "34:motivation": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#motivation",
+   "label": "Motivation"
+  },
+  "§34.2": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#exposition",
+   "label": "§34.2 Exposition"
+  },
+  "34:exposition": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#exposition",
+   "label": "Exposition"
+  },
+  "§34.2.1": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#lora-training-efficiently",
+   "label": "§34.2.1 LoRA: Training Efficiently"
+  },
+  "34:lora: training efficiently": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#lora-training-efficiently",
+   "label": "LoRA: Training Efficiently"
+  },
+  "§34.2.2": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#qlora-fine-tuning-on-one-gpu",
+   "label": "§34.2.2 QLoRA: Fine-Tuning on One GPU"
+  },
+  "34:qlora: fine-tuning on one gpu": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#qlora-fine-tuning-on-one-gpu",
+   "label": "QLoRA: Fine-Tuning on One GPU"
+  },
+  "§34.2.3": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#why-data-quality-dominates",
+   "label": "§34.2.3 Why Data Quality Dominates"
+  },
+  "34:why data quality dominates": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#why-data-quality-dominates",
+   "label": "Why Data Quality Dominates"
+  },
+  "§34.2.4": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#evaluating-an-ift-model",
+   "label": "§34.2.4 Evaluating an IFT Model"
+  },
+  "34:evaluating an ift model": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#evaluating-an-ift-model",
+   "label": "Evaluating an IFT Model"
+  },
+  "§34.3": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#trade-offs-and-limits",
+   "label": "§34.3 Trade-offs and Limits"
+  },
+  "34:trade-offs and limits": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§34.4": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#procedures",
+   "label": "§34.4 Procedures"
+  },
+  "34:procedures": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#procedures",
+   "label": "Procedures"
+  },
+  "§34.5": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#worked-example",
+   "label": "§34.5 Worked Example"
+  },
+  "34:worked example": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#worked-example",
+   "label": "Worked Example"
+  },
+  "§34.6": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#history-and-further-reading",
+   "label": "§34.6 History and Further Reading"
+  },
+  "34:history and further reading": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§34.7": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#how-this-connects",
+   "label": "§34.7 How This Connects"
+  },
+  "34:how this connects": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§34.8": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#exercises",
+   "label": "§34.8 Exercises"
+  },
+  "34:exercises": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#exercises",
+   "label": "Exercises"
+  },
+  "§34.9": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#mental-model",
+   "label": "§34.9 Mental Model"
+  },
+  "34:mental model": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 34.1": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#lst-ift-format-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 34.1"
+  },
+  "Listing 34.2": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#lst-ift-template-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 34.2"
+  },
+  "Listing 34.3": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#lst-ift-lora-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 34.3"
+  },
+  "Listing 34.4": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#lst-ift-worked-setup-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 34.4"
+  },
+  "Procedure 34.1": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#proc-34-1",
+   "label": "Procedure 34.1"
+  },
+  "Procedure 34.2": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#proc-34-2",
+   "label": "Procedure 34.2"
+  },
+  "Procedure 34.3": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#proc-34-3",
+   "label": "Procedure 34.3"
+  },
+  "Exercise 34.1": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#ex-34-1",
+   "label": "Exercise 34.1"
+  },
+  "Exercise 34.2": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#ex-34-2",
+   "label": "Exercise 34.2"
+  },
+  "Exercise 34.3": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#ex-34-3",
+   "label": "Exercise 34.3"
+  },
+  "Exercise 34.4": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#ex-34-4",
+   "label": "Exercise 34.4"
+  },
+  "Exercise 34.5": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#ex-34-5",
+   "label": "Exercise 34.5"
+  },
+  "Exercise 34.6": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#ex-34-6",
+   "label": "Exercise 34.6"
+  },
+  "Exercise 34.7": {
+   "href": "/books/modern-ai/ch34-instruction-fine-tuning#ex-34-7",
+   "label": "Exercise 34.7"
+  },
+  "§35.1": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#motivation",
+   "label": "§35.1 Motivation"
+  },
+  "35:motivation": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#motivation",
+   "label": "Motivation"
+  },
+  "§35.2": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#exposition",
+   "label": "§35.2 Exposition"
+  },
+  "35:exposition": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#exposition",
+   "label": "Exposition"
+  },
+  "§35.2.1": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#a-minimal-rl-vocabulary",
+   "label": "§35.2.1 A Minimal RL Vocabulary"
+  },
+  "35:a minimal rl vocabulary": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#a-minimal-rl-vocabulary",
+   "label": "A Minimal RL Vocabulary"
+  },
+  "§35.2.2": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#the-three-stage-rlhf-pipeline",
+   "label": "§35.2.2 The Three-Stage RLHF Pipeline"
+  },
+  "35:the three-stage rlhf pipeline": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#the-three-stage-rlhf-pipeline",
+   "label": "The Three-Stage RLHF Pipeline"
+  },
+  "§35.2.3": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#the-kl-penalty-why-reward-cant-be-maximised-directly",
+   "label": "§35.2.3 The KL Penalty: Why Reward Can’t Be Maximised Directly"
+  },
+  "35:the kl penalty: why reward can’t be maximised directly": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#the-kl-penalty-why-reward-cant-be-maximised-directly",
+   "label": "The KL Penalty: Why Reward Can’t Be Maximised Directly"
+  },
+  "§35.2.4": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#dpo-skipping-the-reward-model-and-the-rl-loop",
+   "label": "§35.2.4 DPO: Skipping the Reward Model and the RL Loop"
+  },
+  "35:dpo: skipping the reward model and the rl loop": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#dpo-skipping-the-reward-model-and-the-rl-loop",
+   "label": "DPO: Skipping the Reward Model and the RL Loop"
+  },
+  "§35.3": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#trade-offs-and-limits",
+   "label": "§35.3 Trade-offs and Limits"
+  },
+  "35:trade-offs and limits": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§35.4": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#procedures",
+   "label": "§35.4 Procedures"
+  },
+  "35:procedures": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#procedures",
+   "label": "Procedures"
+  },
+  "§35.5": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#worked-example",
+   "label": "§35.5 Worked Example"
+  },
+  "35:worked example": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#worked-example",
+   "label": "Worked Example"
+  },
+  "§35.6": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#aws-sagemaker-notes",
+   "label": "§35.6 AWS SageMaker Notes"
+  },
+  "35:aws sagemaker notes": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#aws-sagemaker-notes",
+   "label": "AWS SageMaker Notes"
+  },
+  "§35.7": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#history-and-further-reading",
+   "label": "§35.7 History and Further Reading"
+  },
+  "35:history and further reading": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§35.8": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#how-this-connects",
+   "label": "§35.8 How This Connects"
+  },
+  "35:how this connects": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§35.9": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#exercises",
+   "label": "§35.9 Exercises"
+  },
+  "35:exercises": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#exercises",
+   "label": "Exercises"
+  },
+  "§35.10": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#mental-model",
+   "label": "§35.10 Mental Model"
+  },
+  "35:mental model": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 35.1": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#lst-preference-format-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 35.1"
+  },
+  "Listing 35.2": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#lst-reward-model-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 35.2"
+  },
+  "Listing 35.3": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#lst-dpo-loss-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 35.3"
+  },
+  "Listing 35.4": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#lst-dpo-trainer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 35.4"
+  },
+  "Listing 35.5": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#lst-beta-diagnosis-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 35.5"
+  },
+  "Listing 35.6": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#lst-preference-eval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 35.6"
+  },
+  "Procedure 35.1": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#proc-35-1",
+   "label": "Procedure 35.1"
+  },
+  "Procedure 35.2": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#proc-35-2",
+   "label": "Procedure 35.2"
+  },
+  "Procedure 35.3": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#proc-35-3",
+   "label": "Procedure 35.3"
+  },
+  "Procedure 35.4": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#proc-35-4",
+   "label": "Procedure 35.4"
+  },
+  "Procedure 35.5": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#proc-35-5",
+   "label": "Procedure 35.5"
+  },
+  "Procedure 35.6": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#proc-35-6",
+   "label": "Procedure 35.6"
+  },
+  "Exercise 35.1": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#ex-35-1",
+   "label": "Exercise 35.1"
+  },
+  "Exercise 35.2": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#ex-35-2",
+   "label": "Exercise 35.2"
+  },
+  "Exercise 35.3": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#ex-35-3",
+   "label": "Exercise 35.3"
+  },
+  "Exercise 35.4": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#ex-35-4",
+   "label": "Exercise 35.4"
+  },
+  "Exercise 35.5": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#ex-35-5",
+   "label": "Exercise 35.5"
+  },
+  "Exercise 35.6": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#ex-35-6",
+   "label": "Exercise 35.6"
+  },
+  "Exercise 35.7": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#ex-35-7",
+   "label": "Exercise 35.7"
+  },
+  "Exercise 35.8": {
+   "href": "/books/modern-ai/ch35-reinforcement-learning-rlhf#ex-35-8",
+   "label": "Exercise 35.8"
+  },
+  "§36.1": {
+   "href": "/books/modern-ai/ch36-agentic-ai#motivation",
+   "label": "§36.1 Motivation"
+  },
+  "36:motivation": {
+   "href": "/books/modern-ai/ch36-agentic-ai#motivation",
+   "label": "Motivation"
+  },
+  "§36.2": {
+   "href": "/books/modern-ai/ch36-agentic-ai#exposition",
+   "label": "§36.2 Exposition"
+  },
+  "36:exposition": {
+   "href": "/books/modern-ai/ch36-agentic-ai#exposition",
+   "label": "Exposition"
+  },
+  "§36.2.1": {
+   "href": "/books/modern-ai/ch36-agentic-ai#the-react-pattern",
+   "label": "§36.2.1 The ReAct Pattern"
+  },
+  "36:the react pattern": {
+   "href": "/books/modern-ai/ch36-agentic-ai#the-react-pattern",
+   "label": "The ReAct Pattern"
+  },
+  "§36.2.2": {
+   "href": "/books/modern-ai/ch36-agentic-ai#tool-use-as-the-only-way-an-agent-acts",
+   "label": "§36.2.2 Tool Use as the Only Way an Agent Acts"
+  },
+  "36:tool use as the only way an agent acts": {
+   "href": "/books/modern-ai/ch36-agentic-ai#tool-use-as-the-only-way-an-agent-acts",
+   "label": "Tool Use as the Only Way an Agent Acts"
+  },
+  "§36.2.3": {
+   "href": "/books/modern-ai/ch36-agentic-ai#memory-short-term-vs.-long-term",
+   "label": "§36.2.3 Memory: Short-Term vs. Long-Term"
+  },
+  "36:memory: short-term vs. long-term": {
+   "href": "/books/modern-ai/ch36-agentic-ai#memory-short-term-vs.-long-term",
+   "label": "Memory: Short-Term vs. Long-Term"
+  },
+  "§36.2.4": {
+   "href": "/books/modern-ai/ch36-agentic-ai#planning-and-multi-agent-orchestration",
+   "label": "§36.2.4 Planning and Multi-Agent Orchestration"
+  },
+  "36:planning and multi-agent orchestration": {
+   "href": "/books/modern-ai/ch36-agentic-ai#planning-and-multi-agent-orchestration",
+   "label": "Planning and Multi-Agent Orchestration"
+  },
+  "§36.2.5": {
+   "href": "/books/modern-ai/ch36-agentic-ai#failure-modes-to-expect",
+   "label": "§36.2.5 Failure Modes to Expect"
+  },
+  "36:failure modes to expect": {
+   "href": "/books/modern-ai/ch36-agentic-ai#failure-modes-to-expect",
+   "label": "Failure Modes to Expect"
+  },
+  "§36.3": {
+   "href": "/books/modern-ai/ch36-agentic-ai#trade-offs-and-limits",
+   "label": "§36.3 Trade-offs and Limits"
+  },
+  "36:trade-offs and limits": {
+   "href": "/books/modern-ai/ch36-agentic-ai#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§36.4": {
+   "href": "/books/modern-ai/ch36-agentic-ai#procedures",
+   "label": "§36.4 Procedures"
+  },
+  "36:procedures": {
+   "href": "/books/modern-ai/ch36-agentic-ai#procedures",
+   "label": "Procedures"
+  },
+  "§36.5": {
+   "href": "/books/modern-ai/ch36-agentic-ai#worked-example",
+   "label": "§36.5 Worked Example"
+  },
+  "36:worked example": {
+   "href": "/books/modern-ai/ch36-agentic-ai#worked-example",
+   "label": "Worked Example"
+  },
+  "§36.6": {
+   "href": "/books/modern-ai/ch36-agentic-ai#history-and-further-reading",
+   "label": "§36.6 History and Further Reading"
+  },
+  "36:history and further reading": {
+   "href": "/books/modern-ai/ch36-agentic-ai#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§36.7": {
+   "href": "/books/modern-ai/ch36-agentic-ai#how-this-connects",
+   "label": "§36.7 How This Connects"
+  },
+  "36:how this connects": {
+   "href": "/books/modern-ai/ch36-agentic-ai#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§36.8": {
+   "href": "/books/modern-ai/ch36-agentic-ai#exercises",
+   "label": "§36.8 Exercises"
+  },
+  "36:exercises": {
+   "href": "/books/modern-ai/ch36-agentic-ai#exercises",
+   "label": "Exercises"
+  },
+  "§36.9": {
+   "href": "/books/modern-ai/ch36-agentic-ai#mental-model",
+   "label": "§36.9 Mental Model"
+  },
+  "36:mental model": {
+   "href": "/books/modern-ai/ch36-agentic-ai#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 36.1": {
+   "href": "/books/modern-ai/ch36-agentic-ai#lst-agent-tool-schema-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 36.1"
+  },
+  "Listing 36.2": {
+   "href": "/books/modern-ai/ch36-agentic-ai#lst-agent-step-limit-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 36.2"
+  },
+  "Listing 36.3": {
+   "href": "/books/modern-ai/ch36-agentic-ai#lst-agent-approval-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 36.3"
+  },
+  "Listing 36.4": {
+   "href": "/books/modern-ai/ch36-agentic-ai#lst-agent-worked-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 36.4"
+  },
+  "Listing 36.5": {
+   "href": "/books/modern-ai/ch36-agentic-ai#lst-agent-worked-good-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 36.5"
+  },
+  "Procedure 36.1": {
+   "href": "/books/modern-ai/ch36-agentic-ai#proc-36-1",
+   "label": "Procedure 36.1"
+  },
+  "Procedure 36.2": {
+   "href": "/books/modern-ai/ch36-agentic-ai#proc-36-2",
+   "label": "Procedure 36.2"
+  },
+  "Procedure 36.3": {
+   "href": "/books/modern-ai/ch36-agentic-ai#proc-36-3",
+   "label": "Procedure 36.3"
+  },
+  "Exercise 36.1": {
+   "href": "/books/modern-ai/ch36-agentic-ai#ex-36-1",
+   "label": "Exercise 36.1"
+  },
+  "Exercise 36.2": {
+   "href": "/books/modern-ai/ch36-agentic-ai#ex-36-2",
+   "label": "Exercise 36.2"
+  },
+  "Exercise 36.3": {
+   "href": "/books/modern-ai/ch36-agentic-ai#ex-36-3",
+   "label": "Exercise 36.3"
+  },
+  "Exercise 36.4": {
+   "href": "/books/modern-ai/ch36-agentic-ai#ex-36-4",
+   "label": "Exercise 36.4"
+  },
+  "Exercise 36.5": {
+   "href": "/books/modern-ai/ch36-agentic-ai#ex-36-5",
+   "label": "Exercise 36.5"
+  },
+  "Exercise 36.6": {
+   "href": "/books/modern-ai/ch36-agentic-ai#ex-36-6",
+   "label": "Exercise 36.6"
+  },
+  "Exercise 36.7": {
+   "href": "/books/modern-ai/ch36-agentic-ai#ex-36-7",
+   "label": "Exercise 36.7"
+  },
+  "§37.1": {
+   "href": "/books/modern-ai/ch37-capstone#motivation",
+   "label": "§37.1 Motivation"
+  },
+  "37:motivation": {
+   "href": "/books/modern-ai/ch37-capstone#motivation",
+   "label": "Motivation"
+  },
+  "§37.2": {
+   "href": "/books/modern-ai/ch37-capstone#exposition",
+   "label": "§37.2 Exposition"
+  },
+  "37:exposition": {
+   "href": "/books/modern-ai/ch37-capstone#exposition",
+   "label": "Exposition"
+  },
+  "§37.2.1": {
+   "href": "/books/modern-ai/ch37-capstone#scoping-the-skill-most-learners-underrate",
+   "label": "§37.2.1 Scoping: The Skill Most Learners Underrate"
+  },
+  "37:scoping: the skill most learners underrate": {
+   "href": "/books/modern-ai/ch37-capstone#scoping-the-skill-most-learners-underrate",
+   "label": "Scoping: The Skill Most Learners Underrate"
+  },
+  "§37.2.2": {
+   "href": "/books/modern-ai/ch37-capstone#why-a-capstone-deliberately-doesnt-specify-a-dataset",
+   "label": "§37.2.2 Why a Capstone Deliberately Doesn’t Specify a Dataset"
+  },
+  "37:why a capstone deliberately doesn’t specify a dataset": {
+   "href": "/books/modern-ai/ch37-capstone#why-a-capstone-deliberately-doesnt-specify-a-dataset",
+   "label": "Why a Capstone Deliberately Doesn’t Specify a Dataset"
+  },
+  "§37.2.3": {
+   "href": "/books/modern-ai/ch37-capstone#deployment-and-monitoring-are-not-optional-extensions",
+   "label": "§37.2.3 Deployment and Monitoring Are Not Optional Extensions"
+  },
+  "37:deployment and monitoring are not optional extensions": {
+   "href": "/books/modern-ai/ch37-capstone#deployment-and-monitoring-are-not-optional-extensions",
+   "label": "Deployment and Monitoring Are Not Optional Extensions"
+  },
+  "§37.2.4": {
+   "href": "/books/modern-ai/ch37-capstone#an-optional-genai-extension",
+   "label": "§37.2.4 An Optional GenAI Extension"
+  },
+  "37:an optional genai extension": {
+   "href": "/books/modern-ai/ch37-capstone#an-optional-genai-extension",
+   "label": "An Optional GenAI Extension"
+  },
+  "§37.3": {
+   "href": "/books/modern-ai/ch37-capstone#trade-offs-and-limits",
+   "label": "§37.3 Trade-offs and Limits"
+  },
+  "37:trade-offs and limits": {
+   "href": "/books/modern-ai/ch37-capstone#trade-offs-and-limits",
+   "label": "Trade-offs and Limits"
+  },
+  "§37.4": {
+   "href": "/books/modern-ai/ch37-capstone#procedures",
+   "label": "§37.4 Procedures"
+  },
+  "37:procedures": {
+   "href": "/books/modern-ai/ch37-capstone#procedures",
+   "label": "Procedures"
+  },
+  "§37.5": {
+   "href": "/books/modern-ai/ch37-capstone#worked-example",
+   "label": "§37.5 Worked Example"
+  },
+  "37:worked example": {
+   "href": "/books/modern-ai/ch37-capstone#worked-example",
+   "label": "Worked Example"
+  },
+  "§37.6": {
+   "href": "/books/modern-ai/ch37-capstone#history-and-further-reading",
+   "label": "§37.6 History and Further Reading"
+  },
+  "37:history and further reading": {
+   "href": "/books/modern-ai/ch37-capstone#history-and-further-reading",
+   "label": "History and Further Reading"
+  },
+  "§37.7": {
+   "href": "/books/modern-ai/ch37-capstone#how-this-connects",
+   "label": "§37.7 How This Connects"
+  },
+  "37:how this connects": {
+   "href": "/books/modern-ai/ch37-capstone#how-this-connects",
+   "label": "How This Connects"
+  },
+  "§37.8": {
+   "href": "/books/modern-ai/ch37-capstone#exercises",
+   "label": "§37.8 Exercises"
+  },
+  "37:exercises": {
+   "href": "/books/modern-ai/ch37-capstone#exercises",
+   "label": "Exercises"
+  },
+  "§37.9": {
+   "href": "/books/modern-ai/ch37-capstone#mental-model",
+   "label": "§37.9 Mental Model"
+  },
+  "37:mental model": {
+   "href": "/books/modern-ai/ch37-capstone#mental-model",
+   "label": "Mental Model"
+  },
+  "Listing 37.1": {
+   "href": "/books/modern-ai/ch37-capstone#lst-capstone-problem-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 37.1"
+  },
+  "Listing 37.2": {
+   "href": "/books/modern-ai/ch37-capstone#lst-capstone-effort-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 37.2"
+  },
+  "Listing 37.3": {
+   "href": "/books/modern-ai/ch37-capstone#lst-capstone-present-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 37.3"
+  },
+  "Listing 37.4": {
+   "href": "/books/modern-ai/ch37-capstone#lst-capstone-worked-cv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 37.4"
+  },
+  "Listing 37.5": {
+   "href": "/books/modern-ai/ch37-capstone#lst-capstone-worked-psi-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca",
+   "label": "Listing 37.5"
+  },
+  "Procedure 37.1": {
+   "href": "/books/modern-ai/ch37-capstone#proc-37-1",
+   "label": "Procedure 37.1"
+  },
+  "Procedure 37.2": {
+   "href": "/books/modern-ai/ch37-capstone#proc-37-2",
+   "label": "Procedure 37.2"
+  },
+  "Procedure 37.3": {
+   "href": "/books/modern-ai/ch37-capstone#proc-37-3",
+   "label": "Procedure 37.3"
+  },
+  "Exercise 37.1": {
+   "href": "/books/modern-ai/ch37-capstone#ex-37-1",
+   "label": "Exercise 37.1"
+  },
+  "Exercise 37.2": {
+   "href": "/books/modern-ai/ch37-capstone#ex-37-2",
+   "label": "Exercise 37.2"
+  },
+  "Exercise 37.3": {
+   "href": "/books/modern-ai/ch37-capstone#ex-37-3",
+   "label": "Exercise 37.3"
+  },
+  "Exercise 37.4": {
+   "href": "/books/modern-ai/ch37-capstone#ex-37-4",
+   "label": "Exercise 37.4"
+  },
+  "Exercise 37.5": {
+   "href": "/books/modern-ai/ch37-capstone#ex-37-5",
+   "label": "Exercise 37.5"
+  },
+  "Exercise 37.6": {
+   "href": "/books/modern-ai/ch37-capstone#ex-37-6",
+   "label": "Exercise 37.6"
+  },
+  "Exercise 37.7": {
+   "href": "/books/modern-ai/ch37-capstone#ex-37-7",
+   "label": "Exercise 37.7"
+  },
+  "21:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-21-responsible-ai-data-governance",
+   "label": "Quick Reference, Chapter 21"
+  },
+  "appendix-a-quick-reference:chapter 21 — responsible ai & data governance": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-21-responsible-ai-data-governance",
+   "label": "Chapter 21 — Responsible AI & Data Governance"
+  },
+  "22:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-22-ml-experiment-tracking",
+   "label": "Quick Reference, Chapter 22"
+  },
+  "appendix-a-quick-reference:chapter 22 — ml experiment tracking": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-22-ml-experiment-tracking",
+   "label": "Chapter 22 — ML Experiment Tracking"
+  },
+  "23:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-23-model-deployment-serving",
+   "label": "Quick Reference, Chapter 23"
+  },
+  "appendix-a-quick-reference:chapter 23 — model deployment & serving": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-23-model-deployment-serving",
+   "label": "Chapter 23 — Model Deployment & Serving"
+  },
+  "24:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-24-mlops-cicd-for-ml",
+   "label": "Quick Reference, Chapter 24"
+  },
+  "appendix-a-quick-reference:chapter 24 — mlops & ci/cd for ml": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-24-mlops-cicd-for-ml",
+   "label": "Chapter 24 — MLOps & CI/CD for ML"
+  },
+  "25:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-25-monitoring",
+   "label": "Quick Reference, Chapter 25"
+  },
+  "appendix-a-quick-reference:chapter 25 — monitoring": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-25-monitoring",
+   "label": "Chapter 25 — Monitoring"
+  },
+  "26:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-26-cloud-ml-platforms",
+   "label": "Quick Reference, Chapter 26"
+  },
+  "appendix-a-quick-reference:chapter 26 — cloud ml platforms": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-26-cloud-ml-platforms",
+   "label": "Chapter 26 — Cloud ML Platforms"
+  },
+  "27:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-27-nlp-fundamentals",
+   "label": "Quick Reference, Chapter 27"
+  },
+  "appendix-a-quick-reference:chapter 27 — nlp fundamentals": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-27-nlp-fundamentals",
+   "label": "Chapter 27 — NLP Fundamentals"
+  },
+  "28:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-28-intro-to-neural-networks",
+   "label": "Quick Reference, Chapter 28"
+  },
+  "appendix-a-quick-reference:chapter 28 — intro to neural networks": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-28-intro-to-neural-networks",
+   "label": "Chapter 28 — Intro to Neural Networks"
+  },
+  "29:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-29-training-a-transformer-model",
+   "label": "Quick Reference, Chapter 29"
+  },
+  "appendix-a-quick-reference:chapter 29 — training a transformer model": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-29-training-a-transformer-model",
+   "label": "Chapter 29 — Training a Transformer Model"
+  },
+  "30:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-30-prompt-engineering",
+   "label": "Quick Reference, Chapter 30"
+  },
+  "appendix-a-quick-reference:chapter 30 — prompt engineering": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-30-prompt-engineering",
+   "label": "Chapter 30 — Prompt Engineering"
+  },
+  "31:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-31-retrieval-augmented-generation-rag",
+   "label": "Quick Reference, Chapter 31"
+  },
+  "appendix-a-quick-reference:chapter 31 — retrieval-augmented generation (rag)": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-31-retrieval-augmented-generation-rag",
+   "label": "Chapter 31 — Retrieval-Augmented Generation (RAG)"
+  },
+  "32:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-32-llm-evaluation",
+   "label": "Quick Reference, Chapter 32"
+  },
+  "appendix-a-quick-reference:chapter 32 — llm evaluation": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-32-llm-evaluation",
+   "label": "Chapter 32 — LLM Evaluation"
+  },
+  "33:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-33-continuous-pretraining",
+   "label": "Quick Reference, Chapter 33"
+  },
+  "appendix-a-quick-reference:chapter 33 — continuous pretraining": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-33-continuous-pretraining",
+   "label": "Chapter 33 — Continuous Pretraining"
+  },
+  "34:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-34-instruction-fine-tuning",
+   "label": "Quick Reference, Chapter 34"
+  },
+  "appendix-a-quick-reference:chapter 34 — instruction fine-tuning": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-34-instruction-fine-tuning",
+   "label": "Chapter 34 — Instruction Fine-Tuning"
+  },
+  "35:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-35-reinforcement-learning-rlhf",
+   "label": "Quick Reference, Chapter 35"
+  },
+  "appendix-a-quick-reference:chapter 35 — reinforcement learning & rlhf": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-35-reinforcement-learning-rlhf",
+   "label": "Chapter 35 — Reinforcement Learning & RLHF"
+  },
+  "36:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-36-agentic-ai-agent-patterns",
+   "label": "Quick Reference, Chapter 36"
+  },
+  "appendix-a-quick-reference:chapter 36 — agentic ai & agent patterns": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-36-agentic-ai-agent-patterns",
+   "label": "Chapter 36 — Agentic AI & Agent Patterns"
+  },
+  "37:quick reference": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-37-capstone-project",
+   "label": "Quick Reference, Chapter 37"
+  },
+  "appendix-a-quick-reference:chapter 37 — capstone project": {
+   "href": "/books/modern-ai/appendix-a-quick-reference#chapter-37-capstone-project",
+   "label": "Chapter 37 — Capstone Project"
+  },
+  "appendix-b-answers:chapter 21 — responsible ai & data governance": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-21-responsible-ai-data-governance",
+   "label": "Chapter 21 — Responsible AI & Data Governance"
+  },
+  "appendix-b-answers:chapter 22 — ml experiment tracking": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-22-ml-experiment-tracking",
+   "label": "Chapter 22 — ML Experiment Tracking"
+  },
+  "appendix-b-answers:chapter 23 — model deployment & serving": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-23-model-deployment-serving",
+   "label": "Chapter 23 — Model Deployment & Serving"
+  },
+  "appendix-b-answers:chapter 24 — mlops & ci/cd for ml": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-24-mlops-cicd-for-ml",
+   "label": "Chapter 24 — MLOps & CI/CD for ML"
+  },
+  "appendix-b-answers:chapter 25 — monitoring": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-25-monitoring",
+   "label": "Chapter 25 — Monitoring"
+  },
+  "appendix-b-answers:chapter 26 — cloud ml platforms": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-26-cloud-ml-platforms",
+   "label": "Chapter 26 — Cloud ML Platforms"
+  },
+  "appendix-b-answers:chapter 27 — nlp fundamentals": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-27-nlp-fundamentals",
+   "label": "Chapter 27 — NLP Fundamentals"
+  },
+  "appendix-b-answers:chapter 28 — intro to neural networks": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-28-intro-to-neural-networks",
+   "label": "Chapter 28 — Intro to Neural Networks"
+  },
+  "appendix-b-answers:chapter 29 — training a transformer model": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-29-training-a-transformer-model",
+   "label": "Chapter 29 — Training a Transformer Model"
+  },
+  "appendix-b-answers:chapter 30 — prompt engineering": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-30-prompt-engineering",
+   "label": "Chapter 30 — Prompt Engineering"
+  },
+  "appendix-b-answers:chapter 31 — retrieval-augmented generation (rag)": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-31-retrieval-augmented-generation-rag",
+   "label": "Chapter 31 — Retrieval-Augmented Generation (RAG)"
+  },
+  "appendix-b-answers:chapter 32 — llm evaluation": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-32-llm-evaluation",
+   "label": "Chapter 32 — LLM Evaluation"
+  },
+  "appendix-b-answers:chapter 33 — continuous pretraining": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-33-continuous-pretraining",
+   "label": "Chapter 33 — Continuous Pretraining"
+  },
+  "appendix-b-answers:chapter 34 — instruction fine-tuning": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-34-instruction-fine-tuning",
+   "label": "Chapter 34 — Instruction Fine-Tuning"
+  },
+  "appendix-b-answers:chapter 35 — reinforcement learning & rlhf": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-35-reinforcement-learning-rlhf",
+   "label": "Chapter 35 — Reinforcement Learning & RLHF"
+  },
+  "appendix-b-answers:chapter 36 — agentic ai & agent patterns": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-36-agentic-ai-agent-patterns",
+   "label": "Chapter 36 — Agentic AI & Agent Patterns"
+  },
+  "appendix-b-answers:chapter 37 — capstone project": {
+   "href": "/books/modern-ai/appendix-b-answers#chapter-37-capstone-project",
+   "label": "Chapter 37 — Capstone Project"
+  }
+ }
+}

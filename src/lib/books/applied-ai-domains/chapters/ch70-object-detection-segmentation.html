@@ -1,0 +1,222 @@
+<p>Chapters 68 and 69 covered classification: one label per image. That’s often not the question a real task actually asks. “Is there a defect in this frame” is classification. “Where exactly is the defect, and how big is it” is detection. “Which pixels belong to the defect” is segmentation. Whole-image classification throws away exactly the spatial information those questions need. This chapter covers architectures that keep it.</p>
+<section id="motivation" class="level2" data-number="70.1">
+<h2 data-number="70.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">70.1</span> Motivation</h2>
+<p>Detection predicts a set of bounding boxes, each with a class label and a confidence score: “there’s a cat here,” with “here” being four numbers describing a rectangle. Segmentation goes further: a label for every individual pixel, producing a mask rather than a box: “these exact pixels are cat, these are background.” Both need the same underlying capability classification doesn’t: localised, spatially-resolved output, not a single whole-image summary. Worked Example 70 below trains both a simplified detector and a segmentation model, with every accuracy number measured directly.</p>
+</section>
+<section id="exposition" class="level2" data-number="70.2">
+<h2 data-number="70.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">70.2</span> Exposition</h2>
+<section id="the-r-cnn-lineage-from-slow-and-accurate-to-fast-and-accurate" class="level3" data-number="70.2.1">
+<h3 data-number="70.2.1" class="anchored" data-anchor-id="the-r-cnn-lineage-from-slow-and-accurate-to-fast-and-accurate"><span class="header-section-number">70.2.1</span> The R-CNN Lineage: From Slow-and-Accurate to Fast-and-Accurate</h3>
+<p>R-CNN (2014) proposed roughly 2,000 candidate regions per image via a separate, non-learned algorithm, then ran a full CNN forward pass independently on each cropped region. It worked, but running a whole CNN thousands of times per image is extremely slow. Fast R-CNN (2015) fixed the obvious inefficiency: run the CNN once on the whole image to get a feature map, then crop features, not pixels, for each proposed region from that single shared feature map, roughly 200x faster for the same accuracy, because the expensive part stopped being repeated per region. Faster R-CNN (2015) removed the last non-learned bottleneck: the region-proposal step itself becomes a small trainable network (the Region Proposal Network) sharing the same backbone features, rather than an external algorithm, end-to-end trainable, and faster again. Each step in this lineage is the same move repeated: find the part of the pipeline being redundantly recomputed or externally hand-designed, and fold it into the shared, learned, single-pass computation.</p>
+</section>
+<section id="yolo-a-different-philosophy" class="level3" data-number="70.2.2">
+<h3 data-number="70.2.2" class="anchored" data-anchor-id="yolo-a-different-philosophy"><span class="header-section-number">70.2.2</span> YOLO: A Different Philosophy</h3>
+<p>R-CNN-family detectors are two-stage: propose regions, then classify/refine them. YOLO (“You Only Look Once,” 2016) is single-shot: divide the image into a grid, and have the network predict, for every grid cell, in one forward pass, whether an object’s centre falls there, what its box is, and what class it is. No separate proposal stage. This trades some accuracy (particularly on small or heavily overlapping objects) for a dramatic speed advantage. Single-shot detectors are what real-time detection (video, robotics, <a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a>) is generally built on. Worked Example 70’s detector implements a heavily simplified single-shot detector in exactly this spirit: a coarse grid, one predicted box per cell, trained end-to-end.</p>
+</section>
+<section id="u-net-segmentations-answer" class="level3" data-number="70.2.3">
+<h3 data-number="70.2.3" class="anchored" data-anchor-id="u-net-segmentations-answer"><span class="header-section-number">70.2.3</span> U-Net: Segmentation’s Answer</h3>
+<p>Producing a full-resolution, per-pixel mask from a CNN has a structural problem: the encoder downsamples repeatedly to build abstract, spatially coarse features, exactly what classification wants, and exactly what per-pixel prediction doesn’t, since fine spatial detail gets discarded along the way. U-Net (2015) solves this with an encoder-decoder structure: downsample (encoder), then upsample back to full resolution (decoder), and, critically, skip connections between each encoder resolution and the corresponding decoder resolution, concatenating the encoder’s fine-detail features directly into the decoder at the same spatial scale. This looks like ResNet’s skip connections but solves a different problem. Don’t conflate them. Chapter 69’s residual connections fix vanishing gradients in very deep networks; the two paths being added are at the same resolution, same purpose (letting a block default to identity). U-Net’s skip connections reinject spatial detail lost during downsampling. The two paths being concatenated are from different stages of the network (early, fine-detail encoder features and later, coarse-but-semantically-rich decoder features), and they’re concatenated (stacking channels), not added. Same word, same superficial “shortcut” shape, genuinely different job. Worked Example 70 measures exactly what removing U-Net’s skip connections costs.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="70.3">
+<h2 data-number="70.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">70.3</span> Trade-offs and Limits</h2>
+<p>Two-stage detection (Faster R-CNN family) is generally more accurate, particularly for small/dense objects; single-shot detection (YOLO family) is generally faster, often by a wide enough margin to be the only option for real-time use. Choose based on whether latency budget or accuracy requirement is the binding constraint. Segmentation’s per-pixel output is inherently more expensive than detection’s per-box output. A mask has as many predictions as there are pixels, a box has four numbers, so segmentation is worth reaching for only when the task genuinely needs pixel-level precision (medical imaging, precise robotic grasping) rather than “where roughly is it.”</p>
+</section>
+<section id="procedures" class="level2" data-number="70.4">
+<h2 data-number="70.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">70.4</span> Procedures</h2>
+<p id="proc-70-1"><strong>Procedure 70.1 (Compute IoU for Boxes and Masks).</strong> <em>When to use:</em> evaluating any detection or segmentation prediction against ground truth. IoU is the standard overlap metric for both.</p>
+<div id="lst-detseg-iou" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-detseg-iou-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;70.1: Box IoU (geometric) and mask IoU (pixel-wise)
+</figcaption>
+<div aria-describedby="lst-detseg-iou-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> compute_iou(box1, box2):</span>
+<span id="cb1-2">    x1, y1 <span class="op">=</span> <span class="bu">max</span>(box1[<span class="dv">0</span>], box2[<span class="dv">0</span>]), <span class="bu">max</span>(box1[<span class="dv">1</span>], box2[<span class="dv">1</span>])</span>
+<span id="cb1-3">    x2, y2 <span class="op">=</span> <span class="bu">min</span>(box1[<span class="dv">2</span>], box2[<span class="dv">2</span>]), <span class="bu">min</span>(box1[<span class="dv">3</span>], box2[<span class="dv">3</span>])</span>
+<span id="cb1-4">    inter <span class="op">=</span> <span class="bu">max</span>(<span class="dv">0</span>, x2 <span class="op">-</span> x1) <span class="op">*</span> <span class="bu">max</span>(<span class="dv">0</span>, y2 <span class="op">-</span> y1)</span>
+<span id="cb1-5">    area1 <span class="op">=</span> (box1[<span class="dv">2</span>] <span class="op">-</span> box1[<span class="dv">0</span>]) <span class="op">*</span> (box1[<span class="dv">3</span>] <span class="op">-</span> box1[<span class="dv">1</span>])</span>
+<span id="cb1-6">    area2 <span class="op">=</span> (box2[<span class="dv">2</span>] <span class="op">-</span> box2[<span class="dv">0</span>]) <span class="op">*</span> (box2[<span class="dv">3</span>] <span class="op">-</span> box2[<span class="dv">1</span>])</span>
+<span id="cb1-7">    union <span class="op">=</span> area1 <span class="op">+</span> area2 <span class="op">-</span> inter</span>
+<span id="cb1-8">    <span class="cf">return</span> inter <span class="op">/</span> union <span class="cf">if</span> union <span class="op">&gt;</span> <span class="dv">0</span> <span class="cf">else</span> <span class="fl">0.0</span></span>
+<span id="cb1-9"></span>
+<span id="cb1-10"><span class="kw">def</span> mask_iou(pred_mask, true_mask):</span>
+<span id="cb1-11">    pred, true <span class="op">=</span> pred_mask.astype(<span class="bu">bool</span>), true_mask.astype(<span class="bu">bool</span>)</span>
+<span id="cb1-12">    union <span class="op">=</span> (pred <span class="op">|</span> true).<span class="bu">sum</span>()</span>
+<span id="cb1-13">    <span class="cf">return</span> (pred <span class="op">&amp;</span> true).<span class="bu">sum</span>() <span class="op">/</span> union <span class="cf">if</span> union <span class="op">&gt;</span> <span class="dv">0</span> <span class="cf">else</span> <span class="fl">0.0</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>IoU thresholds in practice:</strong> IoU &gt; 0.5 is a common “counts as a correct detection” threshold; stricter tasks (medical, precise robotics) often require 0.7+.</p>
+<p id="proc-70-2"><strong>Procedure 70.2 (Implement Non-Max Suppression).</strong> <em>When to use:</em> a detector predicts multiple overlapping boxes for the same object; NMS keeps only the best one.</p>
+<div id="lst-detseg-nms" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-detseg-nms-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;70.2: Greedy suppression, ordered by confidence
+</figcaption>
+<div aria-describedby="lst-detseg-nms-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="kw">def</span> nms(boxes, scores, iou_threshold<span class="op">=</span><span class="fl">0.5</span>):</span>
+<span id="cb2-2">    order <span class="op">=</span> <span class="bu">sorted</span>(</span>
+<span id="cb2-3">        <span class="bu">range</span>(<span class="bu">len</span>(scores)),</span>
+<span id="cb2-4">        key<span class="op">=</span><span class="kw">lambda</span> i: scores[i],</span>
+<span id="cb2-5">        reverse<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb2-6">    )</span>
+<span id="cb2-7">    keep <span class="op">=</span> []</span>
+<span id="cb2-8">    <span class="cf">while</span> order:</span>
+<span id="cb2-9">        i <span class="op">=</span> order.pop(<span class="dv">0</span>)</span>
+<span id="cb2-10">        keep.append(i)</span>
+<span id="cb2-11">        order <span class="op">=</span> [</span>
+<span id="cb2-12">            j <span class="cf">for</span> j <span class="kw">in</span> order</span>
+<span id="cb2-13">            <span class="cf">if</span> compute_iou(boxes[i], boxes[j]) <span class="op">&lt;</span> iou_threshold</span>
+<span id="cb2-14">        ]</span>
+<span id="cb2-15">    <span class="cf">return</span> keep</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> applying NMS across different classes together. Run it per class; a correctly detected cat and a correctly detected dog with overlapping boxes shouldn’t suppress each other.</p>
+<p id="proc-70-3"><strong>Procedure 70.3 (Choose Two-Stage vs.&nbsp;Single-Shot Detection).</strong> <em>When to use:</em> selecting a detection architecture family for a new task.</p>
+<div id="lst-detseg-choose" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-detseg-choose-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;70.3: Decision factors, not a fixed rule
+</figcaption>
+<div aria-describedby="lst-detseg-choose-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Two-stage (Faster R-CNN family): accuracy &gt; latency;
+  small/dense/overlapping objects; not running in real time.
+Single-shot (YOLO family): real-time inference required;
+  objects reasonably large and sparse; a modest accuracy
+  trade-off for a large speed gain is acceptable.</code></pre>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="70.5">
+<h2 data-number="70.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">70.5</span> Worked Example</h2>
+<p>A simplified single-shot detector (Exposition’s YOLO-style grid approach), trained end-to-end and evaluated on 300 held-out test images:</p>
+<div id="lst-detseg-worked-detector" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-detseg-worked-detector-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;70.4: Per-cell box + class prediction, one forward pass
+</figcaption>
+<div aria-describedby="lst-detseg-worked-detector-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># single forward pass, no proposal stage</span></span>
+<span id="cb4-2">pred_box, pred_class, confidence <span class="op">=</span> detector(image)</span>
+<span id="cb4-3">iou <span class="op">=</span> compute_iou(pred_box, true_box)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Measured value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Mean IoU</td>
+<td><strong>0.878</strong></td>
+</tr>
+<tr class="even">
+<td>Fraction with IoU &gt; 0.5</td>
+<td><strong>1.000</strong></td>
+</tr>
+<tr class="odd">
+<td>Classification accuracy</td>
+<td><strong>1.000</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Every one of the 300 test images cleared the IoU &gt; 0.5 “correct detection” threshold from Procedure 70.1, and mean IoU (0.878) sits comfortably above even the stricter 0.7 threshold cited for precision-critical tasks, a strong result for a heavily simplified, single-box-per-cell detector on this task’s controlled complexity.</p>
+<p>A U-Net segmentation model, trained twice, once with its skip connections intact, once with them removed (a plain encoder-decoder, everything else held identical), isolates exactly what those connections buy, directly rather than by assertion:</p>
+<div id="lst-detseg-worked-unet" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-detseg-worked-unet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;70.5: Identical U-Net, skip connections toggled
+</figcaption>
+<div aria-describedby="lst-detseg-worked-unet-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">unet_with_skips <span class="op">=</span> UNet(use_skip_connections<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-2"><span class="co"># plain encoder-decoder otherwise identical</span></span>
+<span id="cb5-3">unet_no_skips   <span class="op">=</span> UNet(use_skip_connections<span class="op">=</span><span class="va">False</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Configuration</th>
+<th>Dice</th>
+<th>IoU</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>With skip connections</td>
+<td><strong>0.9998</strong></td>
+<td><strong>0.9997</strong></td>
+</tr>
+<tr class="even">
+<td>Without skip connections (plain encoder-decoder)</td>
+<td>0.9856</td>
+<td>0.9719</td>
+</tr>
+<tr class="odd">
+<td><strong>Difference</strong></td>
+<td><strong>+0.0142</strong></td>
+<td><strong>+0.0278</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Both configurations perform well in absolute terms on this task, but the gap is real and directly attributable to the one architectural difference: skip connections improved Dice by 0.0142 and IoU by 0.0278. This is Exposition’s claim about <em>why</em> U-Net’s skip connections exist made measurable. Without them, the plain encoder-decoder has to reconstruct fine spatial boundaries purely from the coarse, downsampled bottleneck representation, and the measured mask quality is correspondingly (if modestly, on this task) worse. On tasks with finer detail requirements than this Worked Example’s, the gap between with-skips and without-skips would be expected to widen further, since the fine detail being reinjected matters more the more precise the required boundary.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># Amazon Rekognition Custom Labels: managed object</span></span>
+<span id="cb6-2"><span class="co"># detection with a labeling UI, no architecture design</span></span>
+<span id="cb6-3"><span class="co"># required, for well-scoped custom categories</span></span>
+<span id="cb6-4">response <span class="op">=</span> rekognition.detect_custom_labels(</span>
+<span id="cb6-5">    ProjectVersionArn<span class="op">=</span>model_arn,</span>
+<span id="cb6-6">    Image<span class="op">=</span>{<span class="st">"S3Object"</span>: {<span class="st">"Bucket"</span>: bucket, <span class="st">"Name"</span>: key}},</span>
+<span id="cb6-7">)</span></code></pre></div>
+<p><strong>When to prefer a custom detector/U-Net over Rekognition Custom Labels:</strong> when the task needs the specific architecture-level control this chapter’s procedures provide, e.g.&nbsp;choosing two-stage vs.&nbsp;single-shot to hit a specific latency budget (Procedure 70.3), or U-Net’s specific skip-connection mechanism for pixel-precise segmentation. Rekognition Custom Labels trades that control for a managed labeling and training pipeline, which is the right trade whenever architecture-level tuning isn’t the actual bottleneck for the task.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="70.6">
+<h2 data-number="70.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">70.6</span> History and Further Reading</h2>
+<p>Girshick et al.’s “Rich feature hierarchies for accurate object detection…” <span class="citation" data-cites="girshick2014rcnn">(<a href="#ref-girshick2014rcnn" role="doc-biblioref">Girshick et al. 2014</a>)</span> is the original R-CNN paper. Ren et al.’s “Faster R-CNN” <span class="citation" data-cites="ren2015fasterrcnn">(<a href="#ref-ren2015fasterrcnn" role="doc-biblioref">Ren et al. 2015</a>)</span> is the region-proposal-network paper. Redmon et al.’s “You Only Look Once” <span class="citation" data-cites="redmon2016yolo">(<a href="#ref-redmon2016yolo" role="doc-biblioref">Redmon et al. 2016</a>)</span> is the original YOLO paper. Ronneberger et al.’s “U-Net: Convolutional Networks for Biomedical Image Segmentation” <span class="citation" data-cites="ronneberger2015unet">(<a href="#ref-ronneberger2015unet" role="doc-biblioref">Ronneberger et al. 2015</a>)</span> is the original U-Net paper.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="70.7">
+<h2 data-number="70.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">70.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 69 (detection/segmentation models typically use a ResNet-family backbone for their encoder). It enables Chapter 75’s capstone, where a detection or segmentation component is a natural building block, and relates directly to <a href="/books/applied-ai-domains/ch59-perception-for-physical-ai" class="quarto-xref"><span>Chapter 59</span></a>, which covers detection/segmentation from a robotics-perception angle, the same underlying techniques, applied to a robot acting on what it perceives rather than a general image-understanding task. It’s often confused on U-Net’s skip connections versus ResNet’s skip connections: same name, different mechanism, different problem solved, and Worked Example 70 measures U-Net’s specific contribution directly rather than assuming the two mechanisms are interchangeable because they share a name.</p>
+</section>
+<section id="exercises" class="level2" data-number="70.8">
+<h2 data-number="70.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">70.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-70-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define detection and segmentation in one sentence each, and state what spatial information both keep that whole-image classification discards.</p></li>
+<li id="ex-70-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in one or two sentences why U-Net’s skip connections and ResNet’s skip connections, despite sharing a name, solve different problems.</p></li>
+<li id="ex-70-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s detector results (mean IoU 0.878, 100% of images above the 0.5 threshold), explain why “100% above 0.5” and “mean IoU 0.878” are both useful numbers to report together rather than either alone.</p></li>
+<li id="ex-70-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the U-Net ablation’s measured Dice/IoU gap (+0.0142 / +0.0278 favouring skip connections), explain in your own words why this gap is architecturally attributable to spatial detail specifically, rather than simply “more parameters,” referring to what changes between the two configurations.</p></li>
+<li id="ex-70-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team building a real-time video analytics pipeline for a warehouse robot is deciding between a Faster R-CNN-style detector and a YOLO-style detector. Using Procedure 70.3 and this chapter’s Trade-offs section, write the two or three sentences you’d say to help them decide.</p></li>
+<li id="ex-70-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 70.2 warns against running NMS across classes together. Describe a concrete scenario, using the “correctly detected cat and dog with overlapping boxes” example, where running NMS across all classes at once would produce a wrong result.</p></li>
+<li id="ex-70-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about mean Average Precision (mAP), the standard detection benchmark metric that goes beyond a single IoU threshold. Explain in your own words why averaging precision across multiple IoU thresholds (e.g.&nbsp;0.5 to 0.95) gives a more complete picture of detector quality than this chapter’s single “IoU &gt; 0.5” threshold alone.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="70.9">
+<h2 data-number="70.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">70.9</span> Mental Model</h2>
+<p>Detection and segmentation are both “classification, but keep the spatial information classification throws away”: detection keeps it as a small number of boxes, segmentation keeps it at full pixel resolution. The R-CNN lineage is a story of removing redundant computation; YOLO is a story of trading a separate proposal stage for speed; U-Net is a story of explicitly routing fine spatial detail around the encoder’s necessary but detail-destroying downsampling. This chapter’s Worked Example turned that last story into a number: 0.0278 IoU, measured, not assumed, is what U-Net’s skip connections were worth on this task.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-girshick2014rcnn" class="csl-entry" role="listitem">
+Girshick, Ross, Jeff Donahue, Trevor Darrell, and Jitendra Malik. 2014. <span>“Rich Feature Hierarchies for Accurate Object Detection and Semantic Segmentation.”</span> <em>IEEE Conference on Computer Vision and Pattern Recognition (CVPR)</em>, 580–87.
+</div>
+<div id="ref-redmon2016yolo" class="csl-entry" role="listitem">
+Redmon, Joseph, Santosh Divvala, Ross Girshick, and Ali Farhadi. 2016. <span>“You Only Look Once: Unified, Real-Time Object Detection.”</span> <em>IEEE Conference on Computer Vision and Pattern Recognition (CVPR)</em>, 779–88.
+</div>
+<div id="ref-ren2015fasterrcnn" class="csl-entry" role="listitem">
+Ren, Shaoqing, Kaiming He, Ross Girshick, and Jian Sun. 2015. <span>“Faster r-CNN: Towards Real-Time Object Detection with Region Proposal Networks.”</span> <em>Advances in Neural Information Processing Systems</em> 28: 91–99.
+</div>
+<div id="ref-ronneberger2015unet" class="csl-entry" role="listitem">
+Ronneberger, Olaf, Philipp Fischer, and Thomas Brox. 2015. <span>“U-Net: Convolutional Networks for Biomedical Image Segmentation.”</span> <em>Medical Image Computing and Computer-Assisted Intervention (MICCAI)</em>, 234–41.
+</div>
+</div>
+</section>

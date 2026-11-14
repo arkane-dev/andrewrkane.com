@@ -1,0 +1,207 @@
+<p>Every model up to this chapter has required labels. Someone had to mark each example “malignant” or “benign,” “fraud” or “not fraud.” Labels are expensive. A radiologist reviewing scans, an analyst labelling transactions: both cost real time and money. For many real questions, like which customers resemble each other or whether a log entry looks unusual, there are no labels, only raw data. Unsupervised learning finds structure without labels. It’s less glamorous than supervised learning. But it’s often where the most interesting discoveries happen.</p>
+<section id="motivation" class="level2" data-number="19.1">
+<h2 data-number="19.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">19.1</span> Motivation</h2>
+<p>There are two main tasks here. <em>Clustering</em> groups similar things together without being told what the groups are. Use cases include customer segmentation, document grouping, and finding natural categories in any dataset. <em>Anomaly detection</em> finds things that don’t fit. Use cases include fraud detection on new accounts with no labelled fraud yet, network intrusion detection, and manufacturing defect detection. Both tasks share an underlying question: what does it mean to be “similar,” and therefore “unusual,” in this space? The answer depends on how distance or density is defined.</p>
+</section>
+<section id="exposition" class="level2" data-number="19.2">
+<h2 data-number="19.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">19.2</span> Exposition</h2>
+<section id="k-means-clustering" class="level3" data-number="19.2.1">
+<h3 data-number="19.2.1" class="anchored" data-anchor-id="k-means-clustering"><span class="header-section-number">19.2.1</span> K-Means Clustering</h3>
+<p>K-Means is the clustering workhorse. Randomly initialise <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> centroids. A centroid is just the cluster’s mean point: the average of every feature, taken across every point currently assigned to it. Assign each point to its nearest centroid. Recompute each centroid as the mean of its assigned points. Repeat until assignments stop changing. It converges to a local minimum, which is why it is usually run several times (with sklearn, <code>n_init=10</code>), keeping the best result. It’s fast, scalable, and easy to interpret. But it needs <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> decided in advance, and assumes clusters are roughly spherical and similar in size.</p>
+<p>Specifying <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> is sometimes easy. A cancer-diagnosis dataset has an obvious <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi><mo>=</mo><mn>2</mn></mrow><annotation encoding="application/x-tex">K=2</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">2</span></span></span></span>: malignant or benign, fixed by the biology being studied, not a choice anyone has to make. Other times it’s close to impossible to know in advance. Segmenting an e-commerce platform’s customers could reasonably use 3 broad tiers (high, medium, low value) or 300 narrow micro-segments, one per campaign. Nothing about the data itself says which is right. The correct <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> depends on what the business plans to do with the answer, not on the customers themselves.</p>
+<p>That spherical, similar-size assumption fails on the wrong kind of data, as this chapter’s Worked Example shows directly. Choosing <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> usually combines two tools. The elbow method plots inertia (the summed squared distance from each point to its assigned centroid) against <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> and looks for diminishing returns. The second tool is the silhouette score (−1 to 1, higher better, measuring how well each point fits its own cluster against the next-best alternative).</p>
+</section>
+<section id="gaussian-mixture-models" class="level3" data-number="19.2.2">
+<h3 data-number="19.2.2" class="anchored" data-anchor-id="gaussian-mixture-models"><span class="header-section-number">19.2.2</span> Gaussian Mixture Models</h3>
+<p>K-Means assigns every point to exactly one cluster and assumes clusters are roughly spherical. A <strong>Gaussian Mixture Model (GMM)</strong> relaxes both assumptions. It models the data as if it were generated by a mixture of several Gaussian distributions, each with its own mean and covariance, and fits them with Expectation-Maximisation. The E-step computes each point’s probability of belonging to each Gaussian, a soft assignment, not a hard 0/1 label. The M-step updates each Gaussian’s mean, covariance, and weight to better fit those soft assignments, repeating until convergence. That’s structurally the same assign-then-recompute loop K-Means uses, made probabilistic.</p>
+<p>Because each component has its own covariance matrix, GMM can fit elongated or rotated elliptical clusters, not just K-Means’s implicitly circular ones. And because membership is a probability rather than a label, a point near a cluster boundary can have, say, a 60/40 split between two components. That’s often a truer description of ambiguous real data than forcing a choice. GMM is a proper probabilistic model with a likelihood, so choosing the number of components can use BIC or AIC instead of K-Means’s elbow-and-silhouette combination above. Both are a single score that rewards a good fit but penalises extra components. The number of components that gets the lowest score is the one to pick. BIC (Bayesian Information Criterion) increases that penalty as the dataset grows larger. AIC (Akaike Information Criterion) keeps the penalty fixed no matter the size. In practice, try both. Plot the score against the number of components, and look for the point where the score stops dropping: the same diminishing-returns idea as the elbow method, just applied to a different number. The added flexibility isn’t free. Fitting a full covariance matrix per component costs more compute than K-Means’s single centroid per cluster. And GMM can still converge to a poor local optimum, the same failure mode K-Means has.</p>
+</section>
+<section id="dbscan" class="level3" data-number="19.2.3">
+<h3 data-number="19.2.3" class="anchored" data-anchor-id="dbscan"><span class="header-section-number">19.2.3</span> DBSCAN</h3>
+<p>DBSCAN needs no <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> decided in advance. It defines clusters as dense regions separated by sparse ones, using two parameters: <code>eps</code> (the neighbourhood radius) and <code>min_samples</code> (how many neighbours within <code>eps</code> make a point a “core point”). Core points and everything density-reachable from them form a cluster. Anything left over is labelled noise (<code>-1</code>), which doubles as automatic outlier detection. DBSCAN finds arbitrarily shaped clusters that K-Means structurally cannot. That comes at the cost of sensitivity to its two parameters and difficulty with clusters of varying density.</p>
+</section>
+<section id="hierarchical-clustering" class="level3" data-number="19.2.4">
+<h3 data-number="19.2.4" class="anchored" data-anchor-id="hierarchical-clustering"><span class="header-section-number">19.2.4</span> Hierarchical Clustering</h3>
+<p>Hierarchical (agglomerative) clustering builds a dendrogram: a tree showing the order clusters were merged, which can be cut at any height to get any number of clusters. It’s useful for exploratory work when the right number of clusters isn’t known in advance. But its <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>O</mi><mo stretchy="false">(</mo><msup><mi>n</mi><mn>3</mn></msup><mo stretchy="false">)</mo></mrow><annotation encoding="application/x-tex">O(n^3)</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1.0641em;vertical-align:-0.25em;"></span><span class="mord mathnormal" style="margin-right:0.0278em;">O</span><span class="mopen">(</span><span class="mord"><span class="mord mathnormal">n</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span></span></span></span></span><span class="mclose">)</span></span></span></span> time complexity makes it impractical past ~10,000 rows.</p>
+</section>
+<section id="isolation-forest" class="level3" data-number="19.2.5">
+<h3 data-number="19.2.5" class="anchored" data-anchor-id="isolation-forest"><span class="header-section-number">19.2.5</span> Isolation Forest</h3>
+<p>Isolation Forest works on the idea that anomalies are few and different, so they’re easy to isolate. Build a forest where each tree splits on a randomly chosen feature and split value. A genuine anomaly, sitting apart from the bulk of the data, needs far fewer random splits to end up alone in its own partition than a typical point does. The anomaly score is based on average path length to isolation across all trees. A short path means easy isolation means likely anomaly. It scales well and works in high dimensions. But results vary run to run (it’s inherently random), and the <code>contamination</code> parameter (expected anomaly fraction) has to be set from real domain knowledge.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="19.3">
+<h2 data-number="19.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">19.3</span> Trade-offs and Limits</h2>
+<p>Without ground-truth labels, there’s no objective way to know if the “right” clusters were found. Silhouette and similar internal metrics measure geometric compactness and separation, not business usefulness. A clustering with a mediocre silhouette score can still be the most actionable one, if a domain expert confirms the groups map to real, distinct behaviour. Anomaly detection has the same problem. “Anomaly” is domain-specific: a large purchase is normal for one customer and suspicious for another. Results are very sensitive to the contamination assumption. Ground-truth labels, when available, always beat unsupervised detection. Unsupervised methods are where you turn when labels don’t exist yet.</p>
+</section>
+<section id="procedures" class="level2" data-number="19.4">
+<h2 data-number="19.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">19.4</span> Procedures</h2>
+<p id="proc-19-1"><strong>Procedure 19.1 (Choose the Number of Clusters).</strong> <em>When to use:</em> before running K-Means or any fixed-<span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> algorithm.</p>
+<div id="lst-choose-k" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-choose-k-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;19.1: Elbow method and silhouette score together
+</figcaption>
+<div aria-describedby="lst-choose-k-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">from</span> sklearn.cluster <span class="im">import</span> KMeans</span>
+<span id="cb1-2"><span class="im">from</span> sklearn.metrics <span class="im">import</span> silhouette_score</span>
+<span id="cb1-3"></span>
+<span id="cb1-4">inertias, silhouettes <span class="op">=</span> [], []</span>
+<span id="cb1-5"><span class="cf">for</span> k <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">2</span>, <span class="dv">11</span>):</span>
+<span id="cb1-6">    km <span class="op">=</span> KMeans(</span>
+<span id="cb1-7">        n_clusters<span class="op">=</span>k, random_state<span class="op">=</span><span class="dv">42</span>, n_init<span class="op">=</span><span class="dv">10</span></span>
+<span id="cb1-8">    ).fit(X_scaled)</span>
+<span id="cb1-9">    inertias.append(km.inertia_)</span>
+<span id="cb1-10">    silhouettes.append(silhouette_score(X_scaled, km.labels_))</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> picking <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> purely from an ambiguous elbow chart. Cross-check with the silhouette score, and, more important than either, check whether the resulting clusters make sense to someone who knows the domain.</p>
+<p id="proc-19-2"><strong>Procedure 19.2 (Run K-Means, GMM, DBSCAN, and Agglomerative Clustering).</strong> <em>When to use:</em> a feature matrix with rows to group.</p>
+<div id="lst-clustering-algos" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-clustering-algos-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;19.2: Four clustering approaches for four different assumptions
+</figcaption>
+<div aria-describedby="lst-clustering-algos-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">from</span> sklearn.cluster <span class="im">import</span> KMeans, DBSCAN, AgglomerativeClustering</span>
+<span id="cb2-2"><span class="im">from</span> sklearn.mixture <span class="im">import</span> GaussianMixture</span>
+<span id="cb2-3"></span>
+<span id="cb2-4">km <span class="op">=</span> KMeans(</span>
+<span id="cb2-5">    n_clusters<span class="op">=</span><span class="dv">4</span>, random_state<span class="op">=</span><span class="dv">42</span>, n_init<span class="op">=</span><span class="dv">10</span></span>
+<span id="cb2-6">).fit_predict(X_scaled)</span>
+<span id="cb2-7">gm <span class="op">=</span> GaussianMixture(</span>
+<span id="cb2-8">    n_components<span class="op">=</span><span class="dv">4</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb2-9">).fit_predict(X_scaled)</span>
+<span id="cb2-10">db <span class="op">=</span> DBSCAN(eps<span class="op">=</span><span class="fl">0.5</span>, min_samples<span class="op">=</span><span class="dv">5</span>).fit_predict(X_scaled)</span>
+<span id="cb2-11">agg <span class="op">=</span> AgglomerativeClustering(</span>
+<span id="cb2-12">    n_clusters<span class="op">=</span><span class="dv">4</span>, linkage<span class="op">=</span><span class="st">'ward'</span></span>
+<span id="cb2-13">).fit_predict(X_scaled)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> calling <code>DBSCAN(eps=0.5, ...)</code> on unscaled features. <code>eps</code> is a raw distance threshold, so a feature ranging 0-100,000 will dominate the distance calculation over one ranging 0-1 entirely.</p>
+<p id="proc-19-3"><strong>Procedure 19.3 (Detect Anomalies with IsolationForest).</strong> <em>When to use:</em> flagging unusual rows without enough labelled anomalies to train a supervised classifier.</p>
+<div id="lst-isolation-forest" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-isolation-forest-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;19.3: IsolationForest with a domain-informed contamination rate
+</figcaption>
+<div aria-describedby="lst-isolation-forest-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">from</span> sklearn.ensemble <span class="im">import</span> IsolationForest</span>
+<span id="cb3-2"></span>
+<span id="cb3-3">iso <span class="op">=</span> IsolationForest(</span>
+<span id="cb3-4">    n_estimators<span class="op">=</span><span class="dv">100</span>, contamination<span class="op">=</span><span class="fl">0.05</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb3-5">)</span>
+<span id="cb3-6">labels <span class="op">=</span> iso.fit_predict(X_scaled)   <span class="co"># 1 = normal, -1 = anomaly</span></span>
+<span id="cb3-7">scores <span class="op">=</span> iso.score_samples(X_scaled) <span class="co"># lower = more anomalous</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> treating <code>contamination</code> as a free parameter to tune for a “better-looking” result. It should reflect an actual prior belief about how much of the data is anomalous: tuning it to hit a desired output count is circular and either hides real anomalies or manufactures fake ones.</p>
+<p id="proc-19-4"><strong>Procedure 19.4 (Validate Clustering Quality Without Ground Truth).</strong> <em>When to use:</em> after clustering, before trusting or shipping the result.</p>
+<div id="lst-cluster-validation" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cluster-validation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;19.4: Internal clustering-quality metrics
+</figcaption>
+<div aria-describedby="lst-cluster-validation-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> sklearn.metrics <span class="im">import</span> (</span>
+<span id="cb4-2">    silhouette_score,</span>
+<span id="cb4-3">    davies_bouldin_score,</span>
+<span id="cb4-4">    calinski_harabasz_score,</span>
+<span id="cb4-5">)</span>
+<span id="cb4-6"></span>
+<span id="cb4-7"><span class="co"># -1 to 1, higher better</span></span>
+<span id="cb4-8">sil <span class="op">=</span> silhouette_score(X_scaled, labels)</span>
+<span id="cb4-9"><span class="co"># 0 to inf, lower better</span></span>
+<span id="cb4-10">db_score <span class="op">=</span> davies_bouldin_score(X_scaled, labels)</span></code></pre></div>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="19.5">
+<h2 data-number="19.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">19.5</span> Worked Example</h2>
+<p>Fitting K-Means to two interleaving crescent-shaped clusters (<code>make_moons</code>, 300 points, moderate noise) demonstrates the spherical-cluster assumption failing directly, not just in theory:</p>
+<div id="lst-moons-comparison" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-moons-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;19.5: K-Means vs.&nbsp;GMM vs.&nbsp;DBSCAN on non-spherical clusters
+</figcaption>
+<div aria-describedby="lst-moons-comparison-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">km <span class="op">=</span> KMeans(n_clusters<span class="op">=</span><span class="dv">2</span>, random_state<span class="op">=</span><span class="dv">42</span>, n_init<span class="op">=</span><span class="dv">10</span>).fit(X_scaled)</span>
+<span id="cb5-2">gm <span class="op">=</span> GaussianMixture(n_components<span class="op">=</span><span class="dv">2</span>, random_state<span class="op">=</span><span class="dv">42</span>).fit(X_scaled)</span>
+<span id="cb5-3">db <span class="op">=</span> DBSCAN(eps<span class="op">=</span><span class="fl">0.3</span>, min_samples<span class="op">=</span><span class="dv">5</span>).fit(X_scaled)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Measured, scored against the true crescent labels using the Adjusted Rand Index (1.0 = perfect agreement, 0 = random): K-Means achieves ARI 0.479. It finds <em>a</em> split of the data, since it always finds some split. But that split cuts across the two crescents rather than separating them, because K-Means can only ever draw roughly-circular decision boundaries, and the true clusters are not remotely circular. A Gaussian Mixture Model, fit with two components on the same data, lands on the exact same ARI, 0.479, despite its elliptical covariance being strictly more flexible than K-Means’s fixed circular one. Here, that extra flexibility doesn’t help at all. The underlying problem isn’t circularity, it’s convexity. Two crescents can’t be well-approximated by two ellipses any more than by two circles. GMM shares K-Means’s assumption that each cluster is a single convex blob, so both algorithms end up drawing essentially the same dividing line. DBSCAN, with <code>eps=0.3</code> chosen from a k-distance plot, achieves ARI 0.987, with only 2 of 300 points labelled noise. That’s close to a perfect recovery of both crescents. This isn’t DBSCAN being “better” in general. It’s DBSCAN’s density-based definition of a cluster matching this data’s actual shape, while K-Means’s and GMM’s centroid-based definitions structurally cannot.</p>
+<p>A separate anomaly-detection problem is deliberately harder. It has 500 points drawn from a standard 2D normal distribution, plus 25 outliers scattered uniformly across a much wider range. An IsolationForest with <code>contamination=0.05</code> (matching the true 25/525 <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mo>≈</mo></mrow><annotation encoding="application/x-tex">\approx</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4831em;"></span><span class="mrel">≈</span></span></span></span> 4.8% anomaly rate) flags 27 points as anomalies, with precision 0.852 and recall 0.920. It catches most of the real anomalies (23 of 25), while incorrectly flagging a small handful of ordinary points that happened to land unusually far from the bulk of the normal distribution just by chance. That’s a realistic result, not a perfect one. It’s a useful reminder that even a well-calibrated <code>contamination</code> estimate doesn’t produce perfect precision or recall on real, noisy data.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker <span class="im">import</span> KMeans <span class="im">as</span> SageMakerKMeans</span>
+<span id="cb6-2"><span class="im">from</span> sagemaker <span class="im">import</span> RandomCutForest</span>
+<span id="cb6-3"></span>
+<span id="cb6-4">kmeans_estimator <span class="op">=</span> SageMakerKMeans(</span>
+<span id="cb6-5">    role<span class="op">=</span>role,</span>
+<span id="cb6-6">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb6-7">    instance_type<span class="op">=</span><span class="st">'ml.c5.xlarge'</span>,</span>
+<span id="cb6-8">    k<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb6-9">    output_path<span class="op">=</span><span class="ss">f's3://</span><span class="sc">{</span>bucket<span class="sc">}</span><span class="ss">/kmeans-output'</span>,</span>
+<span id="cb6-10">)</span>
+<span id="cb6-11">kmeans_estimator.fit(</span>
+<span id="cb6-12">    kmeans_estimator.record_set(X_train.astype(<span class="st">'float32'</span>))</span>
+<span id="cb6-13">)</span>
+<span id="cb6-14"></span>
+<span id="cb6-15">rcf_estimator <span class="op">=</span> RandomCutForest(</span>
+<span id="cb6-16">    role<span class="op">=</span>role,</span>
+<span id="cb6-17">    instance_count<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb6-18">    instance_type<span class="op">=</span><span class="st">'ml.c5.xlarge'</span>,</span>
+<span id="cb6-19">    num_trees<span class="op">=</span><span class="dv">100</span>,</span>
+<span id="cb6-20">    num_samples_per_tree<span class="op">=</span><span class="dv">256</span>,</span>
+<span id="cb6-21">)</span>
+<span id="cb6-22">rcf_estimator.fit(</span>
+<span id="cb6-23">    rcf_estimator.record_set(X_train.astype(<span class="st">'float32'</span>))</span>
+<span id="cb6-24">)</span></code></pre></div>
+<p><strong>When to prefer SageMaker’s built-in K-Means/Random Cut Forest:</strong> once clustering or anomaly detection needs to run on data too large to fit in memory on one machine, or as a scheduled production pipeline with monitoring and retraining. For exploratory work on data that fits in memory, like this chapter’s Worked Example, sklearn is faster to iterate with.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="19.6">
+<h2 data-number="19.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">19.6</span> History and Further Reading</h2>
+<p>Murphy’s Introduction, Ch. 21-22, gives the full treatment of K-Means, Gaussian Mixture Models, and DBSCAN <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Burkov, Ch. 9, gives an accessible unsupervised learning overview <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Géron’s <em>Hands-On Machine Learning</em>, Ch. 9, covers K-Means, DBSCAN, and Gaussian Mixture Models with the Scikit-Learn code for each, a practical companion to this chapter’s algorithms <span class="citation" data-cites="geron2019hands">(<a href="#ref-geron2019hands" role="doc-biblioref">Géron 2019</a>)</span>. Liu et al.’s original Isolation Forest paper gives the full algorithm and its complexity analysis <span class="citation" data-cites="liu2008isolationforest">(<a href="#ref-liu2008isolationforest" role="doc-biblioref">Liu et al. 2008</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="19.7">
+<h2 data-number="19.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">19.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 6’s Python ecosystem and Chapter 9’s EDA (understanding data before clustering it), and on Chapter 15’s dimensionality reduction, which PCA/UMAP use to visualise high-dimensional clusters in 2D. It enables Chapter 31’s retrieval-augmented generation, where document clustering and embedding-based similarity underpin how vector databases organise retrieval. It’s often confused with semi-supervised learning (some labels exist) and self-supervised learning (a model creates its own supervision signal, central to foundation model pretraining from Chapter 29 onward). Both are related but distinct ideas, apart from the fully-unlabelled setting this chapter covers.</p>
+</section>
+<section id="exercises" class="level2" data-number="19.8">
+<h2 data-number="19.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">19.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-19-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain in one or two sentences why K-Means needs <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>K</mi></mrow><annotation encoding="application/x-tex">K</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.6833em;"></span><span class="mord mathnormal" style="margin-right:0.0715em;">K</span></span></span></span> decided in advance while DBSCAN does not.</p></li>
+<li id="ex-19-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State which algorithm (K-Means or DBSCAN) is the better default for each: (a) a large, roughly spherical, well-separated set of customer segments; (b) an unknown number of irregularly shaped clusters with some genuine noise points mixed in.</p></li>
+<li id="ex-19-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-moons-comparison" class="quarto-xref">Listing&nbsp;<span>19.5</span></a>’s measured ARI scores (K-Means 0.479, DBSCAN 0.987), explain in your own words why a higher silhouette score for K-Means’s own clustering wouldn’t necessarily have revealed this failure: silhouette measures compactness <em>given</em> the clustering K-Means chose, not whether that clustering matches the true structure.</p></li>
+<li id="ex-19-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-isolation-forest" class="quarto-xref">Listing&nbsp;<span>19.3</span></a>’s measured results (27 flagged, precision 0.852, recall 0.920), compute the number of false positives and false negatives, and state which of the two errors this particular run made more of.</p></li>
+<li id="ex-19-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer wants to segment their customer base and reports “we found 6 clusters with a great silhouette score.” Using this chapter’s Trade-offs section, write the follow-up question you’d ask before treating those 6 clusters as actionable business segments.</p></li>
+<li id="ex-19-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A fraud team sets IsolationForest’s <code>contamination=0.20</code> “because that gives us the cleanest-looking separation in our validation plots.” Using Procedure 19.3’s common mistake, explain why this reasoning is circular.</p></li>
+<li id="ex-19-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the original Isolation Forest paper’s (Liu et al., 2008) abstract. Identify the specific computational-complexity claim it makes relative to distance-based anomaly detection methods, and explain how that relates to this chapter’s “scales well, works in high dimensions” summary.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="19.9">
+<h2 data-number="19.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">19.9</span> Mental Model</h2>
+<p>Clustering is map-making: drawing a map of the data space, grouping nearby points into regions. The map isn’t the territory. There’s no single “correct” clustering. Only clusterings useful for a given purpose. Different algorithms draw different maps, by definition. This chapter’s moons example is exactly what it looks like when the map’s assumptions don’t match the territory’s actual shape.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-geron2019hands" class="csl-entry" role="listitem">
+Géron, Aurélien. 2019. <em>Hands-on Machine Learning with Scikit-Learn, Keras, and TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-liu2008isolationforest" class="csl-entry" role="listitem">
+Liu, Fei Tony, Kai Ming Ting, and Zhi-Hua Zhou. 2008. <span>“Isolation Forest.”</span> <em>2008 Eighth IEEE International Conference on Data Mining</em> (Pisa, Italy), 413–22.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+</div>
+</section>

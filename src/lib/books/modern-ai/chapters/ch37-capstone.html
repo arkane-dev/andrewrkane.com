@@ -1,0 +1,257 @@
+<p>Every module up to this point taught one skill in isolation, on a dataset chosen to make that skill’s lesson land cleanly. That’s the right way to learn a technique. It’s the wrong way to learn whether a data science project can actually be run end to end. Real projects don’t arrive labelled “this is a Chapter 12 problem.” They arrive as a vague business question, a messy dataset, and a stakeholder who wants an answer. Deciding which of this book’s techniques actually apply, in what order, and how far to take each one, is itself the skill this capstone chapter is built to exercise. Not a 37th technique, but the first project where nothing tells you which chapter you’re in.</p>
+<section id="motivation" class="level2" data-number="37.1">
+<h2 data-number="37.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">37.1</span> Motivation</h2>
+<p>A capstone is a single, self-contained project exercising the full lifecycle from Chapter 10, problem framing through monitoring, on a problem scoped by the practitioner, using techniques selected from across this book. Two things distinguish it from every prior chapter’s Worked Example. The dataset and problem are chosen, not handed over (dataset and problem selection is itself a core skill no worked example can teach with a pre-cleaned dataset). And the applicable techniques must be recognised, not assumed (a chapter on regularisation assumes regularisation is needed; a real project first requires noticing that overfitting is happening at all). This chapter’s own Worked Example below is built the same way: a synthetic-but-realistically-messy predictive maintenance problem, run through the full lifecycle rather than one isolated technique.</p>
+</section>
+<section id="exposition" class="level2" data-number="37.2">
+<h2 data-number="37.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">37.2</span> Exposition</h2>
+<section id="scoping-the-skill-most-learners-underrate" class="level3" data-number="37.2.1">
+<h3 data-number="37.2.1" class="anchored" data-anchor-id="scoping-the-skill-most-learners-underrate"><span class="header-section-number">37.2.1</span> Scoping: The Skill Most Learners Underrate</h3>
+<p>The single most common way capstones fail isn’t a modelling mistake. It’s scope. Two failure directions recur. Too ambitious: “predict customer churn, deploy it, and build a full monitoring dashboard with automated retraining” is a team’s quarter, not an individual project. Attempting all of it usually means every stage gets done shallowly, and deployment/monitoring (the stages that most distinguish a data scientist from a notebook exercise) get cut first under time pressure. Too safe: picking an already-clean, famous, heavily-solved dataset avoids the hardest and most realistic parts of the job, data cleaning and problem framing, and proves only that <code>.fit()</code> can be called, not that the job can be done. The fix for both: scope so every lifecycle stage gets a real, if modest, version. A small model correctly deployed and monitored beats a sophisticated model that only exists as a notebook cell.</p>
+</section>
+<section id="why-a-capstone-deliberately-doesnt-specify-a-dataset" class="level3" data-number="37.2.2">
+<h3 data-number="37.2.2" class="anchored" data-anchor-id="why-a-capstone-deliberately-doesnt-specify-a-dataset"><span class="header-section-number">37.2.2</span> Why a Capstone Deliberately Doesn’t Specify a Dataset</h3>
+<p>Every other chapter in this book picked a dataset in advance, because the chapter was teaching one isolated technique and a curated dataset kept the lesson clean. A real practitioner will never be handed a curated dataset. They’ll be handed whatever a customer’s systems produce: inconsistent, undocumented, partially missing. The first job is deciding whether the data can even support the business question being asked. This chapter’s Worked Example deliberately injects realistic mess (missing sensor readings, sensor-glitch outliers) into an otherwise clean synthetic dataset, for exactly this reason.</p>
+</section>
+<section id="deployment-and-monitoring-are-not-optional-extensions" class="level3" data-number="37.2.3">
+<h3 data-number="37.2.3" class="anchored" data-anchor-id="deployment-and-monitoring-are-not-optional-extensions"><span class="header-section-number">37.2.3</span> Deployment and Monitoring Are Not Optional Extensions</h3>
+<p>It’s tempting to treat model training as “the real work” and deployment/monitoring as polish added if time permits. A model that exists only in a notebook has not been built to production standard, and production standard is this book’s premise throughout. <a href="/books/modern-ai/ch23-model-deployment-serving" class="quarto-xref"><span>Chapter 23</span></a> and <a href="/books/modern-ai/ch25-monitoring" class="quarto-xref"><span>Chapter 25</span></a> exist precisely because a validation-set metric alone demonstrates only half the lifecycle. Carrying a capstone project through both, even in miniature, is what demonstrates full-lifecycle competency rather than isolated modelling skill. This chapter’s Worked Example includes a real monitoring check (a PSI drift test) precisely to keep this stage from being theoretical.</p>
+</section>
+<section id="an-optional-genai-extension" class="level3" data-number="37.2.4">
+<h3 data-number="37.2.4" class="anchored" data-anchor-id="an-optional-genai-extension"><span class="header-section-number">37.2.4</span> An Optional GenAI Extension</h3>
+<p>Chapters 30–36’s techniques apply to a genuinely different class of problem than the classical-ML chapters. Most classical capstone projects (tabular prediction, classification, forecasting) have no natural place for a prompt, a retrieval pipeline, or an agent, and forcing one in is a scoping mistake in the other direction. If a project’s problem statement is a natural fit (a support-ticket triage system that both classifies tickets <em>and</em> drafts a suggested response using RAG over a knowledge base), extending into Chapters 30–32 demonstrates the book’s full breadth. If it isn’t a natural fit, a rigorous classical-ML capstone that nails deployment and monitoring is complete on its own.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="37.3">
+<h2 data-number="37.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">37.3</span> Trade-offs and Limits</h2>
+<p>Breadth versus depth: a capstone lightly touching every chapter demonstrates breadth but nothing deeply. A capstone going deep on 8–10 well-chosen techniques while handling the rest competently demonstrates the judgment a real project requires: knowing where the hard problem actually is and spending time there. Prefer depth. A novel problem versus a well-trodden one: a completely novel problem is the most honest test of the full lifecycle, including the parts hardest to fake (problem framing, data cleaning). A well-known dataset with a realistic deployment/monitoring angle bolted on is faster to scope and still exercises the production-lifecycle chapters meaningfully. Either is legitimate. An unscoped novel problem with no fallback if the data turns out unusable is the risky combination to avoid.</p>
+</section>
+<section id="procedures" class="level2" data-number="37.4">
+<h2 data-number="37.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">37.4</span> Procedures</h2>
+<p id="proc-37-1"><strong>Procedure 37.1 (Write a Capstone Problem Statement).</strong> <em>When to use:</em> before any modelling. Revisit Chapter 2’s problem-framing techniques directly.</p>
+<div id="lst-capstone-problem" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-problem-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;37.1: The four required elements of a real problem statement
+</figcaption>
+<div aria-describedby="lst-capstone-problem-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Business Question: One or two sentences: what decision
+                    does this model inform?
+Success Criteria:   Specific, measurable metric + threshold,
+                     justified against the real cost of a
+                     false positive vs. a false negative.
+Out of Scope:       What this project deliberately does
+                     NOT attempt.
+Stakeholder:        Who actually uses this model's output,
+                     and how?</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> writing “build a model to predict X” as the whole problem statement. That’s a task description, not a business question. It’s missing <em>why</em> the prediction matters and what a good-enough answer looks like.</p>
+<p id="proc-37-2"><strong>Procedure 37.2 (Scope Effort Across the Lifecycle).</strong> <em>When to use:</em> immediately after picking a problem, before diving into any one stage.</p>
+<div id="lst-capstone-effort" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-effort-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;37.2: A rough solo-capstone effort allocation
+</figcaption>
+<div aria-describedby="lst-capstone-effort-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Problem framing + data understanding   15%
+Cleaning + feature engineering         25%
+  &lt;- usually the real bottleneck
+Modelling + evaluation                 25%
+  &lt;- often over-invested relative to payoff
+Deployment (even minimal)              20%
+  &lt;- do not cut this
+Monitoring (even minimal)              10%
+  &lt;- do not cut this either
+Write-up / presentation                 5%</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> spending 70% of a project’s time iterating on model architecture, then running out of time for deployment and monitoring. A modest, actually-deployed-and-monitored model demonstrates more of this book’s premise than a highly tuned model that only exists in a notebook.</p>
+<p id="proc-37-3"><strong>Procedure 37.3 (Present Results to a Non-Technical Stakeholder).</strong> <em>When to use:</em> writing a capstone’s final summary. The audience is explicitly not another data scientist.</p>
+<div id="lst-capstone-present" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-present-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;37.3: Translating metrics into decision-relevant language
+</figcaption>
+<div aria-describedby="lst-capstone-present-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>What this model does:  One sentence, no jargon.
+How well it works:     Translate the metric into business
+                        terms. Not "recall = 0.79" but
+                        "catches about 4 in 5 real failures,
+                        at a cost of roughly 3 false alarms
+                        per correct flag."
+What it doesn't do:    The "out of scope" section,
+                        restated plainly.
+How confident to be:   What data it was trained on,
+                        known blind spots.</code></pre>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> leading with a raw metric like ROC-AUC. A non-technical stakeholder has no intuition for 0.87. Translate it into what it means for their decision instead.</p>
+</section>
+<section id="worked-example" class="level2" data-number="37.5">
+<h2 data-number="37.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">37.5</span> Worked Example</h2>
+<p>A synthetic-but-deliberately-messy predictive maintenance problem, run through the full lifecycle: 2,000 pump sensor readings (<code>vibration</code>, <code>temperature</code>, <code>pressure</code>, <code>runtime_hours</code>), with <code>will_fail</code> generated from a genuine underlying physical mechanism (failure probability rising with vibration and temperature), then corrupted with realistic mess. 7.9% of <code>vibration</code> readings were set to missing (sensor dropout) and 15 <code>pressure</code> readings inflated 5x (sensor glitches), following Procedure 37.1’s requirement that a capstone dataset be messy enough for cleaning to matter. Base failure rate: <strong>9.65%</strong> (193 of 2,000): realistic class imbalance for this kind of problem, not a balanced toy dataset.</p>
+<div id="lst-capstone-worked-cv" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-worked-cv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;37.4: Two models, cross-validated recall, on the same messy data
+</figcaption>
+<div aria-describedby="lst-capstone-worked-cv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">pipeline_lr <span class="op">=</span> Pipeline([</span>
+<span id="cb4-2">    (<span class="st">"impute"</span>, SimpleImputer(strategy<span class="op">=</span><span class="st">"median"</span>)),</span>
+<span id="cb4-3">    (<span class="st">"scale"</span>, StandardScaler()),</span>
+<span id="cb4-4">    (<span class="st">"clf"</span>, LogisticRegression(class_weight<span class="op">=</span><span class="st">"balanced"</span>)),</span>
+<span id="cb4-5">])</span>
+<span id="cb4-6">pipeline_rf <span class="op">=</span> Pipeline([</span>
+<span id="cb4-7">    (<span class="st">"impute"</span>, SimpleImputer(strategy<span class="op">=</span><span class="st">"median"</span>)),</span>
+<span id="cb4-8">    (</span>
+<span id="cb4-9">        <span class="st">"clf"</span>,</span>
+<span id="cb4-10">        RandomForestClassifier(</span>
+<span id="cb4-11">            n_estimators<span class="op">=</span><span class="dv">200</span>,</span>
+<span id="cb4-12">            class_weight<span class="op">=</span><span class="st">"balanced"</span>,</span>
+<span id="cb4-13">        ),</span>
+<span id="cb4-14">    ),</span>
+<span id="cb4-15">])</span>
+<span id="cb4-16">scores <span class="op">=</span> cross_val_score(</span>
+<span id="cb4-17">    pipeline,</span>
+<span id="cb4-18">    X_train,</span>
+<span id="cb4-19">    y_train,</span>
+<span id="cb4-20">    cv<span class="op">=</span>StratifiedKFold(<span class="dv">5</span>),</span>
+<span id="cb4-21">    scoring<span class="op">=</span><span class="st">"recall"</span>,</span>
+<span id="cb4-22">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Model</th>
+<th>CV recall (mean ± std)</th>
+<th>Test recall</th>
+<th>Test precision</th>
+<th>Failures caught</th>
+<th>False alarms per correct flag</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Logistic Regression (baseline)</td>
+<td>0.7241 ± 0.0617</td>
+<td><strong>0.7917</strong></td>
+<td>0.2568</td>
+<td><strong>38 / 48 (79.2%)</strong></td>
+<td>2.89</td>
+</tr>
+<tr class="even">
+<td>Random Forest</td>
+<td>0.3172 ± 0.0402</td>
+<td>0.2500</td>
+<td>0.2857</td>
+<td>12 / 48 (25.0%)</td>
+<td>2.50</td>
+</tr>
+</tbody>
+</table>
+<p>This is the kind of result Chapter 12’s ensemble chapter already warned against assuming. Random Forest, often the reflexive “stronger” choice, catches barely a quarter of real failures on this dataset, while a simple Logistic Regression baseline with class-weight balancing catches nearly four in five. That’s a genuinely large, measured gap, not a close call decided by noise (the cross-validation standard deviations, 0.06 and 0.04, are far smaller than the 0.41 gap between the two means). For a predictive-maintenance business question, where a missed failure (unplanned downtime, safety risk) is normally far more costly than an unnecessary inspection, Logistic Regression’s higher false-alarm count (2.89 vs.&nbsp;2.50 per correct flag) is a clearly acceptable trade for catching three times as many real failures. That’s exactly the kind of cost-justified metric choice Procedure 37.1 requires a problem statement to make explicit before modelling starts, not after.</p>
+<p>Following Procedure 37.3’s translation requirement, the deployed model’s result in stakeholder language: <em>“Flags pumps likely to fail in the next week, catching roughly 4 out of 5 real failures before they happen, at the cost of about 3 unnecessary inspections for every correct flag.”</em></p>
+<p>Monitoring, in miniature: a Population Stability Index (PSI) check comparing the training distribution against a simulated future batch where the pump fleet has aged and temperatures have drifted up 6 degrees (a plausible seasonal or fleet-ageing shift):</p>
+<div id="lst-capstone-worked-psi" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-worked-psi-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;37.5: PSI drift check: real signal vs.&nbsp;a no-drift control
+</figcaption>
+<div aria-describedby="lst-capstone-worked-psi-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># drifted +6°</span></span>
+<span id="cb5-2">psi_temp <span class="op">=</span> psi(X_train[<span class="st">"temperature"</span>], future_batch_temperature)</span>
+<span id="cb5-3"><span class="co"># no drift, control</span></span>
+<span id="cb5-4">psi_control <span class="op">=</span> psi(</span>
+<span id="cb5-5">    X_train[<span class="st">"vibration"</span>].dropna(),</span>
+<span id="cb5-6">    no_drift_batch_vibration,</span>
+<span id="cb5-7">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Check</th>
+<th>PSI value</th>
+<th>Interpretation (&lt; 0.1 none, 0.1–0.25 moderate, &gt; 0.25 major)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Temperature, drifted +6° batch</td>
+<td><strong>0.4704</strong></td>
+<td>Major shift: flagged</td>
+</tr>
+<tr class="even">
+<td>Vibration, no-drift control batch</td>
+<td>0.0482</td>
+<td>No significant shift: correctly not flagged</td>
+</tr>
+</tbody>
+</table>
+<p>The drift check correctly distinguishes a genuine shift (0.4704, comfortably past the 0.25 “major shift” threshold) from a no-drift control batch drawn from the same distribution as training (0.0482, comfortably below the 0.1 “no shift” threshold). That’s a real, working monitoring stage, not a placeholder, satisfying Exposition’s requirement that deployment and monitoring be more than notebook cells.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="co"># Hosting this Worked Example's pipeline on AWS,</span></span>
+<span id="cb6-2"><span class="co"># stage by stage:</span></span>
+<span id="cb6-3"><span class="co"># Cleaning/feature engineering at scale</span></span>
+<span id="cb6-4"><span class="co">#   -&gt; SageMaker Processing Job</span></span>
+<span id="cb6-5"><span class="co"># Model training (LR vs RF comparison)</span></span>
+<span id="cb6-6"><span class="co">#   -&gt; SageMaker Training Job / Autopilot</span></span>
+<span id="cb6-7"><span class="co"># Model versioning -&gt; SageMaker Model Registry (Chapter 24)</span></span>
+<span id="cb6-8"><span class="co"># Deployment -&gt; SageMaker real-time endpoint (Chapter 23)</span></span>
+<span id="cb6-9"><span class="co"># Monitoring (the PSI check above)</span></span>
+<span id="cb6-10"><span class="co">#   -&gt; SageMaker Model Monitor, scheduled</span></span></code></pre></div>
+<p><strong>When this matters for a capstone:</strong> a capstone hosted end-to-end on SageMaker is a strong way to demonstrate the AWS-specific track of this book, but it is not required. A locally-run capstone hitting every lifecycle stage, as this Worked Example does, is sufficient to demonstrate the same competency.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="37.6">
+<h2 data-number="37.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">37.6</span> History and Further Reading</h2>
+<p>Thakur’s <em>Approaching (Almost) Any Machine Learning Problem</em> is a practical, project-shaped companion to this book’s more chapter-by-chapter structure, directly relevant to capstone-style scoping <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Revisit Chapter 2’s problem-framing techniques and Chapter 10’s lifecycle map directly before scoping any capstone project. Both are more directly load-bearing here than any single modelling technique.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="37.7">
+<h2 data-number="37.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">37.7</span> How This Connects</h2>
+<p>This chapter builds on every chapter in this book. Chapter 2 and Chapter 10 are the two most directly load-bearing, since they teach how to scope and sequence the rest rather than one specific technique. It is the terminal chapter of Book 2. It enables nothing further in this book, and is meant to be the project pointed to afterward as evidence of the whole book’s outcome. It’s often confused with a portfolio piece pursued for its own sake. A capstone’s purpose here is to prove lifecycle competency to the practitioner themselves, that a project can be run end to end without a chapter number saying what’s next. A strong portfolio artefact is a bonus of that, not the goal.</p>
+</section>
+<section id="exercises" class="level2" data-number="37.8">
+<h2 data-number="37.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">37.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-37-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> List the four required elements of a capstone problem statement (Procedure 37.1) and state which one is missing from “build a model to predict pump failure.”</p></li>
+<li id="ex-37-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State Procedure 37.2’s two lifecycle stages most commonly cut under time pressure, and explain in one sentence why that’s the wrong stage to cut, per this chapter’s Motivation.</p></li>
+<li id="ex-37-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-capstone-worked-cv" class="quarto-xref">Listing&nbsp;<span>37.4</span></a>’s measured results (LR: 79.2% failures caught; RF: 25.0% failures caught), explain why the cross-validation standard deviations (0.0617 and 0.0402) are relevant evidence that this gap is real signal and not noise, and connect this to Chapter 13’s cross-validation chapter.</p></li>
+<li id="ex-37-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-capstone-worked-psi" class="quarto-xref">Listing&nbsp;<span>37.5</span></a>’s two measured PSI values (0.4704 for the drifted batch, 0.0482 for the no-drift control), explain why testing the monitoring check against BOTH a genuinely-drifted batch and a no-drift control batch is necessary to trust the check. What would a single PSI value, with nothing to compare it against, fail to demonstrate?</p></li>
+<li id="ex-37-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague’s capstone trains five different model architectures, tunes each extensively, and reports the best cross-validated F1 score, with no deployment code and no monitoring check. Using this chapter’s rubric-style Trade-offs framing, write the two or three sentences you’d say about what’s missing.</p></li>
+<li id="ex-37-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s Worked Example chose Logistic Regression over Random Forest specifically because of the failure-cost asymmetry in a predictive-maintenance problem. Describe a different business problem (naming it explicitly) where the same measured recall gap would justify the opposite choice: accepting far more missed positives in exchange for far fewer false alarms.</p></li>
+<li id="ex-37-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read Chapter 21’s discussion of governance and fairness considerations. For the predictive-maintenance Worked Example in this chapter, identify one plausible fairness-adjacent question worth naming even if ultimately out of scope for a solo capstone (per Procedure 37.1’s “Out of Scope” field), and explain why naming it explicitly is better practice than omitting it silently.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="37.9">
+<h2 data-number="37.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">37.9</span> Mental Model</h2>
+<p>Every prior chapter handed a dataset and said “here’s the technique, apply it.” The capstone hands nothing and asks “what’s actually going on here, and what do you do about it?” That’s the entire difference between having learned three dozen techniques and being able to run a project. This chapter’s Worked Example is a demonstration of that difference in miniature. The interesting finding wasn’t a new technique. It was the discovery, only visible by actually measuring both models, that the “obviously stronger” architecture was the wrong choice for this specific, cost-asymmetric problem. The lifecycle from Chapter 10 is the map. A capstone is the first time the practitioner is the one holding it while walking.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

@@ -31,11 +31,18 @@
 							{#if b.buyHref}<Button size="sm" arrow href={b.buyHref} rel="external noopener">Buy on Amazon</Button>{:else}<Button size="sm" disabled>Buy on Amazon</Button>{/if}
 							{#if b.readHref}<Button size="sm" variant="outline" href={b.readHref}>Read online</Button>{:else}<Button size="sm" variant="outline" disabled>Read online</Button>{/if}
 							{#if b.pdfHref}<Button size="sm" variant="outline" href={b.pdfHref}>PDF</Button>{:else}<Button size="sm" variant="outline" disabled>PDF</Button>{/if}
+							{#if b.quizHref}<Button size="sm" variant="ghost" href={b.quizHref}>Quizzes</Button>{/if}
 						</div>
 					</div>
 				</article>
 			{/each}
 		</div>
+
+		<p class="license">
+			The books are licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" rel="external noopener license">CC BY-SA 4.0</a>.
+			You may copy, share and adapt them, including for commercial use. Credit the author, and share any changed version under the same license.
+			The companion notebooks are licensed under the MIT License.
+		</p>
 	</section>
 </div>
 
@@ -52,6 +59,9 @@
 	/* Ink plate: restores dark-UI tokens so neon status tags keep their contrast on cream paper. */
 	.plate { display: inline-flex; padding: 3px; background: var(--nd-ink); --nd-text-mute: #8885b9; --nd-text-on-neon: #070818; }
 	h3 { margin: var(--nd-space-1) 0 var(--nd-space-2); color: var(--nd-ink); font-size: var(--nd-text-xl); }
+	.license { max-width: 70ch; margin-top: var(--nd-space-10); padding-top: var(--nd-space-5); border-top: 1px solid var(--nd-line); font-size: var(--nd-text-sm); }
+	/* Neon link colours are for the dark UI. On paper, links use ink. */
+	.license a { color: var(--nd-ink); text-decoration: underline; text-underline-offset: 2px; }
 	.row { display: flex; flex-wrap: wrap; gap: var(--nd-space-2); align-items: center; }
 	@media (max-width: 900px) { .vols { grid-template-columns: 1fr; } .series { padding: var(--nd-space-5) var(--nd-space-5) var(--nd-space-8); } .seal { position: static; display: flex; justify-content: flex-end; justify-self: stretch; margin-bottom: var(--nd-space-3); /* in flow on phones: never covers the text */ } }
 </style>

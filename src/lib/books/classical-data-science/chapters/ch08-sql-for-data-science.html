@@ -1,0 +1,451 @@
+<p>Most Solutions Architects already know how to write <code>SELECT * FROM orders WHERE status = 'active'</code>. That’s operational SQL. Retrieving specific records. What separates it from the SQL a data scientist writes is intent. Analytical SQL summarises, ranks, compares across time windows, and answers questions like “which customers increased their spend the most last quarter?” Most business data lives in relational databases or warehouses rather than tidy CSV files. Fluency in this analytical style is a prerequisite for working with real data. This chapter treats SQL as a language for asking questions of <em>sets</em> of rows, rather than a language for retrieving individual ones. It builds up from <code>GROUP BY</code> to the two tools that make that shift possible: common table expressions and window functions.</p>
+<section id="motivation" class="level2" data-number="8.1">
+<h2 data-number="8.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">8.1</span> Motivation</h2>
+<p>The gap between “I can write a <code>WHERE</code> clause” and “I can write the query that answers the business question” is the gap between operational and analytical SQL. It’s where a lot of otherwise-capable engineers stall the first time they’re handed a warehouse table and a business question instead of a well-specified lookup. Relational databases store data in tables. SQL performs <em>set operations</em> on those tables: filtering, joining, grouping, transforming collections of rows at once. Declaratively. You describe what you want and the query planner decides how. The shift that unlocks analytical SQL is thinking in terms of <strong>aggregations over groups</strong>. Almost every analytical question reduces to “for each <em>group</em>, what is the <em>aggregate</em> of <em>value</em>?” That’s what <code>GROUP BY</code> plus an aggregate function expresses, and what the rest of this chapter’s tools extend.</p>
+</section>
+<section id="exposition" class="level2" data-number="8.2">
+<h2 data-number="8.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">8.2</span> Exposition</h2>
+<section id="group-by-and-aggregations" class="level3" data-number="8.2.1">
+<h3 data-number="8.2.1" class="anchored" data-anchor-id="group-by-and-aggregations"><span class="header-section-number">8.2.1</span> GROUP BY and Aggregations</h3>
+<p><code>GROUP BY</code> partitions the rows of a table into groups sharing a common value, then collapses each group down to a single summary row:</p>
+<div id="lst-groupby-basic" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-groupby-basic-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.1: Grouped aggregation: headcount and payroll by department
+</figcaption>
+<div aria-describedby="lst-groupby-basic-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb1-1"><span class="kw">SELECT</span></span>
+<span id="cb1-2">    department,</span>
+<span id="cb1-3">    <span class="fu">COUNT</span>(<span class="op">*</span>)            <span class="kw">AS</span> headcount,</span>
+<span id="cb1-4">    <span class="fu">AVG</span>(salary)         <span class="kw">AS</span> avg_salary,</span>
+<span id="cb1-5">    <span class="fu">MAX</span>(salary)         <span class="kw">AS</span> max_salary,</span>
+<span id="cb1-6">    <span class="fu">SUM</span>(salary)         <span class="kw">AS</span> total_payroll</span>
+<span id="cb1-7"><span class="kw">FROM</span> employees</span>
+<span id="cb1-8"><span class="kw">GROUP</span> <span class="kw">BY</span> department</span>
+<span id="cb1-9"><span class="kw">ORDER</span> <span class="kw">BY</span> total_payroll <span class="kw">DESC</span>;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>HAVING</code> is the group-level equivalent of <code>WHERE</code>. It filters <em>after</em> the grouping and aggregation have happened. That’s why it can reference an aggregate expression that doesn’t exist until the grouping is done:</p>
+<div id="lst-having-basic" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-having-basic-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.2: HAVING filters groups, not rows
+</figcaption>
+<div aria-describedby="lst-having-basic-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb2-1"><span class="kw">SELECT</span> department, <span class="fu">AVG</span>(salary) <span class="kw">AS</span> avg_salary</span>
+<span id="cb2-2"><span class="kw">FROM</span> employees</span>
+<span id="cb2-3"><span class="kw">GROUP</span> <span class="kw">BY</span> department</span>
+<span id="cb2-4"><span class="co">-- Only departments with high average salary</span></span>
+<span id="cb2-5"><span class="kw">HAVING</span> <span class="fu">AVG</span>(salary) <span class="op">&gt;</span> <span class="dv">80000</span>;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>WHERE</code> and <code>HAVING</code> don’t do the same job. <code>WHERE</code> restricts which rows enter a group in the first place. <code>HAVING</code> restricts which already-computed groups survive into the output.</p>
+</section>
+<section id="ctes-common-table-expressions" class="level3" data-number="8.2.2">
+<h3 data-number="8.2.2" class="anchored" data-anchor-id="ctes-common-table-expressions"><span class="header-section-number">8.2.2</span> CTEs — Common Table Expressions</h3>
+<p>A <strong>common table expression (CTE)</strong> is a named subquery defined at the top of a query with <code>WITH</code>. Its purpose is readability, not performance. It lets a complex query be built up as a sequence of named, single-purpose steps, the same way a complicated Python function gets broken into smaller named helper functions, rather than one dense expression.</p>
+<div id="lst-cte-intro" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cte-intro-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.3: A two-step CTE: monthly revenue, then growth against the prior month
+</figcaption>
+<div aria-describedby="lst-cte-intro-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb3-1"><span class="kw">WITH</span> monthly_revenue <span class="kw">AS</span> (</span>
+<span id="cb3-2">    <span class="kw">SELECT</span></span>
+<span id="cb3-3">        DATE_TRUNC(<span class="st">'month'</span>, order_date) <span class="kw">AS</span> <span class="dt">month</span>,</span>
+<span id="cb3-4">        <span class="fu">SUM</span>(amount)                     <span class="kw">AS</span> revenue</span>
+<span id="cb3-5">    <span class="kw">FROM</span> orders</span>
+<span id="cb3-6">    <span class="kw">GROUP</span> <span class="kw">BY</span> <span class="dv">1</span></span>
+<span id="cb3-7">),</span>
+<span id="cb3-8">revenue_with_growth <span class="kw">AS</span> (</span>
+<span id="cb3-9">    <span class="kw">SELECT</span></span>
+<span id="cb3-10">        <span class="dt">month</span>,</span>
+<span id="cb3-11">        revenue,</span>
+<span id="cb3-12">        <span class="fu">LAG</span>(revenue) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> <span class="dt">month</span>)</span>
+<span id="cb3-13">            <span class="kw">AS</span> prev_revenue,</span>
+<span id="cb3-14">        revenue <span class="op">-</span> <span class="fu">LAG</span>(revenue) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> <span class="dt">month</span>)</span>
+<span id="cb3-15">            <span class="kw">AS</span> growth</span>
+<span id="cb3-16">    <span class="kw">FROM</span> monthly_revenue</span>
+<span id="cb3-17">)</span>
+<span id="cb3-18"><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> revenue_with_growth <span class="kw">WHERE</span> <span class="dt">month</span> <span class="op">&gt;=</span> <span class="st">'2023-01-01'</span>;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>A useful discipline: each CTE should do exactly one thing. Its name should describe that thing well enough that the final <code>SELECT</code> reads almost like English.</p>
+</section>
+<section id="window-functions-the-most-powerful-analytical-tool" class="level3" data-number="8.2.3">
+<h3 data-number="8.2.3" class="anchored" data-anchor-id="window-functions-the-most-powerful-analytical-tool"><span class="header-section-number">8.2.3</span> Window Functions — The Most Powerful Analytical Tool</h3>
+<p>A <strong>window function</strong> computes a value across a set of rows <em>related to the current row</em>, without collapsing those rows the way <code>GROUP BY</code> does. This is the distinction: <code>GROUP BY</code> produces one row per group. A window function keeps every original row and adds a computed column alongside it. The general shape is:</p>
+<div id="lst-window-syntax" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-window-syntax-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.4: Window function syntax: PARTITION BY, ORDER BY, and an optional frame
+</figcaption>
+<div aria-describedby="lst-window-syntax-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb4-1">function_name() <span class="kw">OVER</span> (</span>
+<span id="cb4-2">    <span class="co">-- like GROUP BY, but doesn't collapse rows</span></span>
+<span id="cb4-3">    <span class="kw">PARTITION</span> <span class="kw">BY</span> grouping_column</span>
+<span id="cb4-4">    <span class="co">-- defines the sequence for ordered functions</span></span>
+<span id="cb4-5">    <span class="kw">ORDER</span> <span class="kw">BY</span> ordering_column</span>
+<span id="cb4-6">    <span class="co">-- optional: defines the window frame</span></span>
+<span id="cb4-7">    <span class="kw">ROWS</span> <span class="kw">BETWEEN</span> <span class="op">..</span>.</span>
+<span id="cb4-8">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Three families cover most analytical needs. <strong>Ranking functions</strong>: <code>ROW_NUMBER()</code> assigns 1, 2, 3… with no ties. <code>RANK()</code> assigns 1, 1, 3…, where tied rows share a rank and a gap follows. <code>DENSE_RANK()</code> assigns 1, 1, 2…, with no gap. <strong>Offset functions</strong>: <code>LAG(col, n)</code> reaches back <code>n</code> rows, <code>LEAD(col, n)</code> reaches forward, both within the current partition and ordering. <strong>Aggregate window functions</strong>: the same <code>SUM</code>, <code>AVG</code>, <code>COUNT</code> used with <code>GROUP BY</code>, but applied <code>OVER</code> a window instead. <code>SUM(amount) OVER (ORDER BY date)</code> is a running total. <code>COUNT(*) OVER ()</code>, an empty <code>OVER ()</code>, attaches the grand total row count to every row without filtering or grouping anything.</p>
+</section>
+<section id="joins-for-analysis" class="level3" data-number="8.2.4">
+<h3 data-number="8.2.4" class="anchored" data-anchor-id="joins-for-analysis"><span class="header-section-number">8.2.4</span> Joins for Analysis</h3>
+<p>Most analytical questions pull data from more than one table. <code>INNER JOIN</code> keeps only rows matching in both tables. <code>LEFT JOIN</code> keeps every row from the left table, with <code>NULL</code>s filled in where the right table has no match. <code>RIGHT JOIN</code> is the mirror image; rare in practice, since a <code>LEFT JOIN</code> with the tables reordered reads more naturally. <code>FULL OUTER JOIN</code> keeps every row from both sides. In analytics, <code>LEFT JOIN</code> dominates: there is almost always a <em>fact</em> table (orders, events, transactions) that needs enriching with <em>dimension</em> data (customer or product attributes) while every fact row is preserved regardless of whether a match exists.</p>
+</section>
+<section id="using-sql-at-scale" class="level3" data-number="8.2.5">
+<h3 data-number="8.2.5" class="anchored" data-anchor-id="using-sql-at-scale"><span class="header-section-number">8.2.5</span> Using SQL at Scale</h3>
+<p>A query that runs fine on a thousand-row table can take minutes, or fail outright, on a billion-row one. The SQL hasn’t changed. What has changed is how much data the engine has to touch to answer it. A badly formed query touches far more of it than necessary.</p>
+<p>The starting point for any slow query is <code>EXPLAIN</code>, or <code>EXPLAIN ANALYZE</code>, which runs the query and reports real timings instead of estimates. It shows the query plan: the sequence of scans, joins, and aggregations the engine chose, and roughly how much work each step costs. A <strong>sequential scan</strong> reads every row in a table. An <strong>index scan</strong> reads only the rows that match a condition, using a structure built in advance to look them up directly. On a large table, the difference between the two is often the difference between milliseconds and minutes.</p>
+<p>Four habits keep a query fast as data grows:</p>
+<ul>
+<li><strong>Filter early.</strong> A <code>WHERE</code> clause applied before a <code>JOIN</code> shrinks the table the join has to process. Most modern query planners reorder this automatically, but not always. A query that filters manually inside a CTE before joining never depends on the planner getting it right.</li>
+<li><strong>Select only the columns needed.</strong> <code>SELECT *</code> costs little on a small row-based table. On the columnar formats warehouses use, Parquet, Redshift, Snowflake, each column is stored separately. A wide <code>SELECT *</code> on a hundred-column table forces the engine to read all hundred columns off disk, even when a query only needs three of them.</li>
+<li><strong>Avoid wrapping a filtered column in a function.</strong> <code>WHERE YEAR(order_date) = 2023</code> cannot use an index on <code>order_date</code>, because the engine would have to evaluate <code>YEAR()</code> on every row before it can tell which ones qualify. <code>WHERE order_date &gt;= '2023-01-01' AND order_date &lt; '2024-01-01'</code> expresses the identical filter in a form the engine can push down to an index or a partition boundary.</li>
+<li><strong>Know what’s driving the join.</strong> A join between a small table and a large one is cheap if the engine can broadcast the small table to every worker. A join between two large tables usually requires shuffling data across the network, the single most expensive operation in a distributed query engine. Filtering both sides down before the join, not after, is what keeps that shuffle small.</li>
+</ul>
+<p>At warehouse scale, these habits are not just about latency. Tools like Amazon Athena bill per byte scanned: a query that reads every column of every partition costs measurably more than the same query with column pruning and partition filters applied, independent of how long it takes to run.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="8.3">
+<h2 data-number="8.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">8.3</span> Trade-offs and Limits</h2>
+<p>SQL and pandas overlap enough that the real skill is knowing which to reach for, not picking one permanently. SQL is the right tool when the data already lives in a database or warehouse, when a query joins more than two tables, or when the aggregation runs over more rows than fit comfortably in memory. A well-indexed warehouse table can aggregate billions of rows in a way a laptop’s RAM cannot. pandas is the right tool when the data is already loaded as a DataFrame, when the transformation is a custom one specific to feature engineering for a model, or when the task is quick exploration of a CSV that was never going to touch a database. The strongest data scientists are fluent in both and treat them as adjacent stages of a pipeline rather than competitors. SQL does the aggregation in the database, where it’s fast and where the data already lives. pandas does the final feature engineering in Python, where custom logic and ML libraries live. Trying to force one tool to do the other’s job (writing a ten-table join as chained pandas <code>merge()</code> calls, or trying to hand-roll a gradient-boosted feature transform in a <code>CASE WHEN</code>) is an avoidable source of slow, unreadable code.</p>
+</section>
+<section id="procedures" class="level2" data-number="8.4">
+<h2 data-number="8.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">8.4</span> Procedures</h2>
+<p id="proc-8-1"><strong>Procedure 8.1 (Register a DataFrame as a SQL Table and Query It).</strong> <em>When to use:</em> data is already in Python as a pandas DataFrame, and the next transformation is more naturally expressed as SQL than as chained pandas calls. This is most often the case once a query needs a <code>GROUP BY</code>, a multi-table <code>JOIN</code>, or a window function.</p>
+<div id="lst-duckdb-register" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-duckdb-register-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.5: DuckDB: registering a DataFrame as a queryable SQL table
+</figcaption>
+<div aria-describedby="lst-duckdb-register-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">import</span> duckdb</span>
+<span id="cb5-2"></span>
+<span id="cb5-3">con <span class="op">=</span> duckdb.<span class="ex">connect</span>()</span>
+<span id="cb5-4">con.register(<span class="st">'my_table'</span>, df)  <span class="co"># register DataFrame as a SQL table</span></span>
+<span id="cb5-5"></span>
+<span id="cb5-6"><span class="co"># Run a query and get a DataFrame back</span></span>
+<span id="cb5-7">result <span class="op">=</span> con.execute(</span>
+<span id="cb5-8">    <span class="st">"SELECT * FROM my_table WHERE value &gt; 100"</span></span>
+<span id="cb5-9">).df()</span>
+<span id="cb5-10"></span>
+<span id="cb5-11"><span class="co"># Shorthand helper used throughout this chapter</span></span>
+<span id="cb5-12"><span class="kw">def</span> sql(query): <span class="cf">return</span> con.execute(query).df()</span>
+<span id="cb5-13"></span>
+<span id="cb5-14"><span class="co"># DuckDB can also query DataFrames directly by variable name</span></span>
+<span id="cb5-15">result <span class="op">=</span> duckdb.sql(<span class="st">"SELECT * FROM df WHERE col &gt; 5"</span>).df()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> querying a DataFrame by name before registering it raises <code>CatalogException: Table not found</code>. Either call <code>con.register('name', df)</code> first, or use the top-level <code>duckdb.sql(...)</code> form, which resolves DataFrame variables from the calling scope automatically.</p>
+<p id="proc-8-2"><strong>Procedure 8.2 (Filter Rows with <code>pandas.query</code> as a Lightweight Alternative).</strong> <em>When to use:</em> the only operation needed is row filtering and setting up a DuckDB connection would be overkill.</p>
+<div id="lst-pandas-query" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-pandas-query-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.6: pandas.query for simple filtering without a SQL engine
+</figcaption>
+<div aria-describedby="lst-pandas-query-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">result <span class="op">=</span> df.query(<span class="st">"age &gt; 30 and salary &lt; 80000"</span>)</span>
+<span id="cb6-2"></span>
+<span id="cb6-3"><span class="co"># Reference a Python variable in the query string with @</span></span>
+<span id="cb6-4">threshold <span class="op">=</span> <span class="dv">30</span></span>
+<span id="cb6-5">result <span class="op">=</span> df.query(<span class="st">"age &gt; @threshold"</span>)</span>
+<span id="cb6-6"></span>
+<span id="cb6-7">result <span class="op">=</span> df.query(<span class="st">"department == 'Engineering'"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> reaching for <code>pandas.query</code> on a task that needs a <code>GROUP BY</code> or a window function. It supports row filtering only, nothing else. The moment a query needs an aggregation across groups, switch to Procedure 8.1.</p>
+<p id="proc-8-3"><strong>Procedure 8.3 (Aggregate with GROUP BY and HAVING).</strong> <em>When to use:</em> the business question is a “for each X, what is the Y” question, the single most common shape in analytical work.</p>
+<div id="lst-groupby-having" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-groupby-having-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.7: GROUP BY with a HAVING filter and a conditional aggregation
+</figcaption>
+<div aria-describedby="lst-groupby-having-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb7-1"><span class="kw">SELECT</span> col, <span class="fu">COUNT</span>(<span class="op">*</span>), <span class="fu">SUM</span>(val), <span class="fu">AVG</span>(val), <span class="fu">MIN</span>(val), <span class="fu">MAX</span>(val)</span>
+<span id="cb7-2"><span class="kw">FROM</span> <span class="kw">table</span></span>
+<span id="cb7-3"><span class="kw">GROUP</span> <span class="kw">BY</span> col</span>
+<span id="cb7-4"><span class="kw">HAVING</span> <span class="fu">SUM</span>(val) <span class="op">&gt;</span> <span class="dv">1000</span></span>
+<span id="cb7-5"><span class="kw">ORDER</span> <span class="kw">BY</span> <span class="fu">SUM</span>(val) <span class="kw">DESC</span>;</span>
+<span id="cb7-6"></span>
+<span id="cb7-7"><span class="co">-- Conditional aggregation: split one column's sum by a condition</span></span>
+<span id="cb7-8"><span class="kw">SELECT</span></span>
+<span id="cb7-9">    <span class="fu">SUM</span>(<span class="cf">CASE</span> <span class="cf">WHEN</span> status <span class="op">=</span> <span class="st">'completed'</span></span>
+<span id="cb7-10">             <span class="cf">THEN</span> revenue <span class="cf">ELSE</span> <span class="dv">0</span> <span class="cf">END</span>) <span class="kw">AS</span> completed_rev,</span>
+<span id="cb7-11">    <span class="fu">SUM</span>(<span class="cf">CASE</span> <span class="cf">WHEN</span> status <span class="op">=</span> <span class="st">'returned'</span></span>
+<span id="cb7-12">             <span class="cf">THEN</span> revenue <span class="cf">ELSE</span> <span class="dv">0</span> <span class="cf">END</span>) <span class="kw">AS</span> returned_rev</span>
+<span id="cb7-13"><span class="kw">FROM</span> orders;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> referencing a column <em>alias</em> inside <code>HAVING</code> (e.g.&nbsp;<code>HAVING avg_salary &gt; 80000</code> when <code>avg_salary</code> was defined with <code>AS</code> in the <code>SELECT</code>). Most engines evaluate <code>HAVING</code> before aliases are resolved. Repeat the full aggregate expression instead.</p>
+<p id="proc-8-4"><strong>Procedure 8.4 (Build Multi-Step Logic with CTEs).</strong> <em>When to use:</em> any query with more than two logical steps. Past that point, a single nested query becomes unreadable and hard to debug. A chain of named CTEs is not.</p>
+<div id="lst-cte-template" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cte-template-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.8: The general CTE shape: named steps, each building on the last
+</figcaption>
+<div aria-describedby="lst-cte-template-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb8-1"><span class="kw">WITH</span></span>
+<span id="cb8-2">cte_name_1 <span class="kw">AS</span> (</span>
+<span id="cb8-3">    <span class="kw">SELECT</span> <span class="op">..</span>.      <span class="co">-- step 1</span></span>
+<span id="cb8-4">),</span>
+<span id="cb8-5">cte_name_2 <span class="kw">AS</span> (</span>
+<span id="cb8-6">    <span class="kw">SELECT</span> <span class="op">..</span>.      <span class="co">-- step 2, may reference cte_name_1</span></span>
+<span id="cb8-7">    <span class="kw">FROM</span> cte_name_1</span>
+<span id="cb8-8">    <span class="kw">WHERE</span> <span class="op">..</span>.</span>
+<span id="cb8-9">),</span>
+<span id="cb8-10">cte_name_3 <span class="kw">AS</span> (</span>
+<span id="cb8-11">    <span class="kw">SELECT</span></span>
+<span id="cb8-12">        <span class="op">*</span>,</span>
+<span id="cb8-13">        <span class="fu">RANK</span>() <span class="kw">OVER</span> (<span class="kw">PARTITION</span> <span class="kw">BY</span> <span class="op">..</span>. <span class="kw">ORDER</span> <span class="kw">BY</span> <span class="op">..</span>.) <span class="kw">AS</span> <span class="fu">rank</span></span>
+<span id="cb8-14">    <span class="kw">FROM</span> cte_name_2</span>
+<span id="cb8-15">)</span>
+<span id="cb8-16"><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> cte_name_3</span>
+<span id="cb8-17"><span class="kw">WHERE</span> <span class="fu">rank</span> <span class="op">&lt;=</span> <span class="dv">10</span>;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> treating a CTE referenced multiple times in the same query as if it were materialised once. Most engines re-evaluate it at each reference. If a CTE is expensive and reused, materialise it as a temp table instead.</p>
+<p id="proc-8-5"><strong>Procedure 8.5 (Rank and Compare Rows with Window Functions).</strong> <em>When to use:</em> a per-row computed value is needed: a rank, a running total, a comparison to the previous row, without collapsing the rows the way <code>GROUP BY</code> would.</p>
+<div id="lst-window-functions" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-window-functions-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.9: Window functions: running total, previous-row lookup, in-group rank, and a moving average
+</figcaption>
+<div aria-describedby="lst-window-functions-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb9"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb9-1"><span class="kw">SELECT</span></span>
+<span id="cb9-2">    customer_id,</span>
+<span id="cb9-3">    order_date,</span>
+<span id="cb9-4">    revenue,</span>
+<span id="cb9-5"></span>
+<span id="cb9-6">    <span class="co">-- Running total (cumulative sum)</span></span>
+<span id="cb9-7">    <span class="fu">SUM</span>(revenue) <span class="kw">OVER</span> (</span>
+<span id="cb9-8">        <span class="kw">PARTITION</span> <span class="kw">BY</span> customer_id <span class="kw">ORDER</span> <span class="kw">BY</span> order_date</span>
+<span id="cb9-9">    ) <span class="kw">AS</span> running_total,</span>
+<span id="cb9-10"></span>
+<span id="cb9-11">    <span class="co">-- Previous row's value</span></span>
+<span id="cb9-12">    <span class="fu">LAG</span>(revenue, <span class="dv">1</span>) <span class="kw">OVER</span> (</span>
+<span id="cb9-13">        <span class="kw">PARTITION</span> <span class="kw">BY</span> customer_id <span class="kw">ORDER</span> <span class="kw">BY</span> order_date</span>
+<span id="cb9-14">    ) <span class="kw">AS</span> prev_revenue,</span>
+<span id="cb9-15"></span>
+<span id="cb9-16">    <span class="co">-- Rank within a group</span></span>
+<span id="cb9-17">    <span class="fu">RANK</span>() <span class="kw">OVER</span> (</span>
+<span id="cb9-18">        <span class="kw">PARTITION</span> <span class="kw">BY</span> region <span class="kw">ORDER</span> <span class="kw">BY</span> revenue <span class="kw">DESC</span></span>
+<span id="cb9-19">    ) <span class="kw">AS</span> rank_in_region,</span>
+<span id="cb9-20"></span>
+<span id="cb9-21">    <span class="co">-- Moving average (last 7 rows)</span></span>
+<span id="cb9-22">    <span class="fu">AVG</span>(revenue) <span class="kw">OVER</span> (</span>
+<span id="cb9-23">        <span class="kw">ORDER</span> <span class="kw">BY</span> order_date</span>
+<span id="cb9-24">        <span class="kw">ROWS</span> <span class="kw">BETWEEN</span> <span class="dv">6</span> <span class="kw">PRECEDING</span> <span class="kw">AND</span> <span class="kw">CURRENT</span> <span class="kw">ROW</span></span>
+<span id="cb9-25">    ) <span class="kw">AS</span> moving_avg_7</span>
+<span id="cb9-26"></span>
+<span id="cb9-27"><span class="kw">FROM</span> orders;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> expecting <code>LAG()</code> to return zero for the first row in a partition. It returns <code>NULL</code>, because there is no previous row. Wrap it in <code>COALESCE(LAG(col) OVER (...), 0)</code> if a zero is what the downstream calculation needs.</p>
+<p id="proc-8-6"><strong>Procedure 8.6 (Compute Period-over-Period Growth).</strong> <em>When to use:</em> month-over-month, quarter-over-quarter, or year-over-year growth calculations: a <code>GROUP BY</code> to get one row per period, followed by <code>LAG</code> to compare consecutive periods.</p>
+<div id="lst-mom-growth" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mom-growth-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.10: Period-over-period growth: aggregate to a period, then compare with LAG
+</figcaption>
+<div aria-describedby="lst-mom-growth-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb10"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb10-1"><span class="kw">WITH</span> monthly <span class="kw">AS</span> (</span>
+<span id="cb10-2">    <span class="kw">SELECT</span></span>
+<span id="cb10-3">        DATE_TRUNC(<span class="st">'month'</span>, order_date) <span class="kw">AS</span> <span class="dt">month</span>,</span>
+<span id="cb10-4">        <span class="fu">SUM</span>(revenue) <span class="kw">AS</span> revenue</span>
+<span id="cb10-5">    <span class="kw">FROM</span> orders</span>
+<span id="cb10-6">    <span class="kw">GROUP</span> <span class="kw">BY</span> <span class="dv">1</span></span>
+<span id="cb10-7">)</span>
+<span id="cb10-8"><span class="kw">SELECT</span></span>
+<span id="cb10-9">    <span class="dt">month</span>,</span>
+<span id="cb10-10">    revenue,</span>
+<span id="cb10-11">    <span class="fu">LAG</span>(revenue) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> <span class="dt">month</span>) <span class="kw">AS</span> prev_month,</span>
+<span id="cb10-12">    revenue <span class="op">-</span> <span class="fu">LAG</span>(revenue) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> <span class="dt">month</span>) <span class="kw">AS</span> abs_change,</span>
+<span id="cb10-13">    (revenue <span class="op">/</span> <span class="fu">LAG</span>(revenue) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> <span class="dt">month</span>) <span class="op">-</span> <span class="dv">1</span>) <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb10-14">        <span class="kw">AS</span> pct_change</span>
+<span id="cb10-15"><span class="kw">FROM</span> monthly;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> forgetting that DuckDB’s date arithmetic (<code>INTERVAL '7 days'</code>) is not portable. SQLite, for instance, expects <code>date(col, '+7 days')</code>. Check the specific engine’s date-function syntax before assuming a query will run unmodified elsewhere.</p>
+<p id="proc-8-7"><strong>Procedure 8.7 (Diagnose a Slow Query with EXPLAIN).</strong> <em>When to use:</em> a query is slower than expected and the reason isn’t obvious from reading the SQL alone.</p>
+<div id="lst-explain" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-explain-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.11: Reading a query plan with EXPLAIN ANALYZE
+</figcaption>
+<div aria-describedby="lst-explain-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb11"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb11-1"><span class="kw">EXPLAIN</span> <span class="kw">ANALYZE</span></span>
+<span id="cb11-2"><span class="kw">SELECT</span> c.customer_id, <span class="fu">SUM</span>(o.revenue) <span class="kw">AS</span> ltv</span>
+<span id="cb11-3"><span class="kw">FROM</span> customers c</span>
+<span id="cb11-4"><span class="kw">JOIN</span> orders o <span class="kw">ON</span> c.customer_id <span class="op">=</span> o.customer_id</span>
+<span id="cb11-5"><span class="kw">WHERE</span> o.status <span class="op">=</span> <span class="st">'completed'</span></span>
+<span id="cb11-6"><span class="kw">GROUP</span> <span class="kw">BY</span> c.customer_id;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> running plain <code>EXPLAIN</code> and reading its cost estimates as if they were real timings. Estimates come from table statistics that can be stale or wrong. <code>EXPLAIN ANALYZE</code> executes the query and reports real row counts and timings at each step, which is what a genuine performance investigation needs.</p>
+</section>
+<section id="worked-example" class="level2" data-number="8.5">
+<h2 data-number="8.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">8.5</span> Worked Example</h2>
+<p>The tutorial notebook builds a small, realistic in-memory e-commerce database with DuckDB (200 customers, 50 products, and 3,000 orders, generated with <code>np.random.seed(42)</code> so every number below is exactly reproducible), then answers six business questions against it with increasingly complex SQL. Of the 3,000 orders, 2,529 (84.3%) are <code>completed</code>, 321 (10.7%) <code>returned</code>, and 150 (5.0%) <code>pending</code>. Every query below filters to <code>completed</code> orders. Returned or pending revenue hasn’t landed yet.</p>
+<p>The first question is a plain <code>GROUP BY</code>: which product category generates the most completed revenue?</p>
+<div id="lst-sql-revenue-category" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sql-revenue-category-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.12: Revenue by category: a straight application of Procedure 8.3
+</figcaption>
+<div aria-describedby="lst-sql-revenue-category-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb12"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb12-1"><span class="kw">SELECT</span></span>
+<span id="cb12-2">    p.<span class="kw">category</span>,</span>
+<span id="cb12-3">    <span class="fu">COUNT</span>(o.order_id)          <span class="kw">AS</span> total_orders,</span>
+<span id="cb12-4">    <span class="fu">ROUND</span>(<span class="fu">SUM</span>(o.revenue), <span class="dv">2</span>)   <span class="kw">AS</span> total_revenue,</span>
+<span id="cb12-5">    <span class="fu">ROUND</span>(<span class="fu">AVG</span>(o.revenue), <span class="dv">2</span>)   <span class="kw">AS</span> avg_order_value</span>
+<span id="cb12-6"><span class="kw">FROM</span> orders o</span>
+<span id="cb12-7"><span class="kw">JOIN</span> products p <span class="kw">ON</span> o.product_id <span class="op">=</span> p.product_id</span>
+<span id="cb12-8"><span class="kw">WHERE</span> o.status <span class="op">=</span> <span class="st">'completed'</span></span>
+<span id="cb12-9"><span class="kw">GROUP</span> <span class="kw">BY</span> p.<span class="kw">category</span></span>
+<span id="cb12-10"><span class="kw">ORDER</span> <span class="kw">BY</span> total_revenue <span class="kw">DESC</span>;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Sports leads on total revenue ($630,002.73 across 756 orders), ahead of Clothing ($553,492.97, 535 orders). But Clothing has the highest <em>average</em> order value at $1,034.57, versus Sports’ $833.34. That’s easy to miss if the chart only shows the total-revenue bar. Home ($408,763.29), Electronics ($344,965.32), and Books ($179,920.02, the smallest category) round out the ranking. Total revenue and average order value answer different business questions. A <code>GROUP BY</code> computes both from the same rows for free. There’s rarely a reason not to pull both.</p>
+<p>The second question chains a CTE with a window function to answer something <code>GROUP BY</code> alone cannot: what fraction of total revenue comes from the top customers, the Pareto question?</p>
+<div id="lst-sql-pareto" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sql-pareto-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.13: Cumulative revenue share via a running total over a grand total: the Pareto curve
+</figcaption>
+<div aria-describedby="lst-sql-pareto-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb13"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb13-1"><span class="kw">WITH</span> customer_ltv <span class="kw">AS</span> (</span>
+<span id="cb13-2">    <span class="kw">SELECT</span> c.customer_id, <span class="fu">ROUND</span>(<span class="fu">SUM</span>(o.revenue), <span class="dv">2</span>) <span class="kw">AS</span> ltv</span>
+<span id="cb13-3">    <span class="kw">FROM</span> customers c</span>
+<span id="cb13-4">    <span class="kw">JOIN</span> orders o <span class="kw">ON</span> c.customer_id <span class="op">=</span> o.customer_id</span>
+<span id="cb13-5">    <span class="kw">WHERE</span> o.status <span class="op">=</span> <span class="st">'completed'</span></span>
+<span id="cb13-6">    <span class="kw">GROUP</span> <span class="kw">BY</span> c.customer_id</span>
+<span id="cb13-7">    <span class="kw">ORDER</span> <span class="kw">BY</span> ltv <span class="kw">DESC</span></span>
+<span id="cb13-8">)</span>
+<span id="cb13-9"><span class="kw">SELECT</span></span>
+<span id="cb13-10">    <span class="fu">ROW_NUMBER</span>() <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> ltv <span class="kw">DESC</span>) <span class="kw">AS</span> customer_rank,</span>
+<span id="cb13-11">    <span class="fu">ROUND</span>(</span>
+<span id="cb13-12">        <span class="fu">SUM</span>(ltv) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> ltv <span class="kw">DESC</span>)</span>
+<span id="cb13-13">        <span class="op">/</span> <span class="fu">SUM</span>(ltv) <span class="kw">OVER</span> () <span class="op">*</span> <span class="dv">100</span>,</span>
+<span id="cb13-14">        <span class="dv">2</span></span>
+<span id="cb13-15">    ) <span class="kw">AS</span> cum_pct</span>
+<span id="cb13-16"><span class="kw">FROM</span> customer_ltv;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><code>SUM(ltv) OVER (ORDER BY ltv DESC)</code> is a running total ordered by descending value. Dividing by <code>SUM(ltv) OVER ()</code>, the same aggregate with an empty window, i.e.&nbsp;the grand total attached to every row, converts that running total into a cumulative percentage without a second query. On this dataset it takes 138 of the 200 customers (69.0%) to reach 80% of total revenue, and 74 customers (37.0%) to reach 50%. That is a noticeably flatter curve than the classic 80/20 rule. That’s worth pausing on. It’s a direct consequence of how the data was generated: revenue per order is <code>quantity × price</code>, drawn from independent, roughly uniform distributions, not from the heavy-tailed distribution real purchasing behaviour usually follows. A synthetic dataset built from independent uniform draws will never produce as concentrated a Pareto curve as real transaction data does. That’s a preview of the distributional reasoning Chapter 3 develops properly.</p>
+<p>The third question is the capstone: of customers whose <em>first</em> order fell in Q1 2022, what fraction placed a second order within 90 days?</p>
+<div id="lst-sql-cohort-retention" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-sql-cohort-retention-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;8.14: Cohort retention: first order, cohort membership, and second order CTEs joined together
+</figcaption>
+<div aria-describedby="lst-sql-cohort-retention-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb14"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb14-1"><span class="kw">WITH</span> first_orders <span class="kw">AS</span> (</span>
+<span id="cb14-2">    <span class="kw">SELECT</span> customer_id, <span class="fu">MIN</span>(order_date) <span class="kw">AS</span> first_order_date</span>
+<span id="cb14-3">    <span class="kw">FROM</span> orders</span>
+<span id="cb14-4">    <span class="kw">WHERE</span> status <span class="op">=</span> <span class="st">'completed'</span></span>
+<span id="cb14-5">    <span class="kw">GROUP</span> <span class="kw">BY</span> customer_id</span>
+<span id="cb14-6">),</span>
+<span id="cb14-7">q1_cohort <span class="kw">AS</span> (</span>
+<span id="cb14-8">    <span class="kw">SELECT</span> customer_id, first_order_date</span>
+<span id="cb14-9">    <span class="kw">FROM</span> first_orders</span>
+<span id="cb14-10">    <span class="kw">WHERE</span> first_order_date <span class="op">&gt;=</span> <span class="st">'2022-01-01'</span></span>
+<span id="cb14-11">      <span class="kw">AND</span> first_order_date <span class="op">&lt;</span>  <span class="st">'2022-04-01'</span></span>
+<span id="cb14-12">),</span>
+<span id="cb14-13">second_orders <span class="kw">AS</span> (</span>
+<span id="cb14-14">    <span class="kw">SELECT</span></span>
+<span id="cb14-15">        o.customer_id,</span>
+<span id="cb14-16">        o.order_date,</span>
+<span id="cb14-17">        <span class="fu">ROW_NUMBER</span>() <span class="kw">OVER</span> (</span>
+<span id="cb14-18">            <span class="kw">PARTITION</span> <span class="kw">BY</span> o.customer_id <span class="kw">ORDER</span> <span class="kw">BY</span> o.order_date</span>
+<span id="cb14-19">        ) <span class="kw">AS</span> order_num</span>
+<span id="cb14-20">    <span class="kw">FROM</span> orders o</span>
+<span id="cb14-21">    <span class="kw">JOIN</span> q1_cohort c <span class="kw">ON</span> o.customer_id <span class="op">=</span> c.customer_id</span>
+<span id="cb14-22">    <span class="kw">WHERE</span> o.status <span class="op">=</span> <span class="st">'completed'</span></span>
+<span id="cb14-23">      <span class="kw">AND</span> o.order_date <span class="op">&gt;</span> c.first_order_date</span>
+<span id="cb14-24">)</span>
+<span id="cb14-25"><span class="kw">SELECT</span></span>
+<span id="cb14-26">    <span class="fu">COUNT</span>(<span class="kw">DISTINCT</span> q1_cohort.customer_id) <span class="kw">AS</span> cohort_size,</span>
+<span id="cb14-27">    <span class="fu">COUNT</span>(<span class="kw">DISTINCT</span> <span class="cf">CASE</span></span>
+<span id="cb14-28">        <span class="cf">WHEN</span> second_orders.order_num <span class="op">=</span> <span class="dv">1</span></span>
+<span id="cb14-29">         <span class="kw">AND</span> second_orders.order_date</span>
+<span id="cb14-30">             <span class="op">&lt;=</span> q1_cohort.first_order_date <span class="op">+</span> <span class="dt">INTERVAL</span> <span class="st">'90 days'</span></span>
+<span id="cb14-31">        <span class="cf">THEN</span> second_orders.customer_id</span>
+<span id="cb14-32">    <span class="cf">END</span>) <span class="kw">AS</span> retained_90d</span>
+<span id="cb14-33"><span class="kw">FROM</span> q1_cohort</span>
+<span id="cb14-34"><span class="kw">LEFT</span> <span class="kw">JOIN</span> second_orders</span>
+<span id="cb14-35">    <span class="kw">ON</span> q1_cohort.customer_id <span class="op">=</span> second_orders.customer_id;</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The Q1 2022 cohort has 156 customers; 128 of them (82.1%) placed a second order within 90 days. That retention figure is high enough to be suspicious for a real e-commerce business. And it is, for the same reason the Pareto curve above was flatter than expected. Orders were assigned to customers uniformly at random across a 730-day window. So a customer with even a modest order count is, by construction, likely to have <em>some</em> order land in the next 90 days purely by chance. The lesson generalises past this dataset: a retention number computed correctly from synthetic data can still be structurally meaningless if the data-generating process doesn’t resemble the real process it’s standing in for. The query being right is necessary, not sufficient.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS Athena / Redshift Equivalent</div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb15-1"><span class="co">-- These same queries run in Amazon Athena (S3-backed</span></span>
+<span id="cb15-2"><span class="co">-- serverless SQL) and Amazon Redshift (data warehouse)</span></span>
+<span id="cb15-3"><span class="co">-- with minimal changes.</span></span>
+<span id="cb15-4"></span>
+<span id="cb15-5"><span class="co">-- Athena date truncation (same as DuckDB)</span></span>
+<span id="cb15-6">DATE_TRUNC(<span class="st">'month'</span>, order_date)</span>
+<span id="cb15-7"></span>
+<span id="cb15-8"><span class="co">-- Redshift window function (identical syntax)</span></span>
+<span id="cb15-9"><span class="fu">SUM</span>(revenue) <span class="kw">OVER</span> (<span class="kw">PARTITION</span> <span class="kw">BY</span> customer_id <span class="kw">ORDER</span> <span class="kw">BY</span> order_date)</span>
+<span id="cb15-10"></span>
+<span id="cb15-11"><span class="co">-- Athena reads Parquet directly from S3:</span></span>
+<span id="cb15-12"><span class="co">-- CREATE EXTERNAL TABLE orders ...</span></span>
+<span id="cb15-13"><span class="co">-- LOCATION 's3://my-bucket/orders/'</span></span></code></pre></div>
+<p><strong>When to prefer Athena over pandas + DuckDB:</strong> once the data lives in S3 and is too large to comfortably fit in memory. Athena scales horizontally and is billed per query scanned. For prototyping on a sample or working set that fits in memory, pandas + DuckDB is faster to iterate with and free.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="8.6">
+<h2 data-number="8.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">8.6</span> History and Further Reading</h2>
+<p>Thakur’s practical approach applies pandas to many of the same operations covered in this chapter. It’s worth reading side-by-side for the comparison <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. For a foundational, SQL-only reference that goes considerably deeper into syntax and query planning than this chapter needs to, Beaulieu’s <em>Learning SQL</em> is the standard recommendation <span class="citation" data-cites="beaulieu2005learningsql">(<a href="#ref-beaulieu2005learningsql" role="doc-biblioref">Beaulieu 2005</a>)</span>. DuckDB’s own documentation (duckdb.org) is unusually readable for a database’s docs. It’s worth bookmarking directly, since it’s the engine every listing in this chapter runs against. For how these same concepts map onto managed AWS services at scale, the Athena and Redshift documentation covers the translation referenced in this chapter’s AWS callout.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="8.7">
+<h2 data-number="8.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">8.7</span> How This Connects</h2>
+<p>This chapter builds on basic SQL (<code>SELECT</code>, <code>WHERE</code>, <code>JOIN</code>) together with Chapter 6’s pandas material. The two are used side by side throughout the Worked Example, with SQL doing the aggregation and pandas or DuckDB moving results back and forth. It enables data pipeline construction (Chapter 24) and feature engineering pulled directly from database sources (Chapter 14), both of which assume the <code>GROUP BY</code>/CTE/window-function vocabulary built here. It’s most often confused with pandas, since the two overlap a lot in what they can express. But the right framing is not “which is better” but “where does the data live”: SQL belongs in the database, pandas belongs in Python, and most real pipelines use both.</p>
+</section>
+<section id="exercises" class="level2" data-number="8.8">
+<h2 data-number="8.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">8.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-8-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In one or two sentences, explain why <code>HAVING SUM(revenue) &gt; 1000</code> works but <code>HAVING total_revenue &gt; 1000</code> (referencing an alias defined as <code>SUM(revenue) AS total_revenue</code> in the same query) often fails.</p></li>
+<li id="ex-8-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain the difference in output between <code>RANK()</code>, <code>DENSE_RANK()</code>, and <code>ROW_NUMBER()</code> when three rows are tied for first place, using <a href="#lst-window-functions" class="quarto-xref">Listing&nbsp;<span>8.9</span></a>’s <code>rank_in_region</code> column as a starting point.</p></li>
+<li id="ex-8-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Adapt <a href="#lst-sql-revenue-category" class="quarto-xref">Listing&nbsp;<span>8.12</span></a> to group by <code>region</code> instead of <code>category</code> (joining <code>orders</code> to <code>customers</code> rather than <code>products</code>). Which region has the highest total completed revenue, and how close is it to the second-place region?</p></li>
+<li id="ex-8-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-sql-cohort-retention" class="quarto-xref">Listing&nbsp;<span>8.14</span></a> as a base, change the retention window from 90 days to 60 days. Does the retention rate change substantially, and does that change your reading of how meaningful the original 90-day figure was?</p></li>
+<li id="ex-8-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-sql-pareto" class="quarto-xref">Listing&nbsp;<span>8.13</span></a>’s output, determine how many customers are needed to reach 50% of total revenue, and express that as a percentage of the full 200-customer base.</p></li>
+<li id="ex-8-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> The Worked Example argues the dataset’s Pareto curve is flatter than real business data because revenue was generated from independent uniform draws rather than a heavy-tailed distribution. Propose a concrete change to the data-generating code in the tutorial notebook (a specific distribution or dependency between variables) that would produce a sharper, more realistic 80/20 split. Explain why your change would have that effect.</p></li>
+<li id="ex-8-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Write a query skeleton (not necessarily runnable against this chapter’s schema) that uses conditional aggregation (<code>SUM(CASE WHEN ... THEN ... ELSE 0 END)</code>) to compute, in a single <code>GROUP BY category</code> query, both completed revenue and returned revenue side by side as two columns. Explain why this is preferable to running two separate queries and joining the results.</p></li>
+<li id="ex-8-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read DuckDB’s documentation on the logical order of SQL clause evaluation (<code>FROM</code> → <code>WHERE</code> → <code>GROUP BY</code> → <code>HAVING</code> → window functions → <code>SELECT</code> → <code>ORDER BY</code>). Explain why window functions are evaluated after <code>WHERE</code>/<code>GROUP BY</code>/<code>HAVING</code> but before the final <code>SELECT</code> list is resolved. Explain what that ordering implies about why a window function can’t appear directly inside a <code>WHERE</code> clause.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="8.9">
+<h2 data-number="8.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">8.9</span> Mental Model</h2>
+<p>SQL is a language for asking questions of sets. Not describing procedures. Every analytical question worth writing a query for reduces to the same underlying operation. Partition the data into groups, and optionally order the rows within those groups. Then either aggregate the group down to one row (<code>GROUP BY</code>) or attach a computed value to every row without collapsing it (a window function). Once every query is read through that lens, window functions stop being a scary advanced feature and become the obvious tool for “I need <code>GROUP BY</code>’s aggregation, but I need to keep all my rows.”</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-beaulieu2005learningsql" class="csl-entry" role="listitem">
+Beaulieu, Alan. 2005. <em>Learning SQL</em>. O’Reilly Media.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

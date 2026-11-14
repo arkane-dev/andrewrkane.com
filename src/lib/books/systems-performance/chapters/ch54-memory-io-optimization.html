@@ -1,0 +1,155 @@
+<p>Every chapter so far in this track has assumed data is already resident in memory, ready to compute on. Real workloads spend real time getting data <em>into</em> memory in the first place: reading files, allocating objects to hold what was parsed, managing buffers, and that stage has its own failure modes, independent of anything CPU-bound covered previously. This chapter covers three of the most common: reading a file in the wrong chunk size, choosing the wrong access pattern for a large file, and paying avoidable per-object memory overhead at scale. One of the four results below is a debunked myth, included deliberately: not every “optimization” habit that sounds plausible turns out to be real once it’s measured.</p>
+<section id="motivation" class="level2" data-number="54.1">
+<h2 data-number="54.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">54.1</span> Motivation</h2>
+<p>Three mechanisms, each with a measured signature on this book’s reference rig. First, every I/O operation carries a fixed per-call cost (Python function dispatch, a kernel system call, buffer bookkeeping) independent of how much data that call actually moves. Calling <code>read()</code> too many times for too little data each time can dominate total runtime completely. Second, memory-mapped files (<code>mmap</code>) trade a page-fault cost on first access for zero system-call cost on every subsequent access to the same page: a clear win for repeated or random access to data that stays cached, and no better (sometimes measurably worse) for a single sequential pass. Third, Python object memory layout has real, measurable overhead, a per-instance <code>__dict__</code> by default, that <code>__slots__</code> can remove. But some “common knowledge” optimizations turn out to already be handled by the interpreter itself, adding nothing.</p>
+</section>
+<section id="exposition" class="level2" data-number="54.2">
+<h2 data-number="54.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">54.2</span> Exposition</h2>
+<section id="read-chunk-size-the-dominant-first-order-effect" class="level3" data-number="54.2.1">
+<h3 data-number="54.2.1" class="anchored" data-anchor-id="read-chunk-size-the-dominant-first-order-effect"><span class="header-section-number">54.2.1</span> Read Chunk Size: The Dominant, First-Order Effect</h3>
+<p>Every <code>read()</code> call pays fixed overhead regardless of how many bytes it returns: a Python-level function call, a transition into kernel space for the underlying system call, and buffer management on both sides. At chunk size 1, that fixed cost is paid once per byte; at chunk size 1MB, it’s paid once per megabyte-plus. This is the same shape of lesson as Chapter 53’s process-pool-creation finding, fixed per-operation overhead dominating when the operation is called far more often than the work justifies, applied here to file I/O instead of process spawning.</p>
+</section>
+<section id="os-level-buffering-a-real-much-smaller-sometimes-negative-effect" class="level3" data-number="54.2.2">
+<h3 data-number="54.2.2" class="anchored" data-anchor-id="os-level-buffering-a-real-much-smaller-sometimes-negative-effect"><span class="header-section-number">54.2.2</span> OS-Level Buffering: A Real, Much Smaller, Sometimes Negative Effect</h3>
+<p>Holding the application-level read chunk fixed and varying only the OS-level read-ahead buffer (Python’s <code>buffering=</code> parameter) is a genuinely different lever from application-level chunk size, and a much weaker one. Once the application is already requesting data in reasonably large chunks, the OS’s own read-ahead buffer has little additional overhead left to amortize. At an extreme buffer size, the cost of allocating and managing that large a buffer on every file open can outweigh any remaining benefit. The practical ordering of effort: fix application-level chunk size first. Only consider tuning OS-level buffering after that, and verify it actually helps rather than assuming bigger is always better.</p>
+</section>
+<section id="memory-mapped-files-a-genuine-win-with-an-honest-asterisk" class="level3" data-number="54.2.3">
+<h3 data-number="54.2.3" class="anchored" data-anchor-id="memory-mapped-files-a-genuine-win-with-an-honest-asterisk"><span class="header-section-number">54.2.3</span> Memory-Mapped Files: A Genuine Win, With an Honest Asterisk</h3>
+<p><code>mmap</code> maps a file’s pages directly into a process’s own virtual address space. The very first access to any page still pays a real page-fault cost either way. mmap doesn’t avoid that, and constructing a Python <code>bytes</code> object from an mmap slice has its own overhead that a direct <code>read()</code> call doesn’t. So on a single cold pass over a file, mmap is not automatically faster, and can measure slightly slower than a well-chunked <code>seek()</code>+<code>read()</code> loop. The advantage shows up specifically on <em>repeated</em> access to already-cached pages: <code>seek()</code>+<code>read()</code> issues a real system call on every single access, even when the requested data is already sitting in the OS page cache, paying that kernel-transition cost every time regardless of caching. <code>mmap</code>, once a page is resident, turns a read into an ordinary memory access with no system call at all. The complete, honest picture: mmap’s advantage is specifically for repeated or random access to data that stays resident in cache. For a single sequential pass over a file, a well-chunked regular read is simpler to write and just as fast.</p>
+</section>
+<section id="slots__-a-real-measurable-memory-win" class="level3" data-number="54.2.4">
+<h3 data-number="54.2.4" class="anchored" data-anchor-id="slots__-a-real-measurable-memory-win"><span class="header-section-number">54.2.4</span> <code>__slots__</code>: A Real, Measurable Memory Win</h3>
+<p>A regular Python object stores its attributes in a per-instance <code>__dict__</code>, flexible, since attributes can be added dynamically at any time, but carrying real memory overhead per instance. <code>__slots__</code> tells Python to allocate fixed, dictionary-free storage for exactly the declared attributes instead, at the cost of that flexibility. For a program holding millions of small objects, parsed records, graph nodes, particles in a simulation, this is not an academic difference. It can decide whether a dataset fits in RAM at all.</p>
+</section>
+<section id="a-debunked-myth-list-preallocation" class="level3" data-number="54.2.5">
+<h3 data-number="54.2.5" class="anchored" data-anchor-id="a-debunked-myth-list-preallocation"><span class="header-section-number">54.2.5</span> A Debunked Myth: List Preallocation</h3>
+<p>A widely repeated piece of Python performance folklore holds that preallocating a list (<code>[None] * n</code>, then filling by index) should beat growing it with repeated <code>.append()</code> calls, by analogy with how C or C++ arrays are typically handled. This turns out to be false for CPython specifically: CPython’s <code>list</code> already over-allocates its backing array internally, growing it in chunks larger than strictly needed so that <code>.append()</code>’s occasional resize cost is amortized across many calls, precisely the manual optimization the “preallocate first” habit is trying to hand-roll, already done for you by the interpreter. This does not generalize to every container or every language: a NumPy array, or a language without CPython’s amortized-growth strategy, would show a real, large gap between the two approaches.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="54.3">
+<h2 data-number="54.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">54.3</span> Trade-offs and Limits</h2>
+<p>Optimize read chunk size first, always. It is the single largest, most reliable lever in an I/O-bound pipeline, and should be checked before anything else. Reach for <code>mmap</code> when access to a large file is repeated and/or random, and the working set fits in available RAM or page cache; not for a single sequential pass, where plain buffered reads are simpler and equally fast. Reach for <code>__slots__</code> when holding large numbers, thousands to millions, of instances of a simple, fixed-attribute class; skip it for a handful of objects, or for classes that genuinely need dynamic attribute assignment. Don’t bother hand-optimizing list growth in pure Python. CPython’s amortized list growth already does this. Spend the effort instead on the algorithm or data-structure choice (Chapter 51), or reach for NumPy (Chapter 52) if the container really is large and numeric, since <code>np.append</code> in a loop <em>is</em> genuinely slow and preallocating a NumPy array is a real, large win there.</p>
+</section>
+<section id="procedures" class="level2" data-number="54.4">
+<h2 data-number="54.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">54.4</span> Procedures</h2>
+<p id="proc-54-1"><strong>Procedure 54.1 (Choose a Read Chunk Size).</strong> <em>When to use:</em> reading a large file and unsure what chunk size to use. The default, first-line answer for any new I/O-bound routine.</p>
+<div id="lst-chunk-size" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-chunk-size-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;54.1: A sensible default chunk size for sequential file reads
+</figcaption>
+<div aria-describedby="lst-chunk-size-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="co"># 1MB is a reasonable default for most sequential reads</span></span>
+<span id="cb1-2">CHUNK_SIZE <span class="op">=</span> <span class="dv">1024</span> <span class="op">*</span> <span class="dv">1024</span></span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">'rb'</span>) <span class="im">as</span> f:</span>
+<span id="cb1-5">    <span class="cf">while</span> <span class="va">True</span>:</span>
+<span id="cb1-6">        data <span class="op">=</span> f.read(CHUNK_SIZE)</span>
+<span id="cb1-7">        <span class="cf">if</span> <span class="kw">not</span> data:</span>
+<span id="cb1-8">            <span class="cf">break</span></span>
+<span id="cb1-9">        process(data)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> reading line-by-line or byte-by-byte on a large binary or high-throughput file “to save memory,” then being surprised at the runtime. If memory is genuinely a constraint, use a moderate chunk size (64KB-1MB) rather than the smallest possible one. The memory savings from going smaller are marginal while the per-call overhead cost is severe.</p>
+<p id="proc-54-2"><strong>Procedure 54.2 (Decide Whether <code>mmap</code> Will Help an Access Pattern).</strong> <em>When to use:</em> before reaching for <code>mmap</code> as a general “faster file access” fix, rather than after.</p>
+<div id="lst-mmap-decide" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-mmap-decide-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;54.2: A minimal mmap usage pattern, plus the question to ask before reaching for it
+</figcaption>
+<div aria-describedby="lst-mmap-decide-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> mmap</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="cf">with</span> <span class="bu">open</span>(path, <span class="st">'rb'</span>) <span class="im">as</span> f:</span>
+<span id="cb2-4">    mm <span class="op">=</span> mmap.mmap(f.fileno(), <span class="dv">0</span>, access<span class="op">=</span>mmap.ACCESS_READ)</span>
+<span id="cb2-5">    <span class="co"># Repeated/random access to mm[offset:offset+length] benefits</span></span>
+<span id="cb2-6">    <span class="co"># from mmap</span></span>
+<span id="cb2-7">    <span class="co"># once the relevant pages are cached.</span></span>
+<span id="cb2-8">    value <span class="op">=</span> mm[<span class="dv">1000</span>:<span class="dv">1064</span>]</span>
+<span id="cb2-9">    mm.close()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Ask first: is the access pattern repeated or random over the same region of a large file? If yes, <code>mmap</code> is likely to help. If the access is a single sequential pass over the whole file, a plain buffered <code>read()</code> loop (<a href="#lst-chunk-size" class="quarto-xref">Listing&nbsp;<span>54.1</span></a>) is simpler to write and measures just as fast. <strong>Common mistake:</strong> expecting <code>mmap</code> to be faster on the very first access to a large file. The first touch of any page pays a real page-fault cost regardless of access method; mmap’s advantage only shows up once pages are already resident in the OS page cache from a prior access.</p>
+<p id="proc-54-3"><strong>Procedure 54.3 (Reduce Memory Overhead for Large Collections of Small Objects).</strong> <em>When to use:</em> holding millions of instances of a simple class with a fixed, known set of attributes.</p>
+<div id="lst-slots" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-slots-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;54.3: A fixed-attribute record class using <strong>slots</strong> instead of a per-instance <strong>dict</strong>
+</figcaption>
+<div aria-describedby="lst-slots-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="kw">class</span> Record:</span>
+<span id="cb3-2">    <span class="va">__slots__</span> <span class="op">=</span> (<span class="st">'id'</span>, <span class="st">'value'</span>, <span class="st">'timestamp'</span>)</span>
+<span id="cb3-3"></span>
+<span id="cb3-4">    <span class="kw">def</span> <span class="fu">__init__</span>(<span class="va">self</span>, <span class="bu">id</span>, value, timestamp):</span>
+<span id="cb3-5">        <span class="va">self</span>.<span class="bu">id</span> <span class="op">=</span> <span class="bu">id</span></span>
+<span id="cb3-6">        <span class="va">self</span>.value <span class="op">=</span> value</span>
+<span id="cb3-7">        <span class="va">self</span>.timestamp <span class="op">=</span> timestamp</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> adding <code>__slots__</code> to a class that needs dynamic attribute assignment, or that participates in multiple inheritance with non-<code>__slots__</code> base classes in a way that breaks. Check that every attribute the class will ever need is declared, and that <code>__slots__</code> doesn’t conflict with a parent class’s <code>__dict__</code>. For simple, fixed-shape “record” classes, it’s a safe, meaningful win.</p>
+<p id="proc-54-4"><strong>Procedure 54.4 (Check Whether “Preallocate for Performance” Actually Helps, Before Assuming It Does).</strong> <em>When to use:</em> deciding whether to preallocate a <code>list</code> before filling it, versus just appending.</p>
+<div id="lst-list-prealloc" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-list-prealloc-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;54.4: Three ways to build a list, only one of them faster and not for the reason you’d guess
+</figcaption>
+<div aria-describedby="lst-list-prealloc-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">lst <span class="op">=</span> []</span>
+<span id="cb4-2"><span class="cf">for</span> x <span class="kw">in</span> data:</span>
+<span id="cb4-3">    lst.append(x)</span>
+<span id="cb4-4"></span>
+<span id="cb4-5"><span class="co"># vs.</span></span>
+<span id="cb4-6">lst <span class="op">=</span> [<span class="va">None</span>] <span class="op">*</span> <span class="bu">len</span>(data)</span>
+<span id="cb4-7"><span class="cf">for</span> i, x <span class="kw">in</span> <span class="bu">enumerate</span>(data):</span>
+<span id="cb4-8">    lst[i] <span class="op">=</span> x</span>
+<span id="cb4-9"></span>
+<span id="cb4-10"><span class="co"># Fastest of the three, for an unrelated reason (avoids repeated</span></span>
+<span id="cb4-11"><span class="co"># .append lookups):</span></span>
+<span id="cb4-12">lst <span class="op">=</span> [x <span class="cf">for</span> x <span class="kw">in</span> data]</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> assuming preallocation habits from C/C++ transfer directly to Python’s <code>list</code>. They don’t. CPython’s list already over-allocates its backing array internally, amortizing <code>.append()</code>’s occasional resize cost. This does not apply to NumPy arrays: preallocating a NumPy array (<code>np.empty(n)</code>, then filling by index) is a real, large win there. Know which container is in use before applying, or dismissing, this habit.</p>
+</section>
+<section id="worked-example" class="level2" data-number="54.5">
+<h2 data-number="54.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">54.5</span> Worked Example</h2>
+<p>All measured numbers in this chapter<span class="ref-rig-mark">†</span> come from this book’s reference rig. See the preface. The companion notebook builds a 210MB test file and reads it in chunks of 1, 64, 4,096, and 1,048,576 bytes. Chunk size 1 took 8,322.8 ms<span class="ref-rig-mark">†</span> (25.2 MB/s, roughly 210 million <code>read()</code> calls); chunk size 1MB took 13.7 ms<span class="ref-rig-mark">†</span> (15,258.4 MB/s, roughly 200 calls), a greater than 600x difference for moving the exact same bytes, purely from how many bytes were requested per call. The intermediate points confirm the trend is smooth, not a two-point artifact: 64 bytes took 217.0 ms, 4,096 bytes took 55.0 ms.</p>
+<p>Holding the application-level chunk fixed at 1MB and varying only <code>buffering=</code>: unbuffered (0), default-ish (4KB), and 1MB all measured within noise of each other (12.9-13.1 ms). 16MB buffering measured slower, 66.4 ms, roughly 5x worse than the smaller settings, a genuine negative result from over-tuning a second-order lever once the first-order one (chunk size) was already fixed.</p>
+<p>A single cold pass over 50,000 random 64-byte reads from a 500MB file measured <code>seek()</code>+<code>read()</code> at 77.0 ms against <code>mmap</code> at 94.4 ms, mmap actually slightly slower, ratio 0.82x, an honest unforced negative result rather than a mistake. Repeating the identical 50,000 reads after warming the page cache with one throwaway pass flipped the comparison entirely: <code>seek()</code>+<code>read()</code> took 90.3 ms (1.81µs/read); <code>mmap</code> took 7.2 ms (0.14µs/read), a genuine 12.5x speedup, entirely attributable to <code>mmap</code> eliminating a system call per access once the data is already cached.</p>
+<p>Creating 100,000 instances of an ordinary Python class used 12.02 MB (120 bytes/object); the identical class with <code>__slots__ = ('x', 'y')</code> used 8.81 MB (88 bytes/object), a 26.7% memory reduction with no other code changes. Finally, timing three ways of building a 5,000,000-element list: append-growth took 149.1 ms, preallocate-then-fill took 142.4 ms, statistically indistinguishable, and a plain list comprehension was fastest at 135.9 ms, for the unrelated reason of avoiding repeated <code>.append</code> method-lookup overhead via dedicated bytecode, not any allocation difference. The preallocation myth is genuinely false for CPython specifically, not merely overstated.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="54.6">
+<h2 data-number="54.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">54.6</span> History and Further Reading</h2>
+<p>The Python <code>io</code> module documentation is the authoritative reference on buffering modes and the actual semantics of the <code>buffering=</code> parameter used in this chapter’s second Exposition section. The <code>mmap</code> module documentation, alongside <code>man 2 mmap</code>, covers the underlying system call <code>mmap</code> wraps and its page-fault and caching behavior in more depth than this chapter’s summary. The Python data model documentation’s section on <code>__slots__</code> gives the authoritative explanation of the <code>__dict__</code>-versus-<code>__slots__</code> memory trade-off. For readers who want to see the amortized-growth strategy behind this chapter’s list-preallocation finding in the actual source, CPython’s <code>Objects/listobject.c</code> implements it directly. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 5, covers the same read-chunk-size mechanism at the scale of feeding GPU clusters from network or NVMe storage, 1MB reads beating 4KB reads for the identical per-call-overhead reason this chapter measures locally, worth reading once this chapter’s single-machine chunk-size result has been seen directly.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="54.7">
+<h2 data-number="54.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">54.7</span> How This Connects</h2>
+<p>This chapter builds on Chapter 53’s fixed-overhead-per-operation lesson, reused here for I/O calls instead of process spawning, and on Chapter 51’s data-structure-choice discipline, extended here to object memory layout. It enables Chapter 55, which revisits the “is this workload memory-bandwidth-bound” framing at the CPU-to-GPU transfer level. The same fixed-per-operation-cost reasoning applies directly to deciding batch sizes for GPU offload. It is often confused with “more buffering/caching is always better.” This chapter’s 16MB-buffering result and the cold-mmap result both directly contradict that assumption in specific, measured ways.</p>
+</section>
+<section id="exercises" class="level2" data-number="54.8">
+<h2 data-number="54.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">54.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-54-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State, in one sentence each, why chunk size 1 and chunk size 1MB differ by more than 600x when reading the identical file, and why the <code>buffering=</code> parameter’s effect is so much smaller than chunk size’s.</p></li>
+<li id="ex-54-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain why <code>mmap</code> measured <em>slower</em> than <code>seek()</code>+<code>read()</code> on a single cold pass in this chapter’s Worked Example, even though <code>mmap</code> is described as a performance optimization.</p></li>
+<li id="ex-54-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-chunk-size" class="quarto-xref">Listing&nbsp;<span>54.1</span></a> as a base, write a version that also reports the number of <code>read()</code> calls made, and predict (before running it) roughly how many calls a 50MB file would need at a 256KB chunk size.</p></li>
+<li id="ex-54-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> A colleague’s class holds 2,000,000 instances of a <code>Point3D</code> class with three float attributes and no need for dynamic attributes. Using this chapter’s 26.7% reduction figure as a guide, estimate the memory saved by adding <code>__slots__</code>, given that the regular-class measurement in this chapter used 120 bytes/object for a two-attribute class.</p></li>
+<li id="ex-54-5"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Modify <a href="#lst-list-prealloc" class="quarto-xref">Listing&nbsp;<span>54.4</span></a> to measure <code>np.append</code>-in-a-loop versus a preallocated <code>np.empty(n)</code> array filled by index, for 100,000 elements, and report which pattern this chapter’s Trade-offs section predicts should win.</p></li>
+<li id="ex-54-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate proposes converting every small class in a data-loading pipeline to use <code>__slots__</code> “for consistency,” including a <code>Config</code> class that user code sometimes monkey-patches with extra attributes at runtime. Using this chapter’s Procedure 54.3, write the two-sentence case against doing this uniformly.</p></li>
+<li id="ex-54-7"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> This chapter’s list-preallocation result is described as “genuinely false for CPython specifically… does not generalize to every container or every language.” Propose one other container (Python or otherwise) where you’d expect preallocation to matter, and justify why its growth strategy differs from CPython <code>list</code>’s.</p></li>
+<li id="ex-54-8"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the <code>mmap</code> module documentation’s section on <code>ACCESS_READ</code> versus <code>ACCESS_WRITE</code> versus <code>ACCESS_COPY</code>. Explain in a sentence or two how a write-heavy access pattern would change this chapter’s cold-versus-warm analysis, which was measured read-only.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="54.9">
+<h2 data-number="54.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">54.9</span> Mental Model</h2>
+<p>Reading a file one byte at a time is like moving a house one book at a time, walking back to the truck after each one. The truck’s capacity is irrelevant if you never load more than one book per trip. <code>mmap</code> is arranging for the boxes to already be sitting in the room you need them in, so grabbing one is just reaching over rather than a whole round trip, genuinely faster once the boxes are actually there, but no help at all for the very first trip that has to fetch them from the truck in the first place.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+</div>
+</section>

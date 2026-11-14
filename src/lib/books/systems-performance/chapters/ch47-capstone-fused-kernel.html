@@ -1,0 +1,240 @@
+<p>Nine chapters built a complete mental model, from the SM (Chapter 38) to the tools that verify and profile a kernel (Chapter 46). This capstone is where all of it gets used together on one real, non-trivial target: LayerNorm, one of the most-executed operations in every transformer forward pass (Book 2’s transformers chapter), fused end-to-end and benchmarked against both a naive decomposition and PyTorch’s own vendor-optimised implementation.</p>
+<section id="motivation" class="level2" data-number="47.1">
+<h2 data-number="47.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">47.1</span> Motivation</h2>
+<p>LayerNorm computes, per row: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi><mo>=</mo><mfrac><mrow><mi>x</mi><mo>−</mo><mtext>mean</mtext><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo></mrow><msqrt><mrow><mtext>var</mtext><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>+</mo><mi>ϵ</mi></mrow></msqrt></mfrac><mo>⋅</mo><mi>w</mi><mo>+</mo><mi>b</mi></mrow><annotation encoding="application/x-tex">y = \frac{x - \text{mean}(x)}{\sqrt{\text{var}(x) + \epsilon}} \cdot w + b</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.8396em;vertical-align:-0.8296em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.01em;"><span style="top:-2.4642em;"><span class="pstrut" style="height:3em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord sqrt mtight"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.0369em;"><span class="svg-align" style="top:-3.4286em;"><span class="pstrut" style="height:3.4286em;"></span><span class="mord mtight" style="padding-left:1.19em;"><span class="mord text mtight"><span class="mord mtight">var</span></span><span class="mopen mtight">(</span><span class="mord mathnormal mtight">x</span><span class="mclose mtight">)</span><span class="mbin mtight">+</span><span class="mord mathnormal mtight">ϵ</span></span></span><span style="top:-3.0089em;"><span class="pstrut" style="height:3.4286em;"></span><span class="hide-tail mtight" style="min-width:0.853em;height:1.5429em;"><svg xmlns="http://www.w3.org/2000/svg" width="400em" height="1.5429em" viewBox="0 0 400000 1080" preserveAspectRatio="xMinYMin slice"><path d="M95,702
+c-2.7,0,-7.17,-2.7,-13.5,-8c-5.8,-5.3,-9.5,-10,-9.5,-14
+c0,-2,0.3,-3.3,1,-4c1.3,-2.7,23.83,-20.7,67.5,-54
+c44.2,-33.3,65.8,-50.3,66.5,-51c1.3,-1.3,3,-2,5,-2c4.7,0,8.7,3.3,12,10
+s173,378,173,378c0.7,0,35.3,-71,104,-213c68.7,-142,137.5,-285,206.5,-429
+c69,-144,104.5,-217.7,106.5,-221
+l0 -0
+c5.3,-9.3,12,-14,20,-14
+H400000v40H845.2724
+s-225.272,467,-225.272,467s-235,486,-235,486c-2.7,4.7,-9,7,-19,7
+c-6,0,-10,-1,-12,-3s-194,-422,-194,-422s-65,47,-65,47z
+M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.4197em;"><span></span></span></span></span></span></span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.485em;"><span class="pstrut" style="height:3em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight"><span class="mord mathnormal mtight">x</span><span class="mbin mtight">−</span><span class="mord text mtight"><span class="mord mtight">mean</span></span><span class="mopen mtight">(</span><span class="mord mathnormal mtight">x</span><span class="mclose mtight">)</span></span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.8296em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6667em;vertical-align:-0.0833em;"></span><span class="mord mathnormal" style="margin-right:0.0269em;">w</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal">b</span></span></span></span>. Written the obvious way in PyTorch, this is five separate operations, mean, variance, subtract, divide, scale-and-shift, each its own kernel launch, each reading and writing the full tensor to global memory. A fused kernel computes the same result in one kernel launch, one read of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span>, one write of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>y</mi></mrow><annotation encoding="application/x-tex">y</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">y</span></span></span></span>, with mean and variance computed as block-level reductions entirely within one program instance. Worked Example 47 below measures exactly how much this costs and saves, on real hardware, against both comparison points a fusion claim needs.</p>
+</section>
+<section id="exposition" class="level2" data-number="47.2">
+<h2 data-number="47.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">47.2</span> Exposition</h2>
+<section id="design-decision-1-triton-not-raw-cuda" class="level3" data-number="47.2.1">
+<h3 data-number="47.2.1" class="anchored" data-anchor-id="design-decision-1-triton-not-raw-cuda"><span class="header-section-number">47.2.1</span> Design Decision 1: Triton, Not Raw CUDA</h3>
+<p>This capstone is built in Triton, following directly from Chapter 44’s finding: LayerNorm is a row-wise reduction-then-elementwise pattern, exactly the shape Triton’s <code>tl.sum</code>/block-level programming model handles well. Chapter 44’s softmax result already showed a hand-written Triton kernel can match vendor-optimised PyTorch on this class of operation. Chapter 45’s raw-CUDA-extension path is a legitimate alternative. The reference material notes what changes if that route is taken instead.</p>
+</section>
+<section id="design-decision-2-one-kernel-three-loads-one-store" class="level3" data-number="47.2.2">
+<h3 data-number="47.2.2" class="anchored" data-anchor-id="design-decision-2-one-kernel-three-loads-one-store"><span class="header-section-number">47.2.2</span> Design Decision 2: One Kernel, Three Loads, One Store</h3>
+<p>The kernel loads <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span> from global memory once per row (not once per pass, as a naive multi-op decomposition would), computes the mean via <code>tl.sum</code> (a block-level reduction, Chapter 42’s tree-reduction idea, generated by Triton’s compiler rather than hand-written), computes the variance from the same loaded values (no second read of <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span> from global memory), normalises, applies the learnable <code>weight</code>/<code>bias</code> (two more small loads), and writes the result once. Every design choice optimises the roofline position (Chapter 43). LayerNorm is memory-bound. Its arithmetic intensity is low, a handful of FLOPs per element, so the entire optimisation lever is reducing bytes moved, not adding cleverness to the arithmetic.</p>
+</section>
+<section id="verification-not-just-speed" class="level3" data-number="47.2.3">
+<h3 data-number="47.2.3" class="anchored" data-anchor-id="verification-not-just-speed"><span class="header-section-number">47.2.3</span> Verification, Not Just Speed</h3>
+<p>Before trusting either number in Worked Example 47, correctness is checked against <code>F.layer_norm</code> directly, the same discipline Chapter 45’s autograd verification and Chapter 46’s <code>compute-sanitizer</code> demonstrations insisted on throughout this book. A fast kernel that’s wrong is worse than a slow one that’s right, and a speed claim without a correctness check alongside it isn’t trustworthy.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="47.3">
+<h2 data-number="47.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">47.3</span> Trade-offs and Limits</h2>
+<p>Fusion’s entire benefit comes from eliminating a redundant read/write between two operations that already share data. Fusing operations that don’t actually share memory traffic adds code complexity for no bandwidth benefit. Fusion is a strong lever specifically for memory-bound sequences (Chapter 43’s roofline classification). For compute-bound operations, Chapter 41’s stencil-tiling result already showed a “should obviously help” optimisation can measure flat or negative. Custom kernels can beat vendor libraries, as this chapter’s Worked Example demonstrates directly, but that’s a genuine, hard-won result on one specific shape and hardware target, not a general claim that hand-written kernels are usually faster than a vendor’s general-purpose implementation, which has to handle many shapes, dtypes, and edge cases well.</p>
+</section>
+<section id="procedures" class="level2" data-number="47.4">
+<h2 data-number="47.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">47.4</span> Procedures</h2>
+<p id="proc-47-1"><strong>Procedure 47.1 (Decide What to Fuse).</strong> <em>When to use:</em> before writing any code. Identify a real fusion candidate rather than assuming one.</p>
+<div id="lst-capstone-fusion-candidate" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-fusion-candidate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;47.1: A roofline-based fusion heuristic
+</figcaption>
+<div aria-describedby="lst-capstone-fusion-candidate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="kw">def</span> is_good_fusion_candidate(operations_in_sequence):</span>
+<span id="cb1-2">    all_memory_bound <span class="op">=</span> <span class="bu">all</span>(</span>
+<span id="cb1-3">        op[<span class="st">'arithmetic_intensity'</span>] <span class="op">&lt;</span> op[<span class="st">'gpu_ridge_point'</span>]</span>
+<span id="cb1-4">        <span class="cf">for</span> op <span class="kw">in</span> operations_in_sequence</span>
+<span id="cb1-5">    )</span>
+<span id="cb1-6">    <span class="co"># each op reads the previous op's output, or the same input</span></span>
+<span id="cb1-7">    <span class="co"># repeatedly</span></span>
+<span id="cb1-8">    shares_data <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb1-9">    enough_ops <span class="op">=</span> <span class="bu">len</span>(operations_in_sequence) <span class="op">&gt;=</span> <span class="dv">2</span></span>
+<span id="cb1-10">    <span class="cf">if</span> all_memory_bound <span class="kw">and</span> shares_data <span class="kw">and</span> enough_ops:</span>
+<span id="cb1-11">        <span class="cf">return</span> (</span>
+<span id="cb1-12">            <span class="st">'Good candidate: fusing removes real memory '</span></span>
+<span id="cb1-13">            <span class="st">'round-trips'</span></span>
+<span id="cb1-14">        )</span>
+<span id="cb1-15">    <span class="cf">if</span> <span class="kw">not</span> all_memory_bound:</span>
+<span id="cb1-16">        <span class="cf">return</span> (</span>
+<span id="cb1-17">            <span class="st">'Check first: if any op is compute-bound, '</span></span>
+<span id="cb1-18">            <span class="st">'fusion may not help'</span></span>
+<span id="cb1-19">        )</span>
+<span id="cb1-20">    <span class="cf">return</span> <span class="st">'Marginal: measure both versions before committing'</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-47-2"><strong>Procedure 47.2 (Build a Fused Reduction-Then-Elementwise Kernel).</strong> <em>When to use:</em> any “reduce across a dimension, then apply the reduced value elementwise” pattern: LayerNorm, softmax, RMSNorm all fit this shape.</p>
+<div id="lst-capstone-fused-kernel" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-fused-kernel-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;47.2: One load, one reduction, one elementwise pass, one store
+</figcaption>
+<div aria-describedby="lst-capstone-fused-kernel-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="at">@triton.jit</span></span>
+<span id="cb2-2"><span class="kw">def</span> fused_kernel(</span>
+<span id="cb2-3">    x_ptr,</span>
+<span id="cb2-4">    out_ptr,</span>
+<span id="cb2-5">    row_stride,</span>
+<span id="cb2-6">    n_cols,</span>
+<span id="cb2-7">    BLOCK_SIZE: tl.constexpr,</span>
+<span id="cb2-8">):</span>
+<span id="cb2-9">    row_idx <span class="op">=</span> tl.program_id(<span class="dv">0</span>)</span>
+<span id="cb2-10">    col_offsets <span class="op">=</span> tl.arange(<span class="dv">0</span>, BLOCK_SIZE)</span>
+<span id="cb2-11">    mask <span class="op">=</span> col_offsets <span class="op">&lt;</span> n_cols</span>
+<span id="cb2-12">    x <span class="op">=</span> tl.load(</span>
+<span id="cb2-13">        x_ptr <span class="op">+</span> row_idx <span class="op">*</span> row_stride <span class="op">+</span> col_offsets,</span>
+<span id="cb2-14">        mask<span class="op">=</span>mask,</span>
+<span id="cb2-15">        other<span class="op">=</span><span class="fl">0.0</span>,</span>
+<span id="cb2-16">    )</span>
+<span id="cb2-17"></span>
+<span id="cb2-18">    <span class="co"># reduce ONCE</span></span>
+<span id="cb2-19">    reduced_value <span class="op">=</span> tl.<span class="bu">sum</span>(x, axis<span class="op">=</span><span class="dv">0</span>) <span class="op">/</span> n_cols</span>
+<span id="cb2-20">    <span class="co"># reuse the SAME loaded x, no second load</span></span>
+<span id="cb2-21">    result <span class="op">=</span> x <span class="op">-</span> reduced_value</span>
+<span id="cb2-22"></span>
+<span id="cb2-23">    tl.store(</span>
+<span id="cb2-24">        out_ptr <span class="op">+</span> row_idx <span class="op">*</span> row_stride <span class="op">+</span> col_offsets,</span>
+<span id="cb2-25">        result,</span>
+<span id="cb2-26">        mask<span class="op">=</span>mask,</span>
+<span id="cb2-27">    )</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> loading <code>x</code> a second time for the elementwise step instead of reusing the values from the first load. The hardware can keep the loaded block in registers/cache between the reduction and elementwise step within the same kernel, and reloading defeats much of the fusion benefit.</p>
+<p id="proc-47-3"><strong>Procedure 47.3 (Verify a Fused Kernel Actually Fused).</strong> <em>When to use:</em> confirming a kernel launches once, not silently decomposing into multiple launches.</p>
+<div id="lst-capstone-verify-fused" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-verify-fused-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;47.3: Counting actual CUDA kernel launches, not assuming from Python structure
+</figcaption>
+<div aria-describedby="lst-capstone-verify-fused-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1">activities <span class="op">=</span> [torch.profiler.ProfilerActivity.CUDA]</span>
+<span id="cb3-2"><span class="cf">with</span> torch.profiler.profile(activities<span class="op">=</span>activities) <span class="im">as</span> prof:</span>
+<span id="cb3-3">    my_fused_op(x)</span>
+<span id="cb3-4">torch.cuda.synchronize()</span>
+<span id="cb3-5">cuda_events <span class="op">=</span> [</span>
+<span id="cb3-6">    e <span class="cf">for</span> e <span class="kw">in</span> prof.key_averages()</span>
+<span id="cb3-7">    <span class="cf">if</span> e.device_type <span class="op">==</span> torch.profiler.DeviceType.CUDA</span>
+<span id="cb3-8">]</span>
+<span id="cb3-9"><span class="co"># Expect exactly 1 for a properly fused kernel</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-47-4"><strong>Procedure 47.4 (Benchmark a Fused Kernel Honestly).</strong> <em>When to use:</em> reporting any speedup claim for fusion work.</p>
+<div id="lst-capstone-bench" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;47.4: Warmup, synchronize, event-timed average
+</figcaption>
+<div aria-describedby="lst-capstone-bench-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="kw">def</span> bench(fn, <span class="op">*</span>args, warmup<span class="op">=</span><span class="dv">10</span>, reps<span class="op">=</span><span class="dv">50</span>):</span>
+<span id="cb4-2">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(warmup):</span>
+<span id="cb4-3">        fn(<span class="op">*</span>args)</span>
+<span id="cb4-4">    torch.cuda.synchronize()</span>
+<span id="cb4-5">    start <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-6">    end <span class="op">=</span> torch.cuda.Event(enable_timing<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-7">    start.record()</span>
+<span id="cb4-8">    <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(reps):</span>
+<span id="cb4-9">        fn(<span class="op">*</span>args)</span>
+<span id="cb4-10">    end.record()</span>
+<span id="cb4-11">    torch.cuda.synchronize()</span>
+<span id="cb4-12">    <span class="cf">return</span> start.elapsed_time(end) <span class="op">/</span> reps</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> benchmarking only against a naive decomposition and reporting that speedup, without also checking whether a vendor-optimised alternative already exists and is faster. A speedup over only the naive version is a much weaker (and potentially misleading) claim than one that also clears the vendor baseline.</p>
+</section>
+<section id="worked-example" class="level2" data-number="47.5">
+<h2 data-number="47.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">47.5</span> Worked Example</h2>
+<p>Four implementations of LayerNorm on a <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mn>2048</mn><mo>×</mo><mn>4096</mn></mrow><annotation encoding="application/x-tex">2048 \times 4096</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.7278em;vertical-align:-0.0833em;"></span><span class="mord">2048</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">×</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">4096</span></span></span></span> input, correctness-verified against <code>F.layer_norm</code> (max absolute error ~2.9e-6, consistent with float32 rounding, not a bug) before any timing was trusted, all measured on this book’s reference rig<span class="ref-rig-mark">†</span>. See the preface:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 33%">
+<col style="width: 33%">
+<col style="width: 33%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Implementation</th>
+<th>Kernel launches</th>
+<th>Time (2048×4096 input)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Naive PyTorch decomposition</td>
+<td><strong>7</strong><span class="ref-rig-mark">†</span></td>
+<td>~0.121 ms<span class="ref-rig-mark">†</span></td>
+</tr>
+<tr class="even">
+<td><code>torch.compile(naive_layernorm)</code></td>
+<td><strong>1</strong><span class="ref-rig-mark">†</span></td>
+<td>~0.036 ms<span class="ref-rig-mark">†</span></td>
+</tr>
+<tr class="odd">
+<td>Native <code>F.layer_norm</code> (vendor-optimised)</td>
+<td><strong>1</strong><span class="ref-rig-mark">†</span></td>
+<td>~0.021 ms<span class="ref-rig-mark">†</span></td>
+</tr>
+<tr class="even">
+<td><strong>This capstone’s Triton kernel</strong></td>
+<td><strong>1</strong><span class="ref-rig-mark">†</span></td>
+<td><strong>~0.018 ms</strong><span class="ref-rig-mark">†</span></td>
+</tr>
+</tbody>
+</table>
+<p>Three results worth sitting with. First, 7 kernels to 1 kernel is roughly a 6.6x speedup for mathematically identical output, Chapter 45’s fusion lesson at a larger, more realistic scale, since LayerNorm is a real, ubiquitous operation rather than a toy example. Second, <code>torch.compile</code>, applied to the naive decomposition with no manual kernel-writing at all, already fuses it into one kernel launch (PyTorch’s own generated Triton kernel, confirmed via Procedure 47.3’s profiler check) and recovers most of the naive version’s lost time, 3.36x faster than naive for a one-line change. This is the “cheapest first resort” ch45’s History section points to: before writing a hand-written kernel, checking what <code>torch.compile</code> alone achieves is nearly free and often enough. Third, <code>torch.compile</code>’s automatic fusion still trails both the vendor’s hand-tuned <code>F.layer_norm</code> (1.70x slower) and this capstone’s hand-written kernel (1.97x slower). The compiler’s general-purpose fusion heuristics did not find the same specialised reduction structure a human targeting this exact shape did. That gap is why hand-written kernels remain a live skill: <code>torch.compile</code> closes most of the distance for free, but not all of it, and knowing when the remaining distance is worth writing a kernel for is itself a judgement call, not automatic. The hand-written capstone kernel being faster than PyTorch’s own vendor-optimised implementation, on top of that, is a genuine, reproducible result on this specific GPU and problem size, not a claim that beating a vendor library is easy or usual. A kernel written for one exact shape and use case can sometimes out-specialise both a general compiler and a general-purpose library implementation that has to handle many shapes, dtypes, and edge cases well.</p>
+<div id="lst-capstone-worked-verify" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-capstone-worked-verify-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;47.5: The correctness check that had to pass before any timing number was trusted
+</figcaption>
+<div aria-describedby="lst-capstone-worked-verify-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">ref_output <span class="op">=</span> torch.nn.functional.layer_norm(x, ...)</span>
+<span id="cb5-2">max_abs_error <span class="op">=</span> (triton_output <span class="op">-</span> ref_output).<span class="bu">abs</span>().<span class="bu">max</span>()</span>
+<span id="cb5-3"><span class="co"># ~2.9e-6: float32 rounding, not a discrepancy in the underlying</span></span>
+<span id="cb5-4"><span class="co"># formula</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<p>Fusion work like this capstone’s kernel is invisible to SageMaker’s managed training/inference services in one sense. A Triton or CUDA extension built this way runs identically whether launched locally or inside a SageMaker Training Job or endpoint container, since SageMaker orchestrates <em>where</em> code runs, not what the code does at the kernel level. Where it becomes visible: a custom fused kernel reduces the memory-bandwidth cost of each forward pass, which directly lowers the <code>ml.g5</code>/<code>ml.p4d</code> instance-hours needed to serve a given throughput target (Book 2’s model deployment and serving chapter covers this capacity-estimation material). The same lever this capstone demonstrates at the kernel level applies at the fleet-sizing level.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="47.6">
+<h2 data-number="47.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">47.6</span> History and Further Reading</h2>
+<p>Ba, Kiros, and Hinton’s “Layer Normalization” <span class="citation" data-cites="ba2016layernormalization">(<a href="#ref-ba2016layernormalization" role="doc-biblioref">Ba et al. 2016</a>)</span> is the original paper for the operation this capstone fuses. The official Triton tutorials’ “Layer Normalization” example is a more advanced version of this capstone’s kernel, including a hand-written backward pass. Fregly’s <em>AI Systems Performance Engineering</em> <span class="citation" data-cites="fregly2026aisystemsperf">(<a href="#ref-fregly2026aisystemsperf" role="doc-biblioref">Fregly 2026</a>)</span>, Chapter 9, works through an almost identical fusion, a block-level L2-normalisation reduction that loads once and writes once, worth reading directly against this capstone’s LayerNorm kernel for how closely the two patterns match.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="47.7">
+<h2 data-number="47.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">47.7</span> How This Connects</h2>
+<p>This chapter builds on every chapter in this book’s GPU-kernels half. It is deliberately the synthesis point, not new material. It connects directly to Book 2’s transformers chapter, where LayerNorm sits inside every transformer block, and to Book 2’s model deployment and serving chapter, which discusses fusion as a lever for reducing memory-bandwidth cost during serving at the system level this capstone demonstrates at the kernel level. It’s often confused with “writing a custom kernel means you’ll always beat the library.” Chapter 44’s softmax result and this capstone’s LayerNorm result are two genuine wins, but Chapters 41 and 43 also contain genuine null results (bank-conflict padding, stencil tiling) where a “should obviously help” optimisation measured as flat or negative. The throughline of this entire book: measure, don’t assume, in either direction.</p>
+</section>
+<section id="exercises" class="level2" data-number="47.8">
+<h2 data-number="47.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">47.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-47-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Write LayerNorm’s formula and state how many separate operations a naive PyTorch decomposition requires versus a fused kernel.</p></li>
+<li id="ex-47-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State Procedure 47.4’s rule about what a fusion benchmark must always compare against, and explain in one sentence why comparing only to the naive version is a weaker claim.</p></li>
+<li id="ex-47-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s measured table (naive 0.121 ms, vendor 0.021 ms, capstone kernel 0.018 ms), compute the speedup of the capstone kernel over the naive decomposition AND over the vendor implementation separately, and explain why reporting only the first number would understate the more impressive claim.</p></li>
+<li id="ex-47-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-capstone-worked-verify" class="quarto-xref">Listing&nbsp;<span>47.5</span></a>’s measured correctness result (~2.9e-6 max absolute error), explain what magnitude of error would have indicated a genuine formula bug rather than float32 rounding, and why “the kernel is 7x faster” would not be a trustworthy claim without this check having passed first.</p></li>
+<li id="ex-47-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague wants to fuse two operations in their pipeline: a matrix multiply followed immediately by a lookup into a large embedding table with no relationship to the matmul’s output. Using Procedure 47.1’s heuristic, explain why this is likely a poor fusion candidate.</p></li>
+<li id="ex-47-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 47.3 warns that a “one Python function call” can hide multiple kernel launches. Describe a concrete scenario, using this chapter’s discussion of dtype handling, where a kernel that looks fused in source code would fail Procedure 47.3’s verification check.</p></li>
+<li id="ex-47-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the official Triton “Layer Normalization” tutorial’s backward-pass implementation. Identify one additional complexity the backward pass introduces that the forward pass in this chapter’s Procedure 47.2 doesn’t need to handle.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="47.9">
+<h2 data-number="47.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">47.9</span> Mental Model</h2>
+<p>This capstone is the book’s Chapter 38-46 thesis statement, executed once: understand the machine, write and correctly measure a kernel against it, choose the right authoring tool for the job, and verify both correctness and performance with real tools rather than intuition, and only then trust the number produced. The Worked Example’s headline result, beating a vendor-optimised implementation, is not the point by itself. The point is that it was earned by the same discipline (roofline classification, correctness verification before timing, comparison against both a naive and a vendor baseline) this book has insisted on since Chapter 38, applied once, together, on a real target.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-ba2016layernormalization" class="csl-entry" role="listitem">
+Ba, Jimmy Lei, Jamie Ryan Kiros, and Geoffrey E. Hinton. 2016. <em>Layer Normalization</em>. <a href="https://arxiv.org/abs/1607.06450" rel="noopener">https://arxiv.org/abs/1607.06450</a>.
+</div>
+<div id="ref-fregly2026aisystemsperf" class="csl-entry" role="listitem">
+Fregly, Chris. 2026. <em>AI Systems Performance Engineering: Optimizing Model Training and Inference Workloads with GPUs, CUDA, and PyTorch</em>. O’Reilly Media.
+</div>
+</div>
+</section>

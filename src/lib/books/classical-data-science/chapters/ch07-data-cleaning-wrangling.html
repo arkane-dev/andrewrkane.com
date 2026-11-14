@@ -1,0 +1,418 @@
+<p>Real-world data does not arrive clean. It comes from databases with NULLs. Scrapers with encoding errors. Manual entry with typos. Merges with duplicate records. Legacy systems whose type conventions made sense years ago but not today. A model trained on top of that doesn’t average the noise away. It often learns the noise <em>better</em> than the signal. Noise tends to be more systematic than it looks. Every data quality problem reduces to one of a small number of categories, no matter how varied the symptom: missing values, outliers, duplicates, wrong types, encoding errors, inconsistent categories, and schema violations. This chapter builds the diagnostic habit and the treatment toolkit for all seven. It argues that cleaning is not a chore that comes before the real work of data science. For most practitioners, on most projects, it <em>is</em> the real work.</p>
+<section id="motivation" class="level2" data-number="7.1">
+<h2 data-number="7.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">7.1</span> Motivation</h2>
+<p>Experienced data scientists report spending 60-80% of their time on data cleaning. Not because they’re inefficient. The work is that large relative to modelling. The reason cleaning matters as much as it does is uneven risk. A model can survive a slightly suboptimal hyperparameter. It cannot survive training on systematically corrupted labels or features. It will faithfully learn the corruption. The discipline this chapter teaches is a repeatable loop that works on any new dataset, regardless of domain, shown in <a href="#fig-cleaning-loop" class="quarto-xref">Figure&nbsp;<span>7.1</span></a>.</p>
+<div id="fig-cleaning-loop" class="quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-cleaning-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<img src="/books/classical-data-science/images/ch07/cleaning-loop.png" class="img-fluid figure-img" style="width:49.0%" alt="The data-cleaning loop: find, understand, decide, validate, then back to find." loading="lazy">
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-cleaning-loop-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Figure&nbsp;7.1: The data-cleaning loop: find, understand, decide, validate, then back to find.
+</figcaption>
+</figure>
+</div>
+<p>That loop is not unique to data cleaning. It is a special case of an older idea: Boyd’s OODA loop, observe, orient, decide, act. Find is observation: what is in the data. Understand is orientation: why it is there, what produced it. Decide keeps its name. Validate plays the role of act. It checks that the decision, once taken, worked, before the next problem gets the same treatment. Skipping straight to treatment without understanding <em>why</em> a value is missing or unusual is the most common way cleaning goes wrong. It is exactly the failure OODA warns against: acting on an assumption instead of on what the data actually shows.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>A Little History: The OODA Loop
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>John Boyd developed the OODA loop as a US Air Force fighter pilot and military strategist, drawing on his analysis of why American F-86 pilots consistently beat the technically superior MiG-15 in Korean War dogfights. His conclusion: the pilot who cycles through observing, orienting, deciding, and acting fastest wins, regardless of whose aircraft is better. Boyd never published the idea as a single paper. It spread through a long unpublished briefing, “Patterns of Conflict,” that he gave throughout the 1970s and 80s. Business strategy, cybersecurity incident response, and sports coaching have since borrowed the loop far outside its military origin, the same way this chapter borrows it for data cleaning.</p>
+</div>
+</div>
+</section>
+<section id="exposition" class="level2" data-number="7.2">
+<h2 data-number="7.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">7.2</span> Exposition</h2>
+<section id="missing-values" class="level3" data-number="7.2.1">
+<h3 data-number="7.2.1" class="anchored" data-anchor-id="missing-values"><span class="header-section-number">7.2.1</span> Missing Values</h3>
+<p>Missing data is one of three different problems, depending on the <em>mechanism</em> that produced the gap. The mechanism determines which treatments are safe:</p>
+<ul>
+<li><strong>MCAR (Missing Completely At Random):</strong> the probability of a value being missing has nothing to do with any other variable: a sensor randomly dropped a reading. This is the safest case: dropping or imputing introduces no systematic bias.</li>
+<li><strong>MAR (Missing At Random):</strong> missingness depends on <em>observed</em> variables, not on the missing value itself. Men might be less likely to report their age. But among men, the missing ages aren’t systematically different from the reported ones. This can still be safely imputed, provided the imputation model has access to the variables that predict missingness.</li>
+<li><strong>MNAR (Missing Not At Random):</strong> missingness depends on the missing value itself: high earners decline to report income more often than everyone else. This is the dangerous case: naive imputation will systematically underestimate the very quantity being estimated. The mechanism that hides values correlates with those values. MNAR requires explicitly modelling the missingness process, not just filling gaps.</li>
+</ul>
+<p>Given a mechanism, imputation strategies form a rough ladder of increasing complexity and (usually) increasing accuracy:</p>
+<ul>
+<li><strong>Drop</strong> rows or columns outright.</li>
+<li><strong>Constant fill</strong>: a fixed value such as 0, <code>"Unknown"</code>, or a sentinel.</li>
+<li><strong>Statistical fill</strong>: the column’s own mean, median, or mode (told you mode had a use).</li>
+<li><strong>Forward/backward fill</strong>: for time series, where the adjacent value is a reasonable estimate.</li>
+<li><strong>K-nearest-neighbours imputation</strong>: estimates a missing value from the most similar rows on other features.</li>
+<li><strong>Model-based imputation</strong>: trains a regression or classifier to predict the missing column from the rest.</li>
+</ul>
+<p>Climbing the ladder costs complexity and compute, and gets us robustness. Dropping is free but throws away information. KNN and model-based imputation are expensive but respect the structure between features.</p>
+</section>
+<section id="outliers" class="level3" data-number="7.2.2">
+<h3 data-number="7.2.2" class="anchored" data-anchor-id="outliers"><span class="header-section-number">7.2.2</span> Outliers</h3>
+<p>An outlier is a value far from the rest of a distribution. But “far” is not automatically “wrong.” A CEO’s salary in a company-wide compensation dataset is a real outlier. Treating it as noise discards signal. The question is always: <em>is this outlier informative or harmful?</em></p>
+<p>Two detection methods dominate practice. The <strong>IQR (interquartile range)</strong> method flags anything outside</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mo stretchy="false">[</mo><mtext> </mtext><msub><mi>Q</mi><mn>1</mn></msub><mo>−</mo><mi>k</mi><mo>⋅</mo><mrow><mi mathvariant="normal">I</mi><mi mathvariant="normal">Q</mi><mi mathvariant="normal">R</mi></mrow><mo separator="true">,</mo><mtext>&nbsp;&nbsp;</mtext><msub><mi>Q</mi><mn>3</mn></msub><mo>+</mo><mi>k</mi><mo>⋅</mo><mrow><mi mathvariant="normal">I</mi><mi mathvariant="normal">Q</mi><mi mathvariant="normal">R</mi></mrow><mtext> </mtext><mo stretchy="false">]</mo><mo separator="true">,</mo><mspace width="2em"></mspace><mrow><mi mathvariant="normal">I</mi><mi mathvariant="normal">Q</mi><mi mathvariant="normal">R</mi></mrow><mo>=</mo><msub><mi>Q</mi><mn>3</mn></msub><mo>−</mo><msub><mi>Q</mi><mn>1</mn></msub><mo separator="true">,</mo><mtext>&nbsp;&nbsp;</mtext><mi>k</mi><mo>=</mo><mn>1.5</mn><mtext>&nbsp;(conventional)</mtext></mrow><annotation encoding="application/x-tex">[\,Q_1 - k \cdot \mathrm{IQR},\ \ Q_3 + k \cdot \mathrm{IQR}\,], \qquad \mathrm{IQR} = Q_3 - Q_1,\ \ k = 1.5\ \text{(conventional)}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mopen">[</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathrm">IQR</span></span><span class="mpunct">,</span><span class="mspace">&nbsp;</span><span class="mspace">&nbsp;</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">+</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6944em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">⋅</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord"><span class="mord mathrm">IQR</span></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mclose">]</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord"><span class="mord mathrm">IQR</span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8889em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span><span class="mpunct">,</span><span class="mspace">&nbsp;</span><span class="mspace">&nbsp;</span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.0315em;">k</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">1.5</span><span class="mspace">&nbsp;</span><span class="mord text"><span class="mord">(conventional)</span></span></span></span></span></span></p>
+<p>and is robust to skew because it’s defined by rank statistics, not the mean.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>What Is a Rank Statistic?
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>A rank statistic is computed from the sorted position of values, their rank, rather than their raw magnitude. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>1</mn></msub></mrow><annotation encoding="application/x-tex">Q_1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>3</mn></msub></mrow><annotation encoding="application/x-tex">Q_3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> are examples: <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>1</mn></msub></mrow><annotation encoding="application/x-tex">Q_1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> is the value 25% of the way through the sorted data, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>3</mn></msub></mrow><annotation encoding="application/x-tex">Q_3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> is the value 75% of the way through, and neither cares how far apart the surrounding values are. Move the largest value in a column from 100 to 100,000 and the mean shifts with it. <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>1</mn></msub></mrow><annotation encoding="application/x-tex">Q_1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>3</mn></msub></mrow><annotation encoding="application/x-tex">Q_3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> don’t move at all, because their position in the sorted order hasn’t changed. That’s the same property Chapter 3 uses to call the median robust to outliers, applied here to quartiles instead of the midpoint.</p>
+</div>
+</div>
+<p>The <strong>z-score</strong> method flags any value with</p>
+<p><span class="katex-display"><span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><semantics><mrow><mi mathvariant="normal">∣</mi><mi>z</mi><mi mathvariant="normal">∣</mi><mo>&gt;</mo><mn>3</mn><mo separator="true">,</mo><mspace width="2em"></mspace><mi>z</mi><mo>=</mo><mfrac><mrow><mi>x</mi><mo>−</mo><mi>μ</mi></mrow><mi>σ</mi></mfrac></mrow><annotation encoding="application/x-tex">|z| &gt; 3, \qquad z = \frac{x - \mu}{\sigma}</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:1em;vertical-align:-0.25em;"></span><span class="mord">∣</span><span class="mord mathnormal" style="margin-right:0.044em;">z</span><span class="mord">∣</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">&gt;</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.8389em;vertical-align:-0.1944em;"></span><span class="mord">3</span><span class="mpunct">,</span><span class="mspace" style="margin-right:2em;"></span><span class="mspace" style="margin-right:0.1667em;"></span><span class="mord mathnormal" style="margin-right:0.044em;">z</span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:1.9463em;vertical-align:-0.686em;"></span><span class="mord"><span class="mopen nulldelimiter"></span><span class="mfrac"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:1.2603em;"><span style="top:-2.314em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span></span></span><span style="top:-3.23em;"><span class="pstrut" style="height:3em;"></span><span class="frac-line" style="border-bottom-width:0.04em;"></span></span><span style="top:-3.677em;"><span class="pstrut" style="height:3em;"></span><span class="mord"><span class="mord mathnormal">x</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mbin">−</span><span class="mspace" style="margin-right:0.2222em;"></span><span class="mord mathnormal">μ</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.686em;"><span></span></span></span></span></span><span class="mclose nulldelimiter"></span></span></span></span></span></span></p>
+<p>Here <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>z</mi></mrow><annotation encoding="application/x-tex">z</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.044em;">z</span></span></span></span> is the number of standard deviations <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>x</mi></mrow><annotation encoding="application/x-tex">x</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal">x</span></span></span></span> sits from the mean <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>μ</mi></mrow><annotation encoding="application/x-tex">\mu</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.625em;vertical-align:-0.1944em;"></span><span class="mord mathnormal">μ</span></span></span></span>, using the mean and standard deviation <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi></mrow><annotation encoding="application/x-tex">\sigma</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span></span></span></span> from Chapter 3. Unlike a rank statistic, <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>z</mi></mrow><annotation encoding="application/x-tex">z</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.044em;">z</span></span></span></span> is computed from raw magnitude. That’s exactly why it’s simple and interpretable. But it assumes an approximately normal distribution. It’s also somewhat circular: a genuine outlier inflates <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><mi>σ</mi></mrow><annotation encoding="application/x-tex">\sigma</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.4306em;"></span><span class="mord mathnormal" style="margin-right:0.0359em;">σ</span></span></span></span> and can mask itself. Both are single-variable methods. Multivariate anomaly detection (Isolation Forest and its relatives, covered in Chapter 19) is needed when “unusual” only shows up in the <em>combination</em> of features rather than any one alone.</p>
+<p>Once detected, treatment is a judgement call:</p>
+<ul>
+<li><strong>Remove</strong> a value only when it’s clearly an error, an age of 300, for instance.</li>
+<li><strong>Cap</strong> (winsorise) it: replace values beyond a percentile threshold with the threshold. Use this when the value is real but shouldn’t be allowed to dominate a model fit on scale-sensitive algorithms.</li>
+<li><strong>Transform</strong> (typically log) a skewed distribution, to compress its tail rather than discard information from it.</li>
+<li><strong>Flag and keep</strong>: add a binary <code>is_outlier</code> column and let the model decide. This works well for tree-based models that can split on the flag directly.</li>
+</ul>
+</section>
+<section id="duplicates" class="level3" data-number="7.2.3">
+<h3 data-number="7.2.3" class="anchored" data-anchor-id="duplicates"><span class="header-section-number">7.2.3</span> Duplicates</h3>
+<p>Duplicate rows are quietly catastrophic for machine learning. They corrupt evaluation, not just training. If some fraction of the training set is duplicated into the test set, reported accuracy is inflated by testing on examples the model has effectively memorised. The model looks better than it is. That gap only surfaces in production. The check is one line: <code>df.duplicated().sum()</code>. The fix requires judgement. Are the duplicates <em>exact</em>, every column matching? Then dropping is safe. Are they <em>partial</em>, same ID but a different timestamp (a re-submission or an update)? Then the right row to keep, first, last, or the one with the most complete data, depends on what the ID represents.</p>
+<div class="callout callout-style-default callout-note callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Note</span>Memorisation at Internet Scale
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>The same failure mode shows up at a much larger scale with generative AI. Internet-scale pretraining corpora overlap heavily with the questions people later ask these models. A language model’s strong performance on a question is partly recall of material it has already seen, not proof of general reasoning. Performance measurably drops on questions that fall outside that training distribution. Chapter 29 covers how transformer models are trained on corpora at this scale, and revisits this memorisation question directly.</p>
+</div>
+</div>
+</section>
+<section id="type-coercion" class="level3" data-number="7.2.4">
+<h3 data-number="7.2.4" class="anchored" data-anchor-id="type-coercion"><span class="header-section-number">7.2.4</span> Type Coercion</h3>
+<p>pandas reads everything from a CSV as text by default. Columns that look numeric or date-like can silently load as generic text objects. Operating on such a column as text instead of numbers is a quiet, persistent source of bugs: string comparison orders lexically, so <code>'10' &gt; '9'</code> evaluates to <code>False</code> (because <code>'1' &lt; '9'</code> character-by-character). The numeric comparison <code>10 &gt; 9</code> is <code>True</code>. The fix is to validate types immediately after loading data, before any filtering or aggregation touches it. Type errors compound: a wrong-typed column silently produces wrong-typed derived columns.</p>
+</section>
+<section id="encoding-errors" class="level3" data-number="7.2.5">
+<h3 data-number="7.2.5" class="anchored" data-anchor-id="encoding-errors"><span class="header-section-number">7.2.5</span> Encoding Errors</h3>
+<p>Text has to be stored as bytes. Turning bytes back into characters means picking a character encoding: UTF-8, Latin-1 (ISO-8859-1), Windows-1252, and a handful of others are all still common. Read a file with the wrong one and the bytes don’t change, but the characters they turn back into do. A city name saved as UTF-8 and mistakenly read back as Latin-1 turns <code>São Paulo</code> into <code>SÃ£o Paulo</code>: the same underlying bytes, decoded through the wrong lookup table. This kind of corruption, known as mojibake, is silent. Nothing crashes. The column still loads, still looks like a string, and one real category quietly splits into two, <code>São Paulo</code> and <code>SÃ£o Paulo</code> sitting side by side as if they were different cities.</p>
+<p>Plain ASCII text (letters, digits, common punctuation) survives a wrong-encoding read unharmed. That’s exactly why encoding errors are easy to miss: they only show up on the accented or non-Latin characters a dataset happens to contain. A column of English-only names can hide the same bug a column of international city names exposes immediately. Detection is mostly a matter of looking: scan <code>value_counts()</code> for a suspicious repeated pattern like <code>Ã</code> followed by another character, or count non-ASCII bytes directly. The fix, when the corruption follows the common UTF-8-read-as-Latin-1 pattern, is to run the mismatch backwards: re-encode the mangled string as Latin-1 to recover the original bytes, then decode those bytes as UTF-8 to get the real text back. When that round trip doesn’t fully explain the corruption, re-reading the source file with the correct <code>encoding=</code> argument from the start is the safer fix.</p>
+</section>
+<section id="inconsistent-categories" class="level3" data-number="7.2.6">
+<h3 data-number="7.2.6" class="anchored" data-anchor-id="inconsistent-categories"><span class="header-section-number">7.2.6</span> Inconsistent Categories</h3>
+<p>Free-text categorical data is almost always inconsistent. It was typed by different people, systems, or eras. A gender column might contain <code>'female'</code>, <code>'Female'</code>, <code>'F'</code>, <code>'woman'</code>, and <code>'FEMALE'</code>: five spellings of the same underlying category. But to any model that one-hot encodes or otherwise treats string values literally, they’re five <em>distinct</em> categories. The fix is aggressive normalisation: strip whitespace and lowercase as a floor, then explicitly map every observed variant to a small set of canonical values. And check what’s left unmapped. An unmapped value silently becomes missing.</p>
+</section>
+<section id="schema-violations" class="level3" data-number="7.2.7">
+<h3 data-number="7.2.7" class="anchored" data-anchor-id="schema-violations"><span class="header-section-number">7.2.7</span> Schema Violations</h3>
+<p>A schema violation is a value that has the right type but breaks the rule that type is supposed to follow. <code>'not a date'</code> in a date column is not a type error. Python is perfectly happy holding it as a string. It’s a schema violation: the column’s whole reason for existing is to hold valid dates, and this value doesn’t. The same pattern shows up as a negative age, a percentage over 100, an email address with no <code>@</code>, or a customer ID that points to a customer who was never created. Each of those parses fine and fails silently at the level that matters: meaning, not type.</p>
+<p>Type Coercion (above) and schema violations often get caught by the same code, since forcing a column through <code>pd.to_datetime()</code> or <code>pd.to_numeric()</code> with <code>errors='coerce'</code> turns anything that isn’t a date, or isn’t a number, into a missing value automatically. But the two problems aren’t the same thing. Type coercion asks <em>can this be parsed as the right type at all</em>. A schema violation can pass that test and still be wrong: age <code>-5</code> parses as a perfectly good integer. Catching that kind needs an explicit rule about what the field is allowed to mean, not just what it’s allowed to look like. That’s exactly what Procedure 7.6’s validation rules are for.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="7.3">
+<h2 data-number="7.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">7.3</span> Trade-offs and Limits</h2>
+<p>The decision of whether to drop or impute a column comes down to how much is missing and why: dropping rows is safe when missingness is under roughly 5% and MCAR. The information loss is small and the bias risk is near zero. Above that threshold, or when the missing column matters to the outcome, imputation preserves far more of the dataset at the cost of introducing an estimate where a real value should be. One rule with no exceptions: never impute the target variable (the label). <em>Doing so is label fabrication</em>. The model would be trained, in part, on predictions of itself.</p>
+<p>The decision of whether to remove or cap an outlier follows similar logic. Remove only when the value is clearly an error. Cap when it might be genuine but shouldn’t be allowed to dominate a distance- or gradient-sensitive model. Flag and keep when outliers are themselves predictive. In fraud, sensor-failure, and financial contexts, they often are. The one step in this whole chapter that is never optional is validation. After any cleaning operation, compare the before/after distribution of every column that was touched. A cleaning step that silently collapses meaningful variation (over-aggressive winsorising that flattens a bimodal distribution, for instance) produces a dataset that is <em>cleaner-looking</em> but worse than the original. The damage is now invisible.</p>
+</section>
+<section id="procedures" class="level2" data-number="7.4">
+<h2 data-number="7.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">7.4</span> Procedures</h2>
+<p id="proc-7-1"><strong>Procedure 7.1 (Find and Remove Duplicates).</strong> <em>When to use:</em> as the first cleaning step on any new dataset, before anything else touches it.</p>
+<div id="lst-dedupe" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-dedupe-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.1: Detecting and removing duplicate rows, exact and partial
+</figcaption>
+<div aria-describedby="lst-dedupe-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="co"># How many exact duplicates?</span></span>
+<span id="cb1-2">df.duplicated().<span class="bu">sum</span>()</span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="co"># Remove duplicates (keep first occurrence)</span></span>
+<span id="cb1-5">df <span class="op">=</span> df.drop_duplicates()</span>
+<span id="cb1-6">df <span class="op">=</span> df.reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb1-7"></span>
+<span id="cb1-8"><span class="co"># Deduplicate on a subset of columns</span></span>
+<span id="cb1-9"><span class="co"># (e.g. same ID, different timestamps)</span></span>
+<span id="cb1-10">df <span class="op">=</span> df.drop_duplicates(subset<span class="op">=</span>[<span class="st">'id'</span>], keep<span class="op">=</span><span class="st">'last'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> dropping duplicates without <code>reset_index(drop=True)</code> afterwards. Later <code>.iloc[]</code> lookups then silently use the wrong rows. The index still has gaps from the removed rows.</p>
+<p id="proc-7-2"><strong>Procedure 7.2 (Cast Column Types).</strong> <em>When to use:</em> immediately after loading data, before any analysis or filtering. Never after. A wrong type propagates into every downstream computation.</p>
+<div id="lst-cast-types" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-cast-types-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.2: Coercing text columns to their true numeric, datetime, and categorical types
+</figcaption>
+<div aria-describedby="lst-cast-types-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="co"># Numeric (coerce converts unparseable values to NaN</span></span>
+<span id="cb2-2"><span class="co"># rather than raising)</span></span>
+<span id="cb2-3">df[<span class="st">'col'</span>] <span class="op">=</span> pd.to_numeric(df[<span class="st">'col'</span>], errors<span class="op">=</span><span class="st">'coerce'</span>)</span>
+<span id="cb2-4"></span>
+<span id="cb2-5"><span class="co"># Datetime -- explicit format is both faster and safer</span></span>
+<span id="cb2-6"><span class="co"># than inference</span></span>
+<span id="cb2-7">df[<span class="st">'date'</span>] <span class="op">=</span> pd.to_datetime(</span>
+<span id="cb2-8">    df[<span class="st">'date'</span>], <span class="bu">format</span><span class="op">=</span><span class="st">'%Y-%m-</span><span class="sc">%d</span><span class="st">'</span>, errors<span class="op">=</span><span class="st">'coerce'</span></span>
+<span id="cb2-9">)</span>
+<span id="cb2-10"></span>
+<span id="cb2-11"><span class="co"># Category (saves memory, enables category-aware operations)</span></span>
+<span id="cb2-12">df[<span class="st">'col'</span>] <span class="op">=</span> df[<span class="st">'col'</span>].astype(<span class="st">'category'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-7-3"><strong>Procedure 7.3 (Normalise String and Category Columns).</strong> <em>When to use:</em> any free-text category column sourced from user input or a merge of multiple systems.</p>
+<div id="lst-normalise-category" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-normalise-category-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.3: Normalising inconsistent category spellings to a canonical set
+</figcaption>
+<div aria-describedby="lst-normalise-category-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># Step 1: strip whitespace, lowercase</span></span>
+<span id="cb3-2">df[<span class="st">'col'</span>] <span class="op">=</span> df[<span class="st">'col'</span>].<span class="bu">str</span>.strip().<span class="bu">str</span>.lower()</span>
+<span id="cb3-3"></span>
+<span id="cb3-4"><span class="co"># Step 2: map every observed variant to a canonical value</span></span>
+<span id="cb3-5">mapping <span class="op">=</span> {</span>
+<span id="cb3-6">    <span class="st">'male'</span>: <span class="st">'male'</span>, <span class="st">'m'</span>: <span class="st">'male'</span>, <span class="st">'man'</span>: <span class="st">'male'</span>,</span>
+<span id="cb3-7">    <span class="st">'female'</span>: <span class="st">'female'</span>, <span class="st">'f'</span>: <span class="st">'female'</span>, <span class="st">'woman'</span>: <span class="st">'female'</span>,</span>
+<span id="cb3-8">}</span>
+<span id="cb3-9">df[<span class="st">'col'</span>] <span class="op">=</span> df[<span class="st">'col'</span>].<span class="bu">map</span>(mapping)</span>
+<span id="cb3-10"></span>
+<span id="cb3-11"><span class="co"># Anything that didn't match the mapping becomes NaN --</span></span>
+<span id="cb3-12"><span class="co"># always check for it</span></span>
+<span id="cb3-13">unmapped <span class="op">=</span> df[df[<span class="st">'col'</span>].isnull()][<span class="st">'col'</span>].value_counts()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> applying the mapping without first checking <code>unmapped</code>. A variant that wasn’t anticipated (<code>'Mal'</code>, a typo) silently becomes missing data instead of raising a visible error.</p>
+<p id="proc-7-4"><strong>Procedure 7.4 (Detect and Handle Outliers).</strong> <em>When to use:</em> after imputation, before feature engineering. Outliers in a column with missing values can otherwise distort the very statistics (mean, quantiles) used to detect them.</p>
+<div id="lst-outliers" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-outliers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.4: IQR-based outlier detection with two treatment options
+</figcaption>
+<div aria-describedby="lst-outliers-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="kw">def</span> iqr_bounds(series, factor<span class="op">=</span><span class="fl">1.5</span>):</span>
+<span id="cb4-2">    q1, q3 <span class="op">=</span> series.quantile(<span class="fl">0.25</span>), series.quantile(<span class="fl">0.75</span>)</span>
+<span id="cb4-3">    iqr <span class="op">=</span> q3 <span class="op">-</span> q1</span>
+<span id="cb4-4">    <span class="cf">return</span> q1 <span class="op">-</span> factor <span class="op">*</span> iqr, q3 <span class="op">+</span> factor <span class="op">*</span> iqr</span>
+<span id="cb4-5"></span>
+<span id="cb4-6">lower, upper <span class="op">=</span> iqr_bounds(df[<span class="st">'col'</span>])</span>
+<span id="cb4-7">outliers <span class="op">=</span> df[(df[<span class="st">'col'</span>] <span class="op">&lt;</span> lower) <span class="op">|</span> (df[<span class="st">'col'</span>] <span class="op">&gt;</span> upper)]</span>
+<span id="cb4-8"></span>
+<span id="cb4-9"><span class="co"># Treatment A: winsorise (cap) -- keeps the row,</span></span>
+<span id="cb4-10"><span class="co"># limits its influence</span></span>
+<span id="cb4-11">df[<span class="st">'col'</span>] <span class="op">=</span> df[<span class="st">'col'</span>].clip(lower<span class="op">=</span>lower, upper<span class="op">=</span>upper)</span>
+<span id="cb4-12"></span>
+<span id="cb4-13"><span class="co"># Treatment B: flag and let the model decide</span></span>
+<span id="cb4-14">df[<span class="st">'col_is_outlier'</span>] <span class="op">=</span> (</span>
+<span id="cb4-15">    (df[<span class="st">'col'</span>] <span class="op">&lt;</span> lower) <span class="op">|</span> (df[<span class="st">'col'</span>] <span class="op">&gt;</span> upper)</span>
+<span id="cb4-16">).astype(<span class="bu">int</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-7-5"><strong>Procedure 7.5 (Impute Missing Values).</strong> <em>When to use:</em> after deduplication and type coercion, so the imputer sees clean numeric columns rather than text.</p>
+<div id="lst-impute" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-impute-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.5: Imputation strategies ordered from simplest to most structure-aware
+</figcaption>
+<div aria-describedby="lst-impute-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="im">from</span> sklearn.impute <span class="im">import</span> KNNImputer</span>
+<span id="cb5-2"></span>
+<span id="cb5-3"><span class="co"># Median imputation -- robust to skew and outliers, good</span></span>
+<span id="cb5-4"><span class="co"># default for numeric columns</span></span>
+<span id="cb5-5">df[<span class="st">'col'</span>] <span class="op">=</span> df[<span class="st">'col'</span>].fillna(df[<span class="st">'col'</span>].median())</span>
+<span id="cb5-6"></span>
+<span id="cb5-7"><span class="co"># KNN imputation -- estimates a missing value from the k</span></span>
+<span id="cb5-8"><span class="co"># most similar rows</span></span>
+<span id="cb5-9">imputer <span class="op">=</span> KNNImputer(n_neighbors<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb5-10">df[[<span class="st">'col_a'</span>, <span class="st">'col_b'</span>]] <span class="op">=</span> imputer.fit_transform(</span>
+<span id="cb5-11">    df[[<span class="st">'col_a'</span>, <span class="st">'col_b'</span>]]</span>
+<span id="cb5-12">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> fitting the imputer on the full dataset, including the test set. This leaks test-set statistics into training. Fit only on the training split, then <code>.transform()</code> the test split with that same fitted imputer.</p>
+<p id="proc-7-6"><strong>Procedure 7.6 (Validate a Cleaned Dataset).</strong> <em>When to use:</em> after every cleaning step, and always as the final gate before a cleaned dataset is handed to modelling.</p>
+<div id="lst-validate" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-validate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.6: A small rule-based validator for a cleaned dataset
+</figcaption>
+<div aria-describedby="lst-validate-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="kw">def</span> validate_dataset(df, rules):</span>
+<span id="cb6-2">    all_passed <span class="op">=</span> <span class="va">True</span></span>
+<span id="cb6-3">    <span class="cf">for</span> check, description <span class="kw">in</span> rules:</span>
+<span id="cb6-4">        passed <span class="op">=</span> check(df)</span>
+<span id="cb6-5">        <span class="bu">print</span>(<span class="ss">f"</span><span class="sc">{</span><span class="st">'OK'</span> <span class="cf">if</span> passed <span class="cf">else</span> <span class="st">'FAILED'</span><span class="sc">}</span><span class="ss">  </span><span class="sc">{</span>description<span class="sc">}</span><span class="ss">"</span>)</span>
+<span id="cb6-6">        all_passed <span class="op">=</span> all_passed <span class="kw">and</span> passed</span>
+<span id="cb6-7">    <span class="cf">return</span> all_passed</span>
+<span id="cb6-8"></span>
+<span id="cb6-9">rules <span class="op">=</span> [</span>
+<span id="cb6-10">    (<span class="kw">lambda</span> d: d.isnull().<span class="bu">sum</span>().<span class="bu">sum</span>() <span class="op">==</span> <span class="dv">0</span>, <span class="st">'No missing values'</span>),</span>
+<span id="cb6-11">    (<span class="kw">lambda</span> d: d.duplicated().<span class="bu">sum</span>() <span class="op">==</span> <span class="dv">0</span>,    <span class="st">'No duplicate rows'</span>),</span>
+<span id="cb6-12">    (<span class="kw">lambda</span> d: (d[<span class="st">'age'</span>] <span class="op">&gt;=</span> <span class="dv">16</span>).<span class="bu">all</span>(),       <span class="st">'All ages &gt;= 16'</span>),</span>
+<span id="cb6-13">    (</span>
+<span id="cb6-14">        <span class="kw">lambda</span> d: (d[<span class="st">'salary'</span>] <span class="op">&gt;</span> <span class="dv">0</span>).<span class="bu">all</span>(),</span>
+<span id="cb6-15">        <span class="st">'All salaries positive'</span>,</span>
+<span id="cb6-16">    ),</span>
+<span id="cb6-17">]</span>
+<span id="cb6-18">validate_dataset(df, rules)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-7-7"><strong>Procedure 7.7 (Wrap Cleaning Steps in a Pipeline and ColumnTransformer).</strong> <em>When to use:</em> once the cleaning steps above are validated and stable. It turns them into a single reusable object and closes off leakage by construction, not by discipline alone.</p>
+<div id="lst-column-transformer" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-column-transformer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.7: Column-specific cleaning steps combined into one fit/transform object
+</figcaption>
+<div aria-describedby="lst-column-transformer-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="im">from</span> sklearn.compose <span class="im">import</span> ColumnTransformer</span>
+<span id="cb7-2"><span class="im">from</span> sklearn.pipeline <span class="im">import</span> Pipeline</span>
+<span id="cb7-3"><span class="im">from</span> sklearn.impute <span class="im">import</span> SimpleImputer, KNNImputer</span>
+<span id="cb7-4"><span class="im">from</span> sklearn.preprocessing <span class="im">import</span> OneHotEncoder</span>
+<span id="cb7-5"></span>
+<span id="cb7-6">numeric_cols <span class="op">=</span> [<span class="st">'age'</span>, <span class="st">'salary'</span>, <span class="st">'years_exp'</span>]</span>
+<span id="cb7-7">categorical_cols <span class="op">=</span> [<span class="st">'gender'</span>]</span>
+<span id="cb7-8"></span>
+<span id="cb7-9">numeric_pipeline <span class="op">=</span> Pipeline([</span>
+<span id="cb7-10">    (<span class="st">'impute'</span>, KNNImputer(n_neighbors<span class="op">=</span><span class="dv">5</span>)),</span>
+<span id="cb7-11">])</span>
+<span id="cb7-12">categorical_pipeline <span class="op">=</span> Pipeline([</span>
+<span id="cb7-13">    (<span class="st">'impute'</span>, SimpleImputer(strategy<span class="op">=</span><span class="st">'most_frequent'</span>)),</span>
+<span id="cb7-14">    (<span class="st">'encode'</span>, OneHotEncoder(handle_unknown<span class="op">=</span><span class="st">'ignore'</span>)),</span>
+<span id="cb7-15">])</span>
+<span id="cb7-16"></span>
+<span id="cb7-17">preprocessor <span class="op">=</span> ColumnTransformer([</span>
+<span id="cb7-18">    (<span class="st">'num'</span>, numeric_pipeline, numeric_cols),</span>
+<span id="cb7-19">    (<span class="st">'cat'</span>, categorical_pipeline, categorical_cols),</span>
+<span id="cb7-20">])</span>
+<span id="cb7-21"></span>
+<span id="cb7-22"><span class="co"># Fit only on the training split</span></span>
+<span id="cb7-23">X_train_clean <span class="op">=</span> preprocessor.fit_transform(X_train)</span>
+<span id="cb7-24"><span class="co"># Test data only ever gets transformed, never fit</span></span>
+<span id="cb7-25">X_test_clean <span class="op">=</span> preprocessor.transform(X_test)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> calling <code>.fit_transform()</code> on the test set too, “to keep it consistent with training.” That re-introduces the exact leakage Procedure 7.5 already warned against, just one level up. The <code>ColumnTransformer</code> only prevents leakage by construction if it’s fit once, on the training split, and every other split only ever calls <code>.transform()</code>.</p>
+</section>
+<section id="worked-example" class="level2" data-number="7.5">
+<h2 data-number="7.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">7.5</span> Worked Example</h2>
+<p>The tutorial notebook behind this chapter builds its own mess deliberately. It generates a synthetic 500-employee dataset, then poisons it with every problem category from this chapter. That way the exact set of defects is known in advance. The cleaning pipeline can be checked against ground truth. Five exact-duplicate rows are appended and the whole set shuffled, producing a raw shape of <strong>(505, 8)</strong>.</p>
+<div id="lst-messy-build" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-messy-build-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.8: Deliberately poisoning a clean synthetic dataset with every defect category
+</figcaption>
+<div aria-describedby="lst-messy-build-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1">ages <span class="op">=</span> np.random.randint(<span class="dv">22</span>, <span class="dv">65</span>, n).astype(<span class="bu">float</span>)</span>
+<span id="cb8-2">missing_age_idx <span class="op">=</span> np.random.choice(n, <span class="dv">40</span>, replace<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb8-3">ages[missing_age_idx] <span class="op">=</span> np.nan</span>
+<span id="cb8-4">ages[<span class="dv">0</span>] <span class="op">=</span> <span class="dv">312</span>  <span class="co"># typo outlier</span></span>
+<span id="cb8-5"></span>
+<span id="cb8-6">salaries <span class="op">=</span> np.random.normal(<span class="dv">70_000</span>, <span class="dv">15_000</span>, n)</span>
+<span id="cb8-7">salaries <span class="op">=</span> np.clip(salaries, <span class="dv">30_000</span>, <span class="dv">200_000</span>)</span>
+<span id="cb8-8"><span class="co"># Data entry errors</span></span>
+<span id="cb8-9">salaries[np.random.choice(n, <span class="dv">5</span>, replace<span class="op">=</span><span class="va">False</span>)] <span class="op">=</span> <span class="dv">999_999</span></span>
+<span id="cb8-10">missing_sal_idx <span class="op">=</span> np.random.choice(n, <span class="dv">25</span>, replace<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb8-11">salaries[missing_sal_idx] <span class="op">=</span> np.nan</span>
+<span id="cb8-12"></span>
+<span id="cb8-13"><span class="co"># Wrong type</span></span>
+<span id="cb8-14">experience_str <span class="op">=</span> [<span class="bu">str</span>(e) <span class="cf">for</span> e <span class="kw">in</span> np.random.randint(<span class="dv">0</span>, <span class="dv">30</span>, n)]</span>
+<span id="cb8-15"></span>
+<span id="cb8-16"><span class="co"># Encoding errors: UTF-8 city names read back as Latin-1</span></span>
+<span id="cb8-17">office_cities_messy <span class="op">=</span> <span class="bu">list</span>(office_cities)</span>
+<span id="cb8-18"><span class="cf">for</span> i <span class="kw">in</span> np.random.choice(n, <span class="dv">8</span>, replace<span class="op">=</span><span class="va">False</span>):</span>
+<span id="cb8-19">    city <span class="op">=</span> office_cities_messy[i]</span>
+<span id="cb8-20">    office_cities_messy[i] <span class="op">=</span> city.encode(<span class="st">'utf-8'</span>).decode(<span class="st">'latin1'</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>The diagnostic pass (Procedure 7.1’s <code>.duplicated()</code> plus <code>.isnull().sum()</code> and <code>.dtypes</code>) finds exactly what was planted. <code>age</code> is missing in <strong>39 of 505 rows (7.7%)</strong>, <code>salary</code> in <strong>25 rows (5.0%)</strong>. There are <strong>5 exact duplicate rows</strong>. <code>years_exp</code> loaded as text instead of a number. And the raw <code>age</code> column’s maximum is <strong>312</strong>, an obvious typo outlier no legitimate employee could have. Gender arrives split across ten spellings of two real categories (<code>'M'</code>, <code>'male'</code>, <code>'Male'</code>, <code>'MALE'</code>, <code>'man'</code> and their female equivalents). Two <code>hire_date</code> entries are schema violations, syntactically fine strings that aren’t valid dates (<code>'not a date'</code> and an empty string). And <code>office_city</code> carries a real encoding error: 8 rows had their city name corrupted with a UTF-8-read-as-Latin-1 mismatch, and 7 of the 8 show up visibly mangled (<code>São Paulo</code> as <code>SÃ£o Paulo</code>, and so on). The eighth happened to land on a plain-ASCII city name, which the corruption passes straight through unchanged, invisible until it’s understood <em>why</em>.</p>
+<p>Cleaning proceeds in the order this chapter argues for, duplicates first, then types, then categories, then encoding, then outliers, then missingness, then validation:</p>
+<div id="lst-clean-pipeline" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-clean-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;7.9: The cleaning pipeline applied in dependency order
+</figcaption>
+<div aria-describedby="lst-clean-pipeline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><span class="co"># 505 -&gt; 500 rows</span></span>
+<span id="cb9-2">df <span class="op">=</span> df_raw.drop_duplicates().reset_index(drop<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb9-3"></span>
+<span id="cb9-4">df[<span class="st">'years_exp'</span>] <span class="op">=</span> pd.to_numeric(df[<span class="st">'years_exp'</span>], errors<span class="op">=</span><span class="st">'coerce'</span>)</span>
+<span id="cb9-5"><span class="co"># 2 -&gt; NaT</span></span>
+<span id="cb9-6">df[<span class="st">'hire_date'</span>] <span class="op">=</span> pd.to_datetime(df[<span class="st">'hire_date'</span>], errors<span class="op">=</span><span class="st">'coerce'</span>)</span>
+<span id="cb9-7"></span>
+<span id="cb9-8">df[<span class="st">'gender'</span>] <span class="op">=</span> (</span>
+<span id="cb9-9">    df[<span class="st">'gender'</span>].<span class="bu">str</span>.strip().<span class="bu">str</span>.lower().<span class="bu">map</span>(gender_map)</span>
+<span id="cb9-10">)</span>
+<span id="cb9-11"></span>
+<span id="cb9-12"><span class="co"># Reverse the encoding mismatch: 7 mangled entries repaired</span></span>
+<span id="cb9-13">df[<span class="st">'office_city'</span>] <span class="op">=</span> df[<span class="st">'office_city'</span>].<span class="bu">apply</span>(</span>
+<span id="cb9-14">    <span class="kw">lambda</span> s: s.encode(<span class="st">'latin1'</span>).decode(<span class="st">'utf-8'</span>)</span>
+<span id="cb9-15">)</span>
+<span id="cb9-16"></span>
+<span id="cb9-17"><span class="co"># 312 -&gt; 90</span></span>
+<span id="cb9-18">df[<span class="st">'age'</span>] <span class="op">=</span> df[<span class="st">'age'</span>].clip(lower<span class="op">=</span><span class="dv">16</span>, upper<span class="op">=</span><span class="dv">90</span>)</span>
+<span id="cb9-19">p01, p99 <span class="op">=</span> df[<span class="st">'salary'</span>].quantile([<span class="fl">0.01</span>, <span class="fl">0.99</span>])</span>
+<span id="cb9-20"><span class="co"># 999999 -&gt; 112869</span></span>
+<span id="cb9-21">df[<span class="st">'salary'</span>] <span class="op">=</span> df[<span class="st">'salary'</span>].clip(p01, p99)</span>
+<span id="cb9-22"></span>
+<span id="cb9-23"><span class="co"># median = 42</span></span>
+<span id="cb9-24">df[<span class="st">'age'</span>] <span class="op">=</span> df[<span class="st">'age'</span>].fillna(df[<span class="st">'age'</span>].median())</span>
+<span id="cb9-25">imputer <span class="op">=</span> KNNImputer(n_neighbors<span class="op">=</span><span class="dv">5</span>)</span>
+<span id="cb9-26">impute_cols <span class="op">=</span> [<span class="st">'age'</span>, <span class="st">'salary'</span>, <span class="st">'years_exp'</span>]</span>
+<span id="cb9-27">df[impute_cols] <span class="op">=</span> imputer.fit_transform(df[impute_cols])</span>
+<span id="cb9-28"><span class="co"># Drops 2 NaT rows</span></span>
+<span id="cb9-29">df <span class="op">=</span> df.dropna(subset<span class="op">=</span>[<span class="st">'hire_date'</span>])</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Running that pipeline on the actual generated data, deduplication takes the row count from 505 to exactly 500. The encoding repair recovers all 7 visibly mangled <code>office_city</code> entries back into their correct categories: <code>São Paulo</code> goes from 103 correctly-spelled plus 5 mangled to 108 correctly-spelled, and the same pattern repairs <code>Montréal</code> and <code>Zürich</code>. That confirms the UTF-8/Latin-1 round trip was the right diagnosis, not a guess. Domain-knowledge capping brings the age maximum down from 312 to 90. The IQR method alone flags only 1 outlier in the age column. It doesn’t by itself catch a single extreme value sitting far past <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>3</mn></msub></mrow><annotation encoding="application/x-tex">Q_3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span>. That’s exactly why the domain-knowledge cap of <code>[16, 90]</code> is applied on top of it rather than instead of it. Winsorising salary at the 1st/99th percentile takes the range from <strong>$30,000–$999,999</strong> down to <strong>$33,061–$112,869</strong>. The five $999,999 entry errors are pulled all the way down to the 99th-percentile threshold. Gender normalisation collapses the ten observed spellings into exactly two canonical categories: <strong>267 male, 233 female</strong>. After median-imputing age (median = <strong>42</strong>), KNN-imputing salary, and dropping the 2 rows with unrecoverable hire dates, the final validated dataset has <strong>498 rows, zero missing values, and zero duplicates</strong>. That’s down from 505 raw rows, a loss of under 1.5%, with every remaining value inside a safe domain range and every city name spelled the same way twice.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="7.6">
+<h2 data-number="7.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">7.6</span> History and Further Reading</h2>
+<p>Murphy’s introductory volume gives the formal treatment of data distributions and their properties that underlies the MCAR/MAR/MNAR distinction in this chapter <span class="citation" data-cites="murphy2022pmlintro">(<a href="#ref-murphy2022pmlintro" role="doc-biblioref">Murphy 2022</a>)</span>. Burkov’s discussion of feature engineering assumes clean input arrives first. That’s precisely the boundary this chapter defends <span class="citation" data-cites="burkov2019hundredpage">(<a href="#ref-burkov2019hundredpage" role="doc-biblioref">Burkov 2019</a>)</span>. Thakur’s practical chapters on encoding and feature strategies pick up exactly where a cleaned dataset like this chapter’s leaves off. Worth reading immediately after this chapter, not before <span class="citation" data-cites="thakur2020approaching">(<a href="#ref-thakur2020approaching" role="doc-biblioref">Thakur 2020</a>)</span>. Géron’s <em>Hands-On Machine Learning</em>, Ch. 2, builds a full Scikit-Learn cleaning pipeline (imputation, custom transformers, encoding) end to end. It’s a good template for turning this chapter’s individual techniques into a single reusable pipeline <span class="citation" data-cites="geron2019hands">(<a href="#ref-geron2019hands" role="doc-biblioref">Géron 2019</a>)</span>.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="7.7">
+<h2 data-number="7.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">7.7</span> How This Connects</h2>
+<p>This chapter builds on the pandas mechanics of Chapter 6 and feeds directly into the exploratory data analysis of Chapter 9. In practice the two are often interleaved. EDA is often where a data quality problem is first noticed. It enables every modelling chapter that follows: “garbage in, garbage out” is a cliché because it keeps being true. It is often confused with feature engineering (Chapter 14). Cleaning removes errors and standardises what’s already there. Engineering creates new signal from it. Cleaning has to come first. Engineered features built on dirty inputs propagate the dirt into new columns.</p>
+</section>
+<section id="exercises" class="level2" data-number="7.8">
+<h2 data-number="7.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">7.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-7-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Classify each of the following as MCAR, MAR, or MNAR, and justify your answer in one sentence: (a) a temperature sensor that randomly drops 2% of readings due to a hardware fault; (b) a salary survey where respondents earning over $500k are half as likely to answer the income question as everyone else; (c) a customer age field where missingness is higher among users who signed up via a mobile app that didn’t require an age field, regardless of their actual age.</p></li>
+<li id="ex-7-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Using <a href="#lst-messy-build" class="quarto-xref">Listing&nbsp;<span>7.8</span></a>’s logic, explain why <code>ages[0] = 312</code> is assigned <em>after</em> the missing-value assignment <code>ages[missing_age_idx] = np.nan</code>. Explain what would change about row 0 if the two lines were swapped.</p></li>
+<li id="ex-7-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-clean-pipeline" class="quarto-xref">Listing&nbsp;<span>7.9</span></a> as a reference, compute what the age imputation value would need to be if, instead of median imputation, mean imputation were used on the post-capping age column. Describe the one-line change. State whether you’d expect the result to be higher or lower than 42, and why.</p></li>
+<li id="ex-7-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> The chapter reports that IQR-based detection flags only 1 outlier in the raw age column despite there being an obvious typo (312) and a long right tail from natural variation. Using <a href="/books/classical-data-science/ch09-exploratory-data-analysis#lst-outliers" class="quarto-xref">Listing&nbsp;<span>9.6</span></a>’s <code>iqr_bounds</code> function, explain why a single extreme value like 312 can fail to inflate the outlier count the way you might expect, given how <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>1</mn></msub></mrow><annotation encoding="application/x-tex">Q_1</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">1</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> and <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msub><mi>Q</mi><mn>3</mn></msub></mrow><annotation encoding="application/x-tex">Q_3</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8778em;vertical-align:-0.1944em;"></span><span class="mord"><span class="mord mathnormal">Q</span><span class="msupsub"><span class="vlist-t vlist-t2"><span class="vlist-r"><span class="vlist" style="height:0.3011em;"><span style="top:-2.55em;margin-left:0em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">3</span></span></span></span><span class="vlist-s">​</span></span><span class="vlist-r"><span class="vlist" style="height:0.15em;"><span></span></span></span></span></span></span></span></span></span> are computed.</p></li>
+<li id="ex-7-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague proposes skipping validation (Procedure 7.6) on the grounds that “the pipeline already ran without errors, so the data must be fine.” Using this chapter’s Trade-offs section, write the two or three sentences you’d say to push back, with a concrete example of a silent failure that would pass unnoticed without an explicit validation step.</p></li>
+<li id="ex-7-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Design a validation rule set (in the style of <a href="#lst-validate" class="quarto-xref">Listing&nbsp;<span>7.6</span></a>) for a dataset of e-commerce orders with columns <code>order_total</code>, <code>discount_pct</code>, <code>ship_date</code>, <code>delivery_date</code>, and <code>customer_id</code>. Propose at least four rules, including at least one that checks a relationship <em>between</em> two columns rather than a single column in isolation.</p></li>
+<li id="ex-7-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> MNAR missingness is described in this chapter as requiring you to “model the missingness mechanism, not just the missing value.” Research one concrete technique for this (e.g.&nbsp;Heckman correction, pattern-mixture models, or multiple imputation with a missingness indicator) and summarise, in your own words, what data beyond the column itself it requires.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="7.9">
+<h2 data-number="7.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">7.9</span> Mental Model</h2>
+<p>Data cleaning is defensive programming for a dataset: every assumption you don’t check is a bug waiting to surface in a model’s predictions. The goal is not a perfect dataset (real data will never get there). It’s a dataset where every anomaly has been noticed, understood, and deliberately handled, rather than silently ignored. The pipeline in this chapter’s Worked Example turned 505 raw rows with seven planted defect categories into 498 clean rows and zero silent errors. That ratio is the realistic target.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-burkov2019hundredpage" class="csl-entry" role="listitem">
+Burkov, Andriy. 2019. <em>The Hundred-Page Machine Learning Book</em>. Andriy Burkov.
+</div>
+<div id="ref-geron2019hands" class="csl-entry" role="listitem">
+Géron, Aurélien. 2019. <em>Hands-on Machine Learning with Scikit-Learn, Keras, and TensorFlow: Concepts, Tools, and Techniques to Build Intelligent Systems</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-murphy2022pmlintro" class="csl-entry" role="listitem">
+Murphy, Kevin P. 2022. <em>Probabilistic Machine Learning: An Introduction</em>. MIT Press.
+</div>
+<div id="ref-thakur2020approaching" class="csl-entry" role="listitem">
+Thakur, Abhishek. 2020. <em>Approaching (Almost) Any Machine Learning Problem</em>. Abhishek Thakur.
+</div>
+</div>
+</section>

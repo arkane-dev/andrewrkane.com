@@ -1,0 +1,237 @@
+<p><a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a> treated a graph as a mathematical object: nodes, edges, and the algorithms that walk them. Real systems need more than that: nodes and relationships that carry rich attributes (“this company was acquired in 2018,” “this vendor’s annual spend is $250,000”), a way to store millions of them durably, and a query language other engineers can read without re-deriving traversal code from scratch. This chapter is about the representations, property graphs and RDF triples, and the databases built around each, so a graph theory algorithm has somewhere real to live.</p>
+<section id="motivation" class="level2" data-number="77.1">
+<h2 data-number="77.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">77.1</span> Motivation</h2>
+<p>There are two dominant ways to put attributes onto a graph. A property graph attaches key/value properties directly to nodes and edges: a node just has a <code>type</code> and an <code>industry</code>; an edge just has a <code>since</code> date. An RDF triple store refuses that shortcut: everything, without exception, is a <code>(subject, predicate, object)</code> triple. A node’s “property” is really just another triple; an edge with its own properties needs reification: treating the edge itself as a subject so additional triples can attach to it, because a plain triple has no attribute slots of its own. Worked Example 77 below converts the same small graph into both forms and measures the structural cost of RDF’s uniformity directly.</p>
+</section>
+<section id="exposition" class="level2" data-number="77.2">
+<h2 data-number="77.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">77.2</span> Exposition</h2>
+<section id="property-graphs-optimise-for-the-common-case" class="level3" data-number="77.2.1">
+<h3 data-number="77.2.1" class="anchored" data-anchor-id="property-graphs-optimise-for-the-common-case"><span class="header-section-number">77.2.1</span> Property Graphs: Optimise for the Common Case</h3>
+<p>Most real-world graph queries want to filter or aggregate on node/edge attributes (“vendors with <code>annual_spend_usd &gt; 100000</code>”), and a property graph makes that a direct field lookup: no extra hop, no reification. The cost is conceptual non-uniformity: nodes, edges, and their properties are three different kinds of thing, each with different rules, which makes property graphs slightly less amenable to generic, cross-domain reasoning than RDF’s single uniform shape.</p>
+</section>
+<section id="rdf-optimise-for-uniformity-and-standardised-reasoning" class="level3" data-number="77.2.2">
+<h3 data-number="77.2.2" class="anchored" data-anchor-id="rdf-optimise-for-uniformity-and-standardised-reasoning"><span class="header-section-number">77.2.2</span> RDF: Optimise for Uniformity and Standardised Reasoning</h3>
+<p>RDF’s insistence that everything is a triple is exactly what makes it interoperable at web scale. The same triple format can describe a company, a chemical compound, or a Wikipedia page, and standard ontologies (RDFS, OWL) can define formal inference rules that apply uniformly across any RDF dataset, because there’s only one shape of fact to reason about. That uniformity is also RDF’s cost, and Worked Example 77 measures exactly how much.</p>
+</section>
+<section id="why-the-query-languages-look-so-different" class="level3" data-number="77.2.3">
+<h3 data-number="77.2.3" class="anchored" data-anchor-id="why-the-query-languages-look-so-different"><span class="header-section-number">77.2.3</span> Why the Query Languages Look So Different</h3>
+<p>Cypher’s <code>MATCH (a)-[:OWNS]-&gt;(b)</code> syntax is deliberately drawn to look like the pattern it searches for: arrows point the way relationships do, directly mirroring the property graph’s shape. SPARQL’s <code>WHERE { ?a ex:OWNS ?b }</code> is a flat list of triple patterns connected by shared variables, equally expressive, but the graph shape has to be reconstructed mentally rather than read off the query’s punctuation. Worked Example 77 measures both against a hand-written Python/<code>networkx</code> traversal directly, quantifying how much traversal machinery a declarative query engine handles internally versus what a hand-rolled traversal has to write and maintain.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="77.3">
+<h2 data-number="77.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">77.3</span> Trade-offs and Limits</h2>
+<p>Property graphs win on query ergonomics for attribute-heavy, domain-specific graphs, most enterprise use cases: vendor networks, org charts, recommendation graphs. RDF triple stores win when interoperability across datasets and formal, standards-based inference matter more than raw query convenience: biomedical ontologies, linked open data, regulatory taxonomies that need to interoperate with other organisations’ RDF data. <code>networkx</code> is in-memory, single-process, and has no query language of its own. Every traversal is Python written and maintained by hand, exactly right for learning mechanisms and genuinely small graphs, and exactly wrong once a graph needs to persist, scale past what fits in one process’s memory, or be queried by more than one application. Neo4j (property graph, Cypher) and Amazon Neptune (both property graph and RDF, Gremlin/openCypher/SPARQL) are the production answers.</p>
+</section>
+<section id="procedures" class="level2" data-number="77.4">
+<h2 data-number="77.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">77.4</span> Procedures</h2>
+<p id="proc-77-1"><strong>Procedure 77.1 (Model a Many-to-Many Relationship as a Property Graph).</strong> <em>When to use:</em> two entity types that can each relate to many of the other.</p>
+<div id="lst-graphdb-manytomany" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphdb-manytomany-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;77.1: MultiDiGraph: multiple edges between the same node pair, direction matters
+</figcaption>
+<div aria-describedby="lst-graphdb-manytomany-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> networkx <span class="im">as</span> nx</span>
+<span id="cb1-2"></span>
+<span id="cb1-3">G <span class="op">=</span> nx.MultiDiGraph()</span>
+<span id="cb1-4">G.add_edge(</span>
+<span id="cb1-5">    <span class="st">"Acme Corp"</span>,</span>
+<span id="cb1-6">    <span class="st">"Contoso Bolts"</span>,</span>
+<span id="cb1-7">    relation<span class="op">=</span><span class="st">"PURCHASES_FROM"</span>,</span>
+<span id="cb1-8">    annual_spend_usd<span class="op">=</span><span class="dv">250000</span>,</span>
+<span id="cb1-9">)</span>
+<span id="cb1-10">G.add_edge(</span>
+<span id="cb1-11">    <span class="st">"Northwind Ltd"</span>,</span>
+<span id="cb1-12">    <span class="st">"Contoso Bolts"</span>,</span>
+<span id="cb1-13">    relation<span class="op">=</span><span class="st">"PURCHASES_FROM"</span>,</span>
+<span id="cb1-14">    annual_spend_usd<span class="op">=</span><span class="dv">90000</span>,</span>
+<span id="cb1-15">)</span>
+<span id="cb1-16"><span class="co"># Contoso Bolts now has two incoming PURCHASES_FROM</span></span>
+<span id="cb1-17"><span class="co"># edges: no join table required.</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> using a plain <code>nx.DiGraph</code> when two nodes might need more than one relationship type between them, or the same relationship type recorded twice with different properties: <code>DiGraph</code> silently overwrites the earlier edge instead of adding a second one.</p>
+<p id="proc-77-2"><strong>Procedure 77.2 (Translate the Same Query Across networkx, Cypher, and SPARQL).</strong> <em>When to use:</em> moving a graph query from a prototype to its production target, or reading someone else’s query in an unfamiliar language.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+<col style="width: 25%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Task</th>
+<th>networkx</th>
+<th>Cypher</th>
+<th>SPARQL</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Direct neighbours</td>
+<td><code>list(G.successors(node))</code></td>
+<td><code>MATCH (n {name: $name})--&gt;(m) RETURN m</code></td>
+<td><code>SELECT ?m WHERE { ex:node ?p ?m }</code></td>
+</tr>
+<tr class="even">
+<td>Filter by property</td>
+<td><code>[n for n,d in G.nodes(data=True) if d["type"]=="Company"]</code></td>
+<td><code>MATCH (n:Company) RETURN n</code></td>
+<td><code>SELECT ?n WHERE { ?n rdf:type ex:Company }</code></td>
+</tr>
+<tr class="odd">
+<td>Two-hop traversal</td>
+<td>nested loop over <code>successors</code> twice</td>
+<td><code>MATCH (a)--&gt;(b)--&gt;(c) RETURN a, c</code></td>
+<td><code>WHERE { ?a ?p1 ?b . ?b ?p2 ?c }</code></td>
+</tr>
+</tbody>
+</table>
+<p id="proc-77-3"><strong>Procedure 77.3 (Choose Between a Property Graph DB, a Triple Store, and a Vector DB).</strong> <em>When to use:</em> deciding where a retrieval or storage problem belongs, before writing any code.</p>
+<div id="lst-graphdb-choose" class="text listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphdb-choose-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;77.2: A decision tree, not a preference
+</figcaption>
+<div aria-describedby="lst-graphdb-choose-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<pre class="text"><code>Does the question require following relationships
+(possibly multiple hops) that no single record states
+directly?
+  No  -&gt; vector database (Book 2's RAG chapter)
+  Yes -&gt; Does it need external/standard ontologies or
+         formal RDFS/OWL inference?
+    Yes -&gt; RDF triple store
+    No  -&gt; property graph database
+    (Small enough to fit in memory, single-process/
+     prototype-only? -&gt; networkx is enough.)</code></pre>
+</div>
+</figure>
+</div>
+</section>
+<section id="worked-example" class="level2" data-number="77.5">
+<h2 data-number="77.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">77.5</span> Worked Example</h2>
+<p>A 6-node, 6-edge company/vendor property graph, converted to RDF triple form:</p>
+<div id="lst-graphdb-worked-convert" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphdb-worked-convert-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;77.3: Every node property, and every edge, becomes its own triple
+</figcaption>
+<div aria-describedby="lst-graphdb-worked-convert-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="co"># 6 + 6 = 12</span></span>
+<span id="cb3-2">n_elements <span class="op">=</span> G.number_of_nodes() <span class="op">+</span> G.number_of_edges()</span>
+<span id="cb3-3">triples <span class="op">=</span> property_graph_to_rdf(G)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Representation</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Property graph elements (nodes + edges)</td>
+<td>12</td>
+</tr>
+<tr class="even">
+<td><strong>RDF triples</strong></td>
+<td><strong>30</strong></td>
+</tr>
+</tbody>
+</table>
+<p>12 graph elements became 30 triples: a <strong>2.5x</strong> expansion, the direct structural price of RDF’s total uniformity. Every node property that was a direct field lookup in the property graph (<code>Acme Corp</code>’s <code>type</code>, <code>industry</code>, <code>compliance_flag</code>) becomes its own separate triple, and each edge’s own properties require reification. This factor isn’t a fluke of this particular example. It’s what “everything is a triple, no exceptions” costs structurally, confirmed by counting, not asserted.</p>
+<p>The same multi-hop compliance question, find a flagged vendor’s sibling vendors via a shared parent company, answered identically both ways:</p>
+<div id="lst-graphdb-worked-query" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-graphdb-worked-query-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;77.4: Same fact, reached via two different representations
+</figcaption>
+<div aria-describedby="lst-graphdb-worked-query-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="co"># networkx traversal</span></span>
+<span id="cb4-2">property_graph_result <span class="op">=</span> find_siblings_of_flagged(G)</span>
+<span id="cb4-3"><span class="co"># hand-written triple matching</span></span>
+<span id="cb4-4">triple_result <span class="op">=</span> triple_pattern_match(triples, pattern)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Both return the identical fact: <code>Northwind Ltd ← [OWNS] ← Northwind Parent → [OWNS] → Fabrikam Supply</code>. Same facts, different representation, confirmed by direct comparison rather than assumed equivalent.</p>
+<p>Measuring the actual code/query volume needed for this one multi-hop query, across four approaches:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Approach</th>
+<th>Lines needed</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>networkx</code> traversal (hand-written Python)</td>
+<td>11</td>
+</tr>
+<tr class="even">
+<td>Triple-pattern matching (hand-written Python)</td>
+<td>10</td>
+</tr>
+<tr class="odd">
+<td><strong>Cypher (declarative)</strong></td>
+<td><strong>3</strong></td>
+</tr>
+<tr class="even">
+<td><strong>SPARQL (declarative)</strong></td>
+<td><strong>6</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Cypher took roughly a third the lines of the hand-written <code>networkx</code> Python (3 vs.&nbsp;11), a real, measured difference in how much traversal machinery is written and maintained by hand versus delegated to a query engine’s internal indexing and planning. SPARQL, while still shorter than the hand-rolled Python (6 vs.&nbsp;10-11), needs roughly twice Cypher’s line count for the equivalent query: a direct, measured instance of Exposition’s claim that SPARQL’s flat triple-pattern syntax requires reconstructing the graph shape mentally rather than reading it off the query’s arrows, the way Cypher’s syntax does.</p>
+<div class="callout-aws">
+<div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Notes</div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><span class="co"># Amazon Neptune supports BOTH property-graph</span></span>
+<span id="cb5-2"><span class="co"># (Gremlin/openCypher) and RDF (SPARQL) query models on</span></span>
+<span id="cb5-3"><span class="co"># the same managed database service: the representation</span></span>
+<span id="cb5-4"><span class="co"># choice from Procedure 77.3 doesn't require choosing a</span></span>
+<span id="cb5-5"><span class="co"># different AWS service, only a different query API</span></span>
+<span id="cb5-6"><span class="co"># against the same underlying Neptune cluster.</span></span></code></pre></div>
+<p><strong>When this chapter’s measured trade-off matters for a Neptune deployment decision:</strong> the 2.5x triple-count expansion and roughly 2x SPARQL-vs-Cypher query-length overhead measured in this chapter’s Worked Example are real operational costs (more triples to index and store, longer queries to write and maintain) that argue for Neptune’s property-graph mode by default, reserving RDF mode specifically for cases needing standards-based interoperability or formal ontology inference, per Procedure 77.3’s decision tree.</p>
+</div>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="77.6">
+<h2 data-number="77.6" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">77.6</span> History and Further Reading</h2>
+<p>Robinson, Webber &amp; Eifrem’s “Graph Databases” <span class="citation" data-cites="robinson2015graphdatabases">(<a href="#ref-robinson2015graphdatabases" role="doc-biblioref">Robinson et al. 2015</a>)</span> (O’Reilly) is the standard property-graph-and-Cypher reference. The W3C RDF 1.1 Concepts and Abstract Syntax is the formal RDF specification. Hogan et al.’s “Knowledge Graphs” <span class="citation" data-cites="hogan2021knowledgegraphs">(<a href="#ref-hogan2021knowledgegraphs" role="doc-biblioref">Hogan et al. 2021</a>)</span> (ACM Computing Surveys) covers both property-graph and RDF traditions broadly. Kleppmann &amp; Riccomini’s <em>Designing Data-Intensive Applications</em> <span class="citation" data-cites="kleppmann2026ddia">(<a href="#ref-kleppmann2026ddia" role="doc-biblioref">Kleppmann and Riccomini 2026</a>)</span>, Chapter 3, covers the same property-graph-versus-RDF territory from the data-modelling side, including two query languages this chapter doesn’t build (Datalog and GraphQL) and SQL’s own support for graph queries, worth reading as the wider data-systems context this chapter’s graph-specific comparison sits inside.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="77.7">
+<h2 data-number="77.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">77.7</span> How This Connects</h2>
+<p>This chapter builds on <a href="/books/applied-ai-domains/ch76-graph-theory-fundamentals" class="quarto-xref"><span>Chapter 76</span></a> (the traversal/BFS logic this chapter’s compliance-query function reuses directly). It enables <a href="/books/applied-ai-domains/ch78-knowledge-graph-construction" class="quarto-xref"><span>Chapter 78</span></a> (building a graph like this one from unstructured text, rather than hand-entering it) and <a href="/books/applied-ai-domains/ch80-graphrag-llm-retrieval" class="quarto-xref"><span>Chapter 80</span></a> (grounding LLM answers in exactly this kind of multi-hop, property-graph-shaped fact). It’s often confused with a vector database: a vector index finds items that read alike; a graph database finds items that are connected, a different question entirely and the reason this book’s knowledge-graphs section exists.</p>
+</section>
+<section id="exercises" class="level2" data-number="77.8">
+<h2 data-number="77.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">77.8</span> Exercises</h2>
+<ol type="1">
+<li id="ex-77-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Define a property graph and an RDF triple in one sentence each, and state what mechanism RDF needs that property graphs don’t, to attach properties to an edge.</p></li>
+<li id="ex-77-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the measured triple-expansion factor from Worked Example 77 (12 elements → 30 triples) as a ratio, and explain in one sentence what structural choice causes it.</p></li>
+<li id="ex-77-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s line-count table (networkx 11, hand-triple-matching 10, Cypher 3, SPARQL 6), explain why Cypher’s advantage over SPARQL here (3 vs.&nbsp;6 lines) is consistent with Exposition’s claim about Cypher’s syntax “looking like” the graph pattern it searches for.</p></li>
+<li id="ex-77-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using the Worked Example’s measured 2.5x triple-expansion factor, explain concretely what would happen to a real production knowledge graph’s storage and index size if it were converted from a property-graph representation to RDF, all else being equal.</p></li>
+<li id="ex-77-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A colleague wants to migrate an enterprise vendor-management property graph to RDF “for future-proofing,” with no current need for cross-organisation interoperability or formal ontology reasoning. Using Procedure 77.3 and this chapter’s Worked Example, write the two or three sentences you’d say about this decision.</p></li>
+<li id="ex-77-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> Procedure 77.1 warns against using <code>nx.DiGraph</code> instead of <code>nx.MultiDiGraph</code> when a relationship might be recorded twice. Describe a concrete data-loss scenario using the <code>PURCHASES_FROM</code> example, if <code>DiGraph</code> were used instead and purchases were recorded in two different years.</p></li>
+<li id="ex-77-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read about RDFS/OWL inference rules (e.g.&nbsp;transitive-property reasoning like “if X OWNS Y and Y OWNS Z, then X INDIRECTLY_OWNS Z”). Explain in your own words why this kind of formal, automatically-applied inference is more natural to implement uniformly across an RDF dataset than across a property graph.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="77.9">
+<h2 data-number="77.9" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">77.9</span> Mental Model</h2>
+<p>A property graph is a graph where nodes and edges are allowed to carry their own labelled bag of attributes, the way a company org chart gets naturally sketched on a whiteboard. An RDF triple store insists on breaking everything down to atomic subject-predicate-object facts, the way a database-normalisation purist would insist every table have exactly one kind of row. Neither is “more correct.” They’re two different bets about whether uniformity or ergonomics matters more for the data at hand. This chapter’s Worked Example turned that bet into a number: 2.5x more facts, for the uniformity RDF buys.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-hogan2021knowledgegraphs" class="csl-entry" role="listitem">
+Hogan, Aidan, Eva Blomqvist, Michael Cochez, et al. 2021. <span>“Knowledge Graphs.”</span> <em>ACM Computing Surveys</em> 54 (4): 1–37.
+</div>
+<div id="ref-kleppmann2026ddia" class="csl-entry" role="listitem">
+Kleppmann, Martin, and Chris Riccomini. 2026. <em>Designing Data-Intensive Applications: The Big Ideas Behind Reliable, Scalable, and Maintainable Systems</em>. 2nd ed. O’Reilly Media.
+</div>
+<div id="ref-robinson2015graphdatabases" class="csl-entry" role="listitem">
+Robinson, Ian, Jim Webber, and Emil Eifrem. 2015. <em>Graph Databases: New Opportunities for Connected Data</em>. 2nd ed. O’Reilly Media.
+</div>
+</div>
+</section>

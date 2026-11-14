@@ -1,0 +1,394 @@
+<p>Chapter 58 established that physical control loops often need to run at 50-1000 Hz, and that a late correction is a wrong correction. A model call that round-trips to a cloud endpoint adds network latency on top of inference time, and network latency is neither small nor reliable: it varies with congestion, distance, and connectivity quality, and it can simply fail if connectivity drops mid-task. This chapter covers the two things physical AI systems do in response: run inference <em>on</em> the device rather than asking the cloud, and use IoT protocols built for the power, bandwidth, and reliability constraints that on-device, battery-powered, intermittently-connected hardware actually has.</p>
+<section id="motivation" class="level2" data-number="64.1">
+<h2 data-number="64.1" class="anchored" data-anchor-id="motivation"><span class="header-section-number">64.1</span> Motivation</h2>
+<p>A chatbot that takes an extra 30ms to respond is imperceptible. A control loop that misses its deadline by 30ms has already acted on stale information, or not acted at all. Everything in this chapter is downstream of that asymmetry: physical AI systems don’t get to treat “call the cloud” as a default the way most digital AI systems do, because the latency budget that matters is the control loop’s, not the user’s patience. This chapter measures that gap directly, and then covers the two levers available to close it: shrinking the model so it fits on-device, and choosing a network protocol that matches the actual power, range, and bandwidth constraints of the hardware shipping it.</p>
+</section>
+<section id="exposition" class="level2" data-number="64.2">
+<h2 data-number="64.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">64.2</span> Exposition</h2>
+<section id="the-edge-cloud-split" class="level3" data-number="64.2.1">
+<h3 data-number="64.2.1" class="anchored" data-anchor-id="the-edge-cloud-split"><span class="header-section-number">64.2.1</span> The Edge-Cloud Split</h3>
+<p>Physical AI systems don’t choose “edge” or “cloud” globally. They split responsibilities deliberately, piece by piece:</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Runs on-device (edge)</th>
+<th>Runs in the cloud</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Anything inside the real-time control loop</td>
+<td>Fleet-wide monitoring and dashboards</td>
+</tr>
+<tr class="even">
+<td>Safety-critical fallback behaviour</td>
+<td>Model retraining on aggregated fleet data</td>
+</tr>
+<tr class="odd">
+<td>Local decision-making that must work with no connectivity</td>
+<td>Analytics, A/B testing across the fleet</td>
+</tr>
+<tr class="even">
+<td>Low-latency perception feeding the control loop</td>
+<td>Slower, heavier models the latency budget can’t accommodate on-device</td>
+</tr>
+</tbody>
+</table>
+<p>The deciding question for any given piece of computation is: <strong>does it have to happen within the control loop’s latency budget, and does it have to work even if connectivity is down?</strong> If yes to either, it runs on-device. Everything else is a candidate for the cloud, where more compute and easier fleet-wide aggregation are available.</p>
+</section>
+<section id="iot-networking-protocols" class="level3" data-number="64.2.2">
+<h3 data-number="64.2.2" class="anchored" data-anchor-id="iot-networking-protocols"><span class="header-section-number">64.2.2</span> IoT Networking Protocols</h3>
+<p>Different protocols trade off power, range, and bandwidth differently. There’s no universally “best” one, only a best fit for a given constraint profile:</p>
+<ul>
+<li><strong>MQTT</strong>: publish-subscribe over TCP, lightweight, the default choice for most IoT telemetry where devices have reasonably reliable connectivity (WiFi, Ethernet, cellular). This chapter’s Worked Example demonstrates its core pattern.</li>
+<li><strong>CoAP</strong>: RESTful, UDP-based, designed specifically for very constrained devices (limited RAM/CPU) where even MQTT’s overhead is too much.</li>
+<li><strong>BLE (Bluetooth Low Energy)</strong>: very low power, short range, typically device-to-gateway rather than device-to-cloud directly, common for wearables and battery-powered sensors that hand off to a nearby gateway.</li>
+<li><strong>LoRaWAN</strong>: long range (kilometres), extremely low power, but very low bandwidth and high latency, suited to sparse telemetry (e.g.&nbsp;an occasional soil-moisture reading), never suited to real-time control.</li>
+</ul>
+<p>The general pattern: as power constraints tighten and range requirements grow, bandwidth and latency get sacrificed. Choosing a protocol means being honest about which of those three axes a given task actually needs.</p>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+<col style="width: 16%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Protocol</th>
+<th>Power</th>
+<th>Range</th>
+<th>Bandwidth</th>
+<th>Transport</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>MQTT</td>
+<td>Moderate</td>
+<td>Depends on underlying network</td>
+<td>Moderate-high</td>
+<td>TCP</td>
+<td>General IoT telemetry, the default choice</td>
+</tr>
+<tr class="even">
+<td>CoAP</td>
+<td>Low</td>
+<td>Depends on underlying network</td>
+<td>Low-moderate</td>
+<td>UDP</td>
+<td>Very constrained devices</td>
+</tr>
+<tr class="odd">
+<td>BLE</td>
+<td>Very low</td>
+<td>Short (metres)</td>
+<td>Low-moderate</td>
+<td>Bluetooth radio</td>
+<td>Wearables, device-to-gateway</td>
+</tr>
+<tr class="even">
+<td>LoRaWAN</td>
+<td>Very low</td>
+<td>Long (kilometres)</td>
+<td>Very low</td>
+<td>LoRa radio</td>
+<td>Sparse, infrequent telemetry over distance</td>
+</tr>
+</tbody>
+</table>
+<p>MQTT’s <strong>QoS</strong> (quality of service) levels trade delivery guarantees against overhead: QoS 0 is fire-and-forget, QoS 1 guarantees at-least-once delivery (the broker retries until acknowledged), QoS 2 guarantees exactly-once (more overhead, rarely needed for sensor telemetry where an occasional duplicate reading is harmless).</p>
+</section>
+<section id="model-compression-closing-the-gap-between-training-time-and-deployment-time-constraints" class="level3" data-number="64.2.3">
+<h3 data-number="64.2.3" class="anchored" data-anchor-id="model-compression-closing-the-gap-between-training-time-and-deployment-time-constraints"><span class="header-section-number">64.2.3</span> Model Compression: Closing the Gap Between Training-Time and Deployment-Time Constraints</h3>
+<p>A model trained for accuracy on a GPU cluster is rarely the model that fits an edge device’s compute, memory, and power budget. Three techniques bridge that gap, and they compose: more than one can be applied at once:</p>
+<ul>
+<li><strong>Quantization</strong>: reduce numeric precision (typically FP32 → INT8) for weights and/or activations. Reliably shrinks model size (this chapter’s Worked Example measures roughly 73% for a small MLP) and usually costs little accuracy. It does <strong>not</strong> reliably speed up inference. The Worked Example’s own measurement shows quantization making a small model <em>slower</em>, because per-call quantize/dequantize overhead can exceed the compute it saves when the underlying matmuls are already tiny. The speed benefit is real, but conditional: it shows up on larger models, or hardware with dedicated fast INT8 kernels. Never assume it, measure it.</li>
+<li><strong>Pruning</strong>: remove less-important weights or connections (typically by magnitude), producing a smaller, sparser model. Speed benefits depend on whether the target hardware/runtime can actually exploit sparsity. A naive dense-matmul implementation gains nothing from a pruned-but-still-dense-in-memory weight matrix. Structured pruning (removing entire channels/filters, not just individual weights) is what typically translates into real speed-ups on standard hardware.</li>
+<li><strong>Distillation</strong>: train a small “student” model to mimic a large “teacher” model’s outputs, rather than training the student from scratch on labels alone. The student learns from the teacher’s full output distribution (not just the hard label), which is usually a richer training signal than labels alone, the same fine-tuning intuition as Book 2, Chapter 34, applied to compressing model size rather than adapting behaviour.</li>
+</ul>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+<col style="width: 20%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Technique</th>
+<th>Size reduction</th>
+<th>Speed-up</th>
+<th>Accuracy cost</th>
+<th>Implementation effort</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Dynamic quantization</td>
+<td>High (~70%+ typical)</td>
+<td>Not guaranteed: can be negative for small models on generic CPU (measure!)</td>
+<td>Usually small</td>
+<td>Low</td>
+</tr>
+<tr class="even">
+<td>Static quantization</td>
+<td>High</td>
+<td>Usually positive on CPU</td>
+<td>Small-moderate, needs calibration data</td>
+<td>Moderate</td>
+</tr>
+<tr class="odd">
+<td>Quantization-aware training</td>
+<td>High</td>
+<td>Usually positive</td>
+<td>Smallest of the quantization options</td>
+<td>High (retraining required)</td>
+</tr>
+<tr class="even">
+<td>Pruning (unstructured)</td>
+<td>Moderate-high</td>
+<td>Only if runtime exploits sparsity</td>
+<td>Moderate, tunable via prune amount</td>
+<td>Low-moderate</td>
+</tr>
+<tr class="odd">
+<td>Pruning (structured)</td>
+<td>Moderate</td>
+<td>Usually positive</td>
+<td>Moderate-high</td>
+<td>Moderate</td>
+</tr>
+<tr class="even">
+<td>Distillation</td>
+<td>Depends on student size</td>
+<td>Depends on student size</td>
+<td>Depends on student capacity</td>
+<td>High (requires teacher + retraining)</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="on-device-inference-runtimes" class="level3" data-number="64.2.4">
+<h3 data-number="64.2.4" class="anchored" data-anchor-id="on-device-inference-runtimes"><span class="header-section-number">64.2.4</span> On-Device Inference Runtimes</h3>
+<p>Compressed models still need a runtime that can actually execute them fast on the target hardware. <strong>TensorRT</strong> is NVIDIA’s inference runtime, tightly integrated with Jetson-class edge devices, a natural target for a policy trained per Chapter 63. <strong>ONNX Runtime</strong> is a more hardware-portable option: export any framework’s model to the ONNX format once, run it across a wider range of target hardware. <strong>TFLite</strong> targets mobile/embedded devices, especially Android, and is broadly portable within the TensorFlow ecosystem.</p>
+</section>
+</section>
+<section id="trade-offs-and-limits" class="level2" data-number="64.3">
+<h2 data-number="64.3" class="anchored" data-anchor-id="trade-offs-and-limits"><span class="header-section-number">64.3</span> Trade-offs and Limits</h2>
+<p><strong>Edge compute cost vs.&nbsp;cloud compute cost.</strong> Edge hardware is a one-time, per-device capital cost that scales with fleet size; cloud compute is an ongoing, usage-based cost. A large fleet with light per-device compute needs often favours edge; a small fleet with heavy, bursty compute needs might favour cloud for the workloads that can tolerate it.</p>
+<p><strong>Compression aggressiveness vs.&nbsp;accuracy.</strong> Every compression technique trades some accuracy for size/speed, though often less than expected. This chapter’s Worked Example shows quantization’s accuracy cost landing within noise. The trade-off gets worse, not linearly, as compression becomes more aggressive; a small INT8 quantization is nearly free, but very low-bit quantization or heavy pruning starts to cost real accuracy.</p>
+<p><strong>Protocol overhead vs.&nbsp;reliability guarantees.</strong> MQTT’s QoS 1/2 delivery guarantees cost bandwidth and latency compared to QoS 0’s fire-and-forget. Worth it for safety-relevant telemetry, wasteful for a sensor reading that arriving late or occasionally missing doesn’t matter.</p>
+</section>
+<section id="procedures" class="level2" data-number="64.4">
+<h2 data-number="64.4" class="anchored" data-anchor-id="procedures"><span class="header-section-number">64.4</span> Procedures</h2>
+<p id="proc-64-1"><strong>Procedure 64.1 (Choose an IoT Protocol).</strong> <em>When to use:</em> designing device connectivity for a new physical AI system, before any hardware is finalised.</p>
+<ol type="1">
+<li>Is the device battery-powered with a multi-year lifetime requirement? Yes → BLE (short range, gateway nearby) or LoRaWAN (long range, sparse data). No → MQTT is the default choice.</li>
+<li>Does the device have very limited RAM/CPU (a few KB, not a few MB)? Yes → CoAP. No → MQTT.</li>
+<li>Does the task need real-time control-loop-relevant data, not just telemetry? Yes → none of these protocols are appropriate on their own. Control loops run locally (Chapter 58); these protocols are for telemetry, configuration, and fleet coordination, not the control loop itself.</li>
+<li>Does the deployment span kilometres with very low, infrequent data volume? Yes → LoRaWAN. No → MQTT or CoAP depending on device constraints above.</li>
+</ol>
+<p><strong>Common mistake:</strong> choosing MQTT for a battery-powered sensor that needs to last years on a coin cell. MQTT’s TCP overhead is fine for mains-powered or frequently-recharged devices, but it will drain a coin-cell sensor far faster than BLE or LoRaWAN would.</p>
+<p id="proc-64-2"><strong>Procedure 64.2 (Quantize a PyTorch Model, and Always Measure Latency After).</strong> <em>When to use:</em> after training, before deploying to constrained hardware.</p>
+<div id="lst-quantize" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-quantize-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;64.1: Dynamic quantization: simplest to apply, no calibration data needed
+</figcaption>
+<div aria-describedby="lst-quantize-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><span class="im">import</span> torch</span>
+<span id="cb1-2"><span class="im">import</span> torch.nn <span class="im">as</span> nn</span>
+<span id="cb1-3"></span>
+<span id="cb1-4"><span class="co"># Dynamic quantization: weights quantized ahead of time,</span></span>
+<span id="cb1-5"><span class="co"># activations</span></span>
+<span id="cb1-6"><span class="co"># quantized on the fly during inference. Best for models dominated</span></span>
+<span id="cb1-7"><span class="co"># by</span></span>
+<span id="cb1-8"><span class="co"># Linear/LSTM layers.</span></span>
+<span id="cb1-9">quantized_model <span class="op">=</span> torch.quantization.quantize_dynamic(</span>
+<span id="cb1-10">    model, {nn.Linear}, dtype<span class="op">=</span>torch.qint8</span>
+<span id="cb1-11">)</span>
+<span id="cb1-12"></span>
+<span id="cb1-13"><span class="co"># ALWAYS measure after quantizing: don't assume:</span></span>
+<span id="cb1-14"><span class="im">import</span> time</span>
+<span id="cb1-15"><span class="kw">def</span> measure_latency(m, x, n<span class="op">=</span><span class="dv">300</span>):</span>
+<span id="cb1-16">    m.<span class="bu">eval</span>()</span>
+<span id="cb1-17">    <span class="cf">with</span> torch.no_grad():</span>
+<span id="cb1-18">        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">20</span>):</span>
+<span id="cb1-19">            <span class="co"># warmup</span></span>
+<span id="cb1-20">            m(x)</span>
+<span id="cb1-21">        start <span class="op">=</span> time.perf_counter()</span>
+<span id="cb1-22">        <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(n):</span>
+<span id="cb1-23">            m(x)</span>
+<span id="cb1-24">        <span class="co"># ms/call</span></span>
+<span id="cb1-25">        <span class="cf">return</span> (time.perf_counter() <span class="op">-</span> start) <span class="op">/</span> n <span class="op">*</span> <span class="dv">1000</span></span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Static quantization quantizes both weights and activations ahead of time using a calibration dataset to determine activation ranges. More setup work, but typically faster than dynamic quantization on CPU, especially for convolutional models. Quantization-aware training simulates quantization <em>during</em> training so the model learns weights robust to the precision loss. Use this when post-training quantization costs more accuracy than can be tolerated.</p>
+<p id="proc-64-3"><strong>Procedure 64.3 (Prune a Model).</strong> <em>When to use:</em> when size matters more than accuracy headroom allows for, or as a complement to quantization.</p>
+<div id="lst-prune" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-prune-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;64.2: Magnitude-based unstructured pruning and its resulting sparsity
+</figcaption>
+<div aria-describedby="lst-prune-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><span class="im">import</span> torch.nn.utils.prune <span class="im">as</span> prune</span>
+<span id="cb2-2"></span>
+<span id="cb2-3"><span class="co"># remove 30% of weights</span></span>
+<span id="cb2-4">prune.l1_unstructured(model.fc1, name<span class="op">=</span><span class="st">"weight"</span>, amount<span class="op">=</span><span class="fl">0.3</span>)</span>
+<span id="cb2-5"></span>
+<span id="cb2-6">n_zero <span class="op">=</span> torch.<span class="bu">sum</span>(model.fc1.weight <span class="op">==</span> <span class="dv">0</span>)</span>
+<span id="cb2-7">sparsity <span class="op">=</span> <span class="bu">float</span>(n_zero) <span class="op">/</span> model.fc1.weight.nelement()</span>
+<span id="cb2-8"><span class="bu">print</span>(<span class="ss">f"fc1 sparsity: </span><span class="sc">{</span>sparsity<span class="sc">:.1%}</span><span class="ss">"</span>)</span>
+<span id="cb2-9"></span>
+<span id="cb2-10"><span class="co"># bake in the mask, remove reparametrization</span></span>
+<span id="cb2-11">prune.remove(model.fc1, <span class="st">"weight"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p><strong>Common mistake:</strong> pruning and expecting a speed-up without checking whether the inference runtime can exploit sparse weight matrices. A standard dense-matmul kernel gains nothing from zeros scattered through an otherwise-dense array.</p>
+<p id="proc-64-4"><strong>Procedure 64.4 (Export a Model to ONNX for Portable Edge Deployment).</strong> <em>When to use:</em> deploying to hardware that isn’t NVIDIA, or wanting a single export target many runtimes can consume.</p>
+<div id="lst-onnx" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-onnx-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;64.3: Exporting a trained model to ONNX with a dynamic batch axis
+</figcaption>
+<div aria-describedby="lst-onnx-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><span class="im">import</span> torch</span>
+<span id="cb3-2"></span>
+<span id="cb3-3"><span class="co"># match the model's real input shape</span></span>
+<span id="cb3-4">dummy_input <span class="op">=</span> torch.randn(<span class="dv">1</span>, D)</span>
+<span id="cb3-5">torch.onnx.export(</span>
+<span id="cb3-6">    model, dummy_input, <span class="st">"model.onnx"</span>,</span>
+<span id="cb3-7">    input_names<span class="op">=</span>[<span class="st">"input"</span>], output_names<span class="op">=</span>[<span class="st">"output"</span>],</span>
+<span id="cb3-8">    dynamic_axes<span class="op">=</span>{<span class="st">"input"</span>: {<span class="dv">0</span>: <span class="st">"batch_size"</span>}},</span>
+<span id="cb3-9">)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p id="proc-64-5"><strong>Procedure 64.5 (Profile Inference Latency on Target-Class Hardware).</strong> <em>When to use:</em> before committing to a model architecture or compression strategy for a real deployment. Never trust latency numbers from a development laptop/desktop for a deployment decision. At minimum: (1) profile on hardware that’s the <em>same class</em> as the deployment target. CPU/GPU architecture differences change results non-trivially, as this chapter’s “quantization made it slower” result should make vivid; (2) profile with a realistic batch size, usually 1 for real-time control. Batching for throughput and single-sample latency are different optimisation targets; (3) include the full pipeline (preprocessing, inference, postprocessing), not just the model forward pass; (4) measure a distribution (p50/p95/p99), not just a mean. A control loop’s deadline-miss rate depends on the tail, not the average.</p>
+</section>
+<section id="worked-example" class="level2" data-number="64.5">
+<h2 data-number="64.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">64.5</span> Worked Example</h2>
+<p>The chapter’s tutorial builds a working publish-subscribe telemetry pattern, measures real (not assumed) model compression trade-offs, and quantifies why a cloud round-trip can blow a control loop’s latency budget.</p>
+<p>A minimal in-process broker models MQTT’s core publish-subscribe semantics (topics, subscribe, publish, QoS 0/1 delivery) without any real network I/O. Ten simulated temperature readings between 60°C and 95°C were published to a <code>factory/line1/temperature</code> topic at QoS 1, with a gateway handler subscribed to flag anything above 80°C:</p>
+<div id="lst-broker" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-broker-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;64.4: A minimal publish-subscribe broker and a gateway handler subscribing to one topic
+</figcaption>
+<div aria-describedby="lst-broker-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1">broker.subscribe(<span class="st">"factory/line1/temperature"</span>, gateway_handler)</span>
+<span id="cb4-2">readings <span class="op">=</span> [<span class="bu">round</span>(random.uniform(<span class="dv">60</span>, <span class="dv">95</span>), <span class="dv">1</span>) <span class="cf">for</span> _ <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">10</span>)]</span>
+<span id="cb4-3"><span class="cf">for</span> i, temp <span class="kw">in</span> <span class="bu">enumerate</span>(readings):</span>
+<span id="cb4-4">    broker.publish(<span class="st">"factory/line1/temperature"</span>,</span>
+<span id="cb4-5">                    {</span>
+<span id="cb4-6">                        <span class="st">"device_id"</span>: <span class="ss">f"sensor-</span><span class="sc">{</span>i<span class="sc">:03d}</span><span class="ss">"</span>,</span>
+<span id="cb4-7">                        <span class="st">"temperature_c"</span>: temp,</span>
+<span id="cb4-8">                    },</span>
+<span id="cb4-9">                    qos<span class="op">=</span><span class="dv">1</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Four of the ten readings triggered alerts (82.4C, 85.8C, 83.7C, 91.2C). The gateway never had to know how many sensors existed or where they were. It just subscribed to a topic. Publishing to an unsubscribed <code>vibration</code> topic at QoS 1 produced a real MQTT-relevant warning: no subscriber received the message, and at QoS 1+ a real broker would retry delivery.</p>
+<p>Next, a small MLP classifier (3 linear layers, 20 input features, 4 classes) was trained to 92.4% test accuracy, then compressed with PyTorch’s dynamic quantization:</p>
+<div id="lst-quant-measure" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-quant-measure-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;64.5: Measuring, not assuming, what quantization actually changes
+</figcaption>
+<div aria-describedby="lst-quant-measure-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1">quantized <span class="op">=</span> torch.quantization.quantize_dynamic(</span>
+<span id="cb5-2">    model,</span>
+<span id="cb5-3">    {nn.Linear},</span>
+<span id="cb5-4">    dtype<span class="op">=</span>torch.qint8,</span>
+<span id="cb5-5">)</span>
+<span id="cb5-6">size_reduction <span class="op">=</span> (<span class="dv">1</span> <span class="op">-</span> size_int8 <span class="op">/</span> size_fp32) <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb5-7"><span class="bu">print</span>(<span class="ss">f"Size reduction:            </span><span class="sc">{</span>size_reduction<span class="sc">:.1f}</span><span class="ss">%"</span>)</span>
+<span id="cb5-8">lat_change_b1 <span class="op">=</span> (lat_int8_b1 <span class="op">/</span> lat_fp32_b1 <span class="op">-</span> <span class="dv">1</span>) <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb5-9"><span class="bu">print</span>(<span class="ss">f"Latency change @ batch=1:  </span><span class="sc">{</span>lat_change_b1<span class="sc">:+.1f}</span><span class="ss">%"</span>)</span>
+<span id="cb5-10">lat_change_b64 <span class="op">=</span> (lat_int8_b64 <span class="op">/</span> lat_fp32_b64 <span class="op">-</span> <span class="dv">1</span>) <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb5-11"><span class="bu">print</span>(<span class="ss">f"Latency change @ batch=64: </span><span class="sc">{</span>lat_change_b64<span class="sc">:+.1f}</span><span class="ss">%"</span>)</span>
+<span id="cb5-12">acc_change <span class="op">=</span> (acc_int8 <span class="op">-</span> acc_fp32) <span class="op">*</span> <span class="dv">100</span></span>
+<span id="cb5-13"><span class="bu">print</span>(<span class="ss">f"Accuracy change:           </span><span class="sc">{</span>acc_change<span class="sc">:+.2f}</span><span class="ss"> pp"</span>)</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Results: a <strong>73.1%</strong> size reduction (284.6 KB → 76.6 KB), essentially no accuracy cost (<strong>+0.10 pp</strong>, well within noise), but latency at batch size 1 <em>increased</em> by <strong>+257.5%</strong> (0.022ms → 0.078ms), and at batch size 64 increased by <strong>+20.2%</strong>. This isn’t a mistake in the measurement. It’s a real, well-known property of dynamic quantization: the quantize/dequantize overhead around each INT8 matmul is fixed per call, and for a model this small (a few hundred thousand parameters across three linear layers), that overhead exceeds the compute time it saves. Quantization’s speed benefit shows up reliably on larger models, where the matmuls themselves dominate runtime, or on hardware with dedicated fast INT8 kernels, not necessarily a generic desktop CPU running a reference dynamic-quantization path. Size reduction, by contrast, is essentially guaranteed by construction (fewer bits per weight). It didn’t need measuring to predict, though measuring it anyway is still the right habit.</p>
+<p>Finally, the chapter’s central quantitative argument: simulating 5,000 inference calls against a 20ms control-loop deadline, comparing a cloud round-trip (a lognormal latency distribution with mean 30ms, realistic for WiFi/cellular RTT to a nearby region) against on-device inference (the quantized model’s own measured latency, plus small OS jitter):</p>
+<div id="lst-deadline" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
+<figure class="quarto-float quarto-float-lst figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-lst" id="lst-deadline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Listing&nbsp;64.6: Deadline-miss rate: cloud round-trip vs.&nbsp;on-device inference, same 20ms budget
+</figcaption>
+<div aria-describedby="lst-deadline-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1">miss_rate_cloud <span class="op">=</span> (cloud_latency_ms <span class="op">&gt;</span> deadline_ms).mean()</span>
+<span id="cb6-2">miss_rate_device <span class="op">=</span> (device_latency_ms <span class="op">&gt;</span> deadline_ms).mean()</span></code></pre></div>
+</div>
+</figure>
+</div>
+<p>Cloud round-trip: mean <strong>34.06 ms</strong>, p95 <strong>68.11 ms</strong>, deadline miss rate <strong>79.3%</strong>. On-device: mean <strong>0.078 ms</strong>, p95 <strong>0.128 ms</strong>, deadline miss rate <strong>0.0000%</strong>. Under a realistic cloud round-trip latency distribution, roughly four out of five inference calls would blow a 20ms deadline, not because the model is slow, but because network latency alone regularly exceeds the entire budget. This is the quantitative version of Chapter 58’s claim in passing: a control loop’s latency budget, not model accuracy, is often the deciding factor in whether inference can happen in the cloud at all.</p>
+</section>
+<section id="aws-sagemaker-notes" class="level2" data-number="64.6">
+<h2 data-number="64.6" class="anchored" data-anchor-id="aws-sagemaker-notes"><span class="header-section-number">64.6</span> AWS SageMaker Notes</h2>
+<p>Device connectivity and MQTT-based messaging at fleet scale map directly onto AWS IoT services:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><span class="im">import</span> boto3</span>
+<span id="cb7-2"></span>
+<span id="cb7-3">iot_client <span class="op">=</span> boto3.client(<span class="st">"iot-data"</span>)</span>
+<span id="cb7-4">iot_client.publish(</span>
+<span id="cb7-5">    topic<span class="op">=</span><span class="st">"factory/line1/temperature"</span>,</span>
+<span id="cb7-6">    payload<span class="op">=</span><span class="st">b'{"device_id": "sensor-042", "temperature_c": 78.5}'</span>,</span>
+<span id="cb7-7">    qos<span class="op">=</span><span class="dv">1</span>,</span>
+<span id="cb7-8">)</span></code></pre></div>
+<ul>
+<li><strong>AWS IoT Core</strong>: the managed MQTT broker / device connectivity layer, the direct equivalent of this chapter’s in-process broker, at fleet scale.</li>
+<li><strong>AWS IoT Greengrass</strong>: extends Lambda-style compute to the edge device itself, so decisions can run locally without a round-trip, matching this chapter’s edge-cloud split philosophy.</li>
+<li><strong>SageMaker Neo</strong>: compiles a trained model for a specific edge/embedded target, conceptually similar to this chapter’s ONNX export step.</li>
+<li><strong>AWS Panorama</strong>: a managed edge computer-vision appliance service; verify its current status against AWS documentation before recommending it, as offerings in this space change.</li>
+</ul>
+<p>This space moves quickly enough that specific service names and availability are worth double-checking against current AWS documentation rather than assumed from this text.</p>
+</section>
+<section id="history-and-further-reading" class="level2" data-number="64.7">
+<h2 data-number="64.7" class="anchored" data-anchor-id="history-and-further-reading"><span class="header-section-number">64.7</span> History and Further Reading</h2>
+<p>The MQTT.org specification is the authoritative reference for MQTT’s topic/QoS semantics this chapter’s broker reimplements in miniature. Han, Mao &amp; Dally’s “Deep Compression” <span class="citation" data-cites="han2016deepcompression">(<a href="#ref-han2016deepcompression" role="doc-biblioref">Han et al. 2016</a>)</span> is the foundational paper on combining pruning, quantization, and coding for model compression. Hinton, Vinyals &amp; Dean’s “Distilling the Knowledge in a Neural Network” <span class="citation" data-cites="hinton2015distillation">(<a href="#ref-hinton2015distillation" role="doc-biblioref">Hinton et al. 2015</a>)</span> is the original knowledge distillation paper. Chapter 58 is where this track’s real-time control-loop latency budget was first established.</p>
+</section>
+<section id="how-this-connects" class="level2" data-number="64.8">
+<h2 data-number="64.8" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">64.8</span> How This Connects</h2>
+<p>This chapter builds on Chapter 58’s real-time latency budget (the reason edge inference exists at all) and on Book 2, Chapter 23’s general deployment concepts, specialised here for constrained, intermittently-connected hardware. It enables Chapter 65 (Deployment, Fleets &amp; Safety), which assumes the edge-cloud architecture and IoT connectivity this chapter establishes, and connects to Book 2, Chapter 25’s monitoring material. Edge fleets need monitoring too, with the added challenge that a device can’t always be assumed reachable the instant something goes wrong. It’s often confused with general cloud deployment (Book 2, Chapter 23). The difference isn’t just “where the server is,” it’s the fundamentally different constraint profile (power, intermittent connectivity, no elastic scaling, hard real-time requirements) that changes which techniques even apply.</p>
+</section>
+<section id="exercises" class="level2" data-number="64.9">
+<h2 data-number="64.9" class="anchored" data-anchor-id="exercises"><span class="header-section-number">64.9</span> Exercises</h2>
+<ol type="1">
+<li id="ex-64-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State the deciding question this chapter uses to assign a piece of computation to the edge vs.&nbsp;the cloud, and apply it to (a) a robot’s obstacle-avoidance check and (b) a monthly fleet-wide performance dashboard.</p></li>
+<li id="ex-64-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Name the three axes (power, range, bandwidth/latency) that IoT protocols trade off against each other, and explain why LoRaWAN sacrifices bandwidth to achieve its range.</p></li>
+<li id="ex-64-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-quant-measure" class="quarto-xref">Listing&nbsp;<span>64.5</span></a>’s pattern, explain why a 73% size reduction with quantization is “essentially guaranteed by construction” while the latency change is not. What’s structurally different about the two measurements?</p></li>
+<li id="ex-64-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> The Worked Example’s on-device latency simulation uses the <em>quantized</em> model’s measured latency (0.078ms) rather than the FP32 model’s (0.022ms), even though quantization made this specific model slower. Explain why this is still the right choice for a real deployment decision, given this chapter’s compression trade-offs discussion.</p></li>
+<li id="ex-64-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer wants to run their perception model in the cloud “because the GPU is bigger there” for a robot with a 20ms control loop. Using this chapter’s deadline-miss measurement (<a href="#lst-deadline" class="quarto-xref">Listing&nbsp;<span>64.6</span></a>), write the two or three sentences you’d say back, citing the specific numbers.</p></li>
+<li id="ex-64-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A team pruned 40% of a CNN’s weights and is disappointed inference didn’t get any faster on their deployment hardware. Using Procedure 64.3, diagnose the likely cause and name the fix.</p></li>
+<li id="ex-64-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the abstract of Han, Mao &amp; Dally’s “Deep Compression.” Compare its combination of pruning, quantization, and Huffman coding to this chapter’s treatment of pruning and quantization as separate, composable techniques. What does combining all three buy over applying either one alone?</p></li>
+<li id="ex-64-8"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> A battery-powered soil-moisture sensor needs to report one reading every ten minutes from a location two kilometres from the nearest gateway, with a multi-year battery life target. Using Procedure 64.1’s decision heuristic, name the protocol this points to and justify it against the other three.</p></li>
+</ol>
+</section>
+<section id="mental-model" class="level2" data-number="64.10">
+<h2 data-number="64.10" class="anchored" data-anchor-id="mental-model"><span class="header-section-number">64.10</span> Mental Model</h2>
+<p>Every decision in this chapter answers the same question from a different angle: what do you do when the model that got good accuracy in training doesn’t fit the constraints of where it actually has to run? Compress the model, choose a lightweight protocol, and put the time-critical decision on the device, reserving the cloud for the things that can afford to wait. And never assume a compression technique’s effect on latency; this chapter’s own quantized model got smaller and slower at the same time, which is exactly the kind of surprise that measuring, not assuming, exists to catch.</p>
+
+
+<div id="refs" class="references csl-bib-body hanging-indent" role="list">
+<div id="ref-han2016deepcompression" class="csl-entry" role="listitem">
+Han, Song, Huizi Mao, and William J. Dally. 2016. <span>“Deep Compression: Compressing Deep Neural Networks with Pruning, Trained Quantization and Huffman Coding.”</span> <em>International Conference on Learning Representations</em>.
+</div>
+<div id="ref-hinton2015distillation" class="csl-entry" role="listitem">
+Hinton, Geoffrey, Oriol Vinyals, and Jeffrey Dean. 2015. <span>“Distilling the Knowledge in a Neural Network.”</span> <em>NIPS Deep Learning and Representation Learning Workshop</em>.
+</div>
+</div>
+</section>

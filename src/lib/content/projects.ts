@@ -50,7 +50,7 @@ export const projects: Project[] = [
 		zh: '书',
 		kind: 'book',
 		status: 'live',
-		summary: 'The four-volume Solutions Architect\'s Field Guide to AI, readable online.',
+		summary: 'The four-volume Solutions Architect\'s Field Guide, readable online.',
 		description: ['The chapters are written in Quarto, with LaTeX for the math. The web edition renders them as paper-style pages. Volume 1 is online now. The others follow.'],
 		stack: ['Quarto', 'LaTeX', 'SvelteKit'],
 		featured: true,

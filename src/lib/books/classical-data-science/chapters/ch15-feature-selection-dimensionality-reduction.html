@@ -96,16 +96,18 @@ Listing&nbsp;15.1: Three real clusters, PCA vs.&nbsp;UMAP vs.&nbsp;t-SNE, when a
 <span id="cb1-29"><span class="bu">print</span>(<span class="ss">f't-SNE silhouette (default perplexity=30): </span><span class="sc">{</span>tsne_sil<span class="sc">:.4f}</span><span class="ss">'</span>)</span>
 <span id="cb1-30"></span>
 <span id="cb1-31">fig, axes <span class="op">=</span> plt.subplots(<span class="dv">1</span>, <span class="dv">2</span>, figsize<span class="op">=</span>(<span class="dv">12</span>, <span class="dv">5</span>))</span>
-<span id="cb1-32">axes[<span class="dv">0</span>].scatter(X_pca[:, <span class="dv">0</span>], X_pca[:, <span class="dv">1</span>], c<span class="op">=</span>y, cmap<span class="op">=</span><span class="st">'viridis'</span>, alpha<span class="op">=</span><span class="fl">0.75</span>, s<span class="op">=</span><span class="dv">30</span>)</span>
-<span id="cb1-33">axes[<span class="dv">0</span>].set_title(<span class="ss">f'PCA (silhouette = </span><span class="sc">{</span>pca_sil<span class="sc">:.3f}</span><span class="ss">)'</span>)</span>
-<span id="cb1-34">axes[<span class="dv">0</span>].set_xlabel(<span class="st">'PC1'</span>)</span>
-<span id="cb1-35">axes[<span class="dv">0</span>].set_ylabel(<span class="st">'PC2'</span>)</span>
-<span id="cb1-36">axes[<span class="dv">1</span>].scatter(X_umap[:, <span class="dv">0</span>], X_umap[:, <span class="dv">1</span>], c<span class="op">=</span>y, cmap<span class="op">=</span><span class="st">'viridis'</span>, alpha<span class="op">=</span><span class="fl">0.75</span>, s<span class="op">=</span><span class="dv">30</span>)</span>
-<span id="cb1-37">axes[<span class="dv">1</span>].set_title(<span class="ss">f'UMAP (silhouette = </span><span class="sc">{</span>umap_sil<span class="sc">:.3f}</span><span class="ss">)'</span>)</span>
-<span id="cb1-38">axes[<span class="dv">1</span>].set_xlabel(<span class="st">'UMAP1'</span>)</span>
-<span id="cb1-39">axes[<span class="dv">1</span>].set_ylabel(<span class="st">'UMAP2'</span>)</span>
-<span id="cb1-40">plt.tight_layout()</span>
-<span id="cb1-41">plt.show()</span></code></pre></div>
+<span id="cb1-32">axes[<span class="dv">0</span>].scatter(X_pca[:, <span class="dv">0</span>], X_pca[:, <span class="dv">1</span>], c<span class="op">=</span>y, cmap<span class="op">=</span><span class="st">'viridis'</span>,</span>
+<span id="cb1-33">                alpha<span class="op">=</span><span class="fl">0.75</span>, s<span class="op">=</span><span class="dv">30</span>)</span>
+<span id="cb1-34">axes[<span class="dv">0</span>].set_title(<span class="ss">f'PCA (silhouette = </span><span class="sc">{</span>pca_sil<span class="sc">:.3f}</span><span class="ss">)'</span>)</span>
+<span id="cb1-35">axes[<span class="dv">0</span>].set_xlabel(<span class="st">'PC1'</span>)</span>
+<span id="cb1-36">axes[<span class="dv">0</span>].set_ylabel(<span class="st">'PC2'</span>)</span>
+<span id="cb1-37">axes[<span class="dv">1</span>].scatter(X_umap[:, <span class="dv">0</span>], X_umap[:, <span class="dv">1</span>], c<span class="op">=</span>y, cmap<span class="op">=</span><span class="st">'viridis'</span>,</span>
+<span id="cb1-38">                alpha<span class="op">=</span><span class="fl">0.75</span>, s<span class="op">=</span><span class="dv">30</span>)</span>
+<span id="cb1-39">axes[<span class="dv">1</span>].set_title(<span class="ss">f'UMAP (silhouette = </span><span class="sc">{</span>umap_sil<span class="sc">:.3f}</span><span class="ss">)'</span>)</span>
+<span id="cb1-40">axes[<span class="dv">1</span>].set_xlabel(<span class="st">'UMAP1'</span>)</span>
+<span id="cb1-41">axes[<span class="dv">1</span>].set_ylabel(<span class="st">'UMAP2'</span>)</span>
+<span id="cb1-42">plt.tight_layout()</span>
+<span id="cb1-43">plt.show()</span></code></pre></div>
 </div>
 </figure>
 </div>

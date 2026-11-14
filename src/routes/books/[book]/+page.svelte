@@ -30,14 +30,16 @@
 			<p class="nd-meta stats">{chapters.length} chapters · {appendices.length} appendices · {Math.round(words / 1000)}k words{#if totalQuestions}{' · '}{totalQuestions} quiz questions{/if}</p>
 			<div class="actions">
 				<Button href="/books/{book.slug}/{first.slug}">Read online</Button>
-				{#if meta.pdfHref}<Button variant="outline" href={meta.pdfHref}>Download PDF</Button>{/if}
-				{#if meta.buyHref}<Button variant="outline" arrow href={meta.buyHref}>Buy on Amazon</Button>{/if}
+				{#if meta.pdfHref}<Button variant="outline" href={meta.pdfHref}>Download PDF</Button>{:else}<Button variant="outline" disabled>Download PDF</Button>{/if}
+				{#if meta.buyHref}<Button variant="outline" arrow href={meta.buyHref} rel="external noopener">Buy on Amazon</Button>{:else}<Button variant="outline" disabled>Buy on Amazon</Button>{/if}
 				{#if meta.quizHref}<Button variant="ghost" href={meta.quizHref}>Chapter quizzes</Button>{/if}
 			</div>
 			{#if meta.payHref}
 				<p class="pay">
 					Free to read, here and as a PDF. If it helped, <a href={meta.payHref}>pay what you want</a>. The print and Kindle editions are on Amazon.
 				</p>
+			{:else}
+				<p class="pay">Free to read online. The PDF and the print and Kindle editions are coming soon.</p>
 			{/if}
 		</div>
 	</header>

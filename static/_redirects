@@ -1,0 +1,3 @@
+# Cloudflare Pages redirects. Short links go here.
+/quiz/vol1   /books/classical-data-science/quiz  302
+/quiz/vol1/  /books/classical-data-science/quiz  302

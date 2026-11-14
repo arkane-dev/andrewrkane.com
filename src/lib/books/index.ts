@@ -1,6 +1,8 @@
 // Web editions of the Field Guide. Each folder here is written by scripts/import-book.mjs from the
 // Quarto source: book.json (contents and anchors), chapters/*.html and quizzes/*.json.
 
+import { books as catalog } from '../content/books';
+
 export interface Section {
 	id: string;
 	number: string;
@@ -60,10 +62,13 @@ const books = import.meta.glob<WebBook>('./*/book.json', { eager: true, import: 
 const quizzes = import.meta.glob<Quiz>('./*/quizzes/*.json', { import: 'default' });
 const chapters = import.meta.glob<string>('./*/chapters/*.html', { query: '?raw', import: 'default' });
 
-export const webBooks: WebBook[] = Object.values(books);
+/** Volumes with a readHref in content/books.ts are published. The rest are imported but not built. */
+const released = new Set(catalog.filter((b) => b.readHref).map((b) => b.slug));
+
+export const webBooks: WebBook[] = Object.values(books).filter((b) => released.has(b.slug));
 
 export function getBook(slug: string): WebBook | undefined {
-	return books[`./${slug}/book.json`];
+	return released.has(slug) ? books[`./${slug}/book.json`] : undefined;
 }
 
 /** "Chapter 3", "Appendix A", or "" for front matter. */

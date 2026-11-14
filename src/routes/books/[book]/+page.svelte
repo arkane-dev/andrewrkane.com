@@ -32,7 +32,7 @@
 				<Button href="/books/{book.slug}/{first.slug}">Read online</Button>
 				{#if meta.pdfHref}<Button variant="outline" href={meta.pdfHref}>Download PDF</Button>{:else}<Button variant="outline" disabled>Download PDF</Button>{/if}
 				{#if meta.buyHref}<Button variant="outline" arrow href={meta.buyHref} rel="external noopener">Buy on Amazon</Button>{:else}<Button variant="outline" disabled>Buy on Amazon</Button>{/if}
-				{#if meta.quizHref}<Button variant="outline" href={meta.quizHref}>Chapter quizzes</Button>{/if}
+				{#if meta.quizHref}<Button variant="ghost" href={meta.quizHref}>Chapter quizzes</Button>{/if}
 			</div>
 			{#if meta.payHref}
 				<p class="pay">

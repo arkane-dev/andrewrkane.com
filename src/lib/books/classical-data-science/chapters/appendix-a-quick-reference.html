@@ -45,7 +45,7 @@
 <tr class="even">
 <td>2001</td>
 <td>Random Forests</td>
-<td>Still dominant on tabular data 20+ years later</td>
+<td>Still a strong tabular baseline 20+ years later</td>
 </tr>
 <tr class="odd">
 <td>2009</td>
@@ -2233,7 +2233,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 </tr>
 <tr class="odd">
 <td><code>SUM(col) OVER (...)</code></td>
-<td>Running total</td>
+<td>Running total (add <code>ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW</code> if dates can tie)</td>
 <td><code>SUM(rev) OVER (ORDER BY date)</code></td>
 </tr>
 <tr class="even">
@@ -2427,19 +2427,22 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <span id="cb24-28"><span class="kw">SELECT</span></span>
 <span id="cb24-29">    date_col,</span>
 <span id="cb24-30">    val,</span>
-<span id="cb24-31">    <span class="fu">SUM</span>(val) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> date_col) <span class="kw">AS</span> running_total</span>
-<span id="cb24-32"><span class="kw">FROM</span> t;</span>
-<span id="cb24-33"></span>
-<span id="cb24-34"><span class="co">-- Deduplicate (keep latest per ID)</span></span>
-<span id="cb24-35"><span class="kw">WITH</span> ranked <span class="kw">AS</span> (</span>
-<span id="cb24-36">    <span class="kw">SELECT</span></span>
-<span id="cb24-37">        <span class="op">*</span>,</span>
-<span id="cb24-38">        <span class="fu">ROW_NUMBER</span>() <span class="kw">OVER</span> (</span>
-<span id="cb24-39">            <span class="kw">PARTITION</span> <span class="kw">BY</span> <span class="kw">id</span> <span class="kw">ORDER</span> <span class="kw">BY</span> updated_at <span class="kw">DESC</span></span>
-<span id="cb24-40">        ) <span class="kw">AS</span> r</span>
-<span id="cb24-41">    <span class="kw">FROM</span> t</span>
-<span id="cb24-42">)</span>
-<span id="cb24-43"><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> ranked <span class="kw">WHERE</span> r <span class="op">=</span> <span class="dv">1</span>;</span></code></pre></div>
+<span id="cb24-31">    <span class="fu">SUM</span>(val) <span class="kw">OVER</span> (</span>
+<span id="cb24-32">        <span class="kw">ORDER</span> <span class="kw">BY</span> date_col</span>
+<span id="cb24-33">        <span class="kw">ROWS</span> <span class="kw">BETWEEN</span> <span class="kw">UNBOUNDED</span> <span class="kw">PRECEDING</span> <span class="kw">AND</span> <span class="kw">CURRENT</span> <span class="kw">ROW</span></span>
+<span id="cb24-34">    ) <span class="kw">AS</span> running_total</span>
+<span id="cb24-35"><span class="kw">FROM</span> t;</span>
+<span id="cb24-36"></span>
+<span id="cb24-37"><span class="co">-- Deduplicate (keep latest per ID)</span></span>
+<span id="cb24-38"><span class="kw">WITH</span> ranked <span class="kw">AS</span> (</span>
+<span id="cb24-39">    <span class="kw">SELECT</span></span>
+<span id="cb24-40">        <span class="op">*</span>,</span>
+<span id="cb24-41">        <span class="fu">ROW_NUMBER</span>() <span class="kw">OVER</span> (</span>
+<span id="cb24-42">            <span class="kw">PARTITION</span> <span class="kw">BY</span> <span class="kw">id</span> <span class="kw">ORDER</span> <span class="kw">BY</span> updated_at <span class="kw">DESC</span></span>
+<span id="cb24-43">        ) <span class="kw">AS</span> r</span>
+<span id="cb24-44">    <span class="kw">FROM</span> t</span>
+<span id="cb24-45">)</span>
+<span id="cb24-46"><span class="kw">SELECT</span> <span class="op">*</span> <span class="kw">FROM</span> ranked <span class="kw">WHERE</span> r <span class="op">=</span> <span class="dv">1</span>;</span></code></pre></div>
 </section>
 <section id="sql-vs-pandas-decision-guide" class="level3">
 <h3 class="anchored" data-anchor-id="sql-vs-pandas-decision-guide">SQL vs pandas Decision Guide</h3>
@@ -2925,12 +2928,12 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <tr class="even">
 <td>6. Deployment</td>
 <td>Package the model and serve predictions: batch or real-time</td>
-<td>Later deployment chapters</td>
+<td>Book 2, Chapter 23</td>
 </tr>
 <tr class="odd">
 <td>7. Monitoring</td>
 <td>Watch for data drift, model drift, operational failures</td>
-<td>Later MLOps chapters</td>
+<td>Book 2, Chapter 25</td>
 </tr>
 <tr class="even">
 <td>8. Iteration</td>
@@ -3242,22 +3245,22 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 <tr class="odd">
 <td>Evaluation</td>
 <td>SageMaker Clarify, SageMaker Model Monitor (baseline)</td>
-<td>Chapters 16, 21</td>
+<td>Chapter 16; Book 2, Chapter 21 (Clarify)</td>
 </tr>
 <tr class="even">
 <td>Deployment</td>
 <td>SageMaker Endpoints (real-time), SageMaker Batch Transform</td>
-<td>Chapter 23</td>
+<td>Book 2, Chapter 23</td>
 </tr>
 <tr class="odd">
 <td>Monitoring</td>
 <td>SageMaker Model Monitor, CloudWatch</td>
-<td>Chapter 25</td>
+<td>Book 2, Chapter 25</td>
 </tr>
 <tr class="even">
 <td>Iteration / orchestration</td>
 <td>SageMaker Pipelines, SageMaker Projects</td>
-<td>Chapter 24</td>
+<td>Book 2, Chapter 24</td>
 </tr>
 </tbody>
 </table>

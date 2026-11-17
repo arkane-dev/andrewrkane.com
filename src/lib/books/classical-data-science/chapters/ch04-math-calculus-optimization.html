@@ -175,9 +175,9 @@ Listing&nbsp;4.2: Plotting train/validation loss and the diagnostic table behind
 <span id="cb2-24">patterns <span class="op">=</span> {</span>
 <span id="cb2-25">    <span class="st">"Steadily decreasing"</span>: <span class="st">"Good: model is learning"</span>,</span>
 <span id="cb2-26">    <span class="st">"Decreasing then plateau"</span>: (</span>
-<span id="cb2-27">        <span class="st">"Good: converged. Try more epochs or a lower LR"</span></span>
+<span id="cb2-27">        <span class="st">"Good: converged. More epochs won't help"</span></span>
 <span id="cb2-28">    ),</span>
-<span id="cb2-29">    <span class="st">"Oscillating"</span>: <span class="st">"Learning rate too high: reduce by 10x"</span>,</span>
+<span id="cb2-29">    <span class="st">"Oscillating"</span>: <span class="st">"Learning rate too high: reduce by 3-10x"</span>,</span>
 <span id="cb2-30">    <span class="st">"Train low, val high"</span>: (</span>
 <span id="cb2-31">        <span class="st">"Overfitting: add regularisation or more data"</span></span>
 <span id="cb2-32">    ),</span>

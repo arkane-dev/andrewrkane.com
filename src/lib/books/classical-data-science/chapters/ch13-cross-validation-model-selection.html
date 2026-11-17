@@ -150,37 +150,43 @@ Listing&nbsp;13.3: TimeSeriesSplit: validation always in the future
 Listing&nbsp;13.4: Nested cross-validation: inner search, outer honest evaluation
 </figcaption>
 <div aria-describedby="lst-nested-cv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
-<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> (</span>
-<span id="cb4-2">    GridSearchCV,</span>
-<span id="cb4-3">    cross_val_score,</span>
-<span id="cb4-4">    StratifiedKFold,</span>
-<span id="cb4-5">)</span>
-<span id="cb4-6"></span>
-<span id="cb4-7">inner_cv <span class="op">=</span> StratifiedKFold(</span>
-<span id="cb4-8">    n_splits<span class="op">=</span><span class="dv">3</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
-<span id="cb4-9">)</span>
-<span id="cb4-10">outer_cv <span class="op">=</span> StratifiedKFold(</span>
-<span id="cb4-11">    n_splits<span class="op">=</span><span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
-<span id="cb4-12">)</span>
-<span id="cb4-13"></span>
-<span id="cb4-14">param_grid <span class="op">=</span> {</span>
-<span id="cb4-15">    <span class="st">'clf__n_estimators'</span>: [<span class="dv">50</span>, <span class="dv">100</span>, <span class="dv">200</span>],</span>
-<span id="cb4-16">    <span class="st">'clf__max_depth'</span>: [<span class="dv">3</span>, <span class="dv">5</span>, <span class="va">None</span>],</span>
-<span id="cb4-17">}</span>
-<span id="cb4-18">search <span class="op">=</span> GridSearchCV(</span>
-<span id="cb4-19">    pipe, param_grid, cv<span class="op">=</span>inner_cv, scoring<span class="op">=</span><span class="st">'accuracy'</span>, n_jobs<span class="op">=-</span><span class="dv">1</span></span>
-<span id="cb4-20">)</span>
-<span id="cb4-21"></span>
-<span id="cb4-22">nested_scores <span class="op">=</span> cross_val_score(</span>
-<span id="cb4-23">    search, X, y, cv<span class="op">=</span>outer_cv, scoring<span class="op">=</span><span class="st">'accuracy'</span></span>
-<span id="cb4-24">)</span>
-<span id="cb4-25">mean, std <span class="op">=</span> nested_scores.mean(), nested_scores.std()</span>
-<span id="cb4-26"><span class="bu">print</span>(<span class="ss">f'Nested CV: </span><span class="sc">{</span>mean<span class="sc">:.3f}</span><span class="ss"> ± </span><span class="sc">{</span>std<span class="sc">:.3f}</span><span class="ss">'</span>)</span>
+<div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><span class="im">from</span> sklearn.ensemble <span class="im">import</span> RandomForestClassifier</span>
+<span id="cb4-2"><span class="im">from</span> sklearn.model_selection <span class="im">import</span> (</span>
+<span id="cb4-3">    GridSearchCV,</span>
+<span id="cb4-4">    cross_val_score,</span>
+<span id="cb4-5">    StratifiedKFold,</span>
+<span id="cb4-6">)</span>
+<span id="cb4-7"></span>
+<span id="cb4-8">rf_pipe <span class="op">=</span> Pipeline([</span>
+<span id="cb4-9">    (<span class="st">'scaler'</span>, StandardScaler()),</span>
+<span id="cb4-10">    (<span class="st">'clf'</span>, RandomForestClassifier(random_state<span class="op">=</span><span class="dv">42</span>)),</span>
+<span id="cb4-11">])</span>
+<span id="cb4-12"></span>
+<span id="cb4-13">inner_cv <span class="op">=</span> StratifiedKFold(</span>
+<span id="cb4-14">    n_splits<span class="op">=</span><span class="dv">3</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb4-15">)</span>
+<span id="cb4-16">outer_cv <span class="op">=</span> StratifiedKFold(</span>
+<span id="cb4-17">    n_splits<span class="op">=</span><span class="dv">5</span>, shuffle<span class="op">=</span><span class="va">True</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
+<span id="cb4-18">)</span>
+<span id="cb4-19"></span>
+<span id="cb4-20">param_grid <span class="op">=</span> {</span>
+<span id="cb4-21">    <span class="st">'clf__n_estimators'</span>: [<span class="dv">50</span>, <span class="dv">100</span>, <span class="dv">200</span>],</span>
+<span id="cb4-22">    <span class="st">'clf__max_depth'</span>: [<span class="dv">3</span>, <span class="dv">5</span>, <span class="va">None</span>],</span>
+<span id="cb4-23">}</span>
+<span id="cb4-24">search <span class="op">=</span> GridSearchCV(</span>
+<span id="cb4-25">    rf_pipe, param_grid, cv<span class="op">=</span>inner_cv, scoring<span class="op">=</span><span class="st">'accuracy'</span>, n_jobs<span class="op">=-</span><span class="dv">1</span></span>
+<span id="cb4-26">)</span>
 <span id="cb4-27"></span>
-<span id="cb4-28"><span class="co"># After nested CV establishes the honest estimate, refit</span></span>
-<span id="cb4-29"><span class="co"># on all data for the final model:</span></span>
-<span id="cb4-30">search.fit(X, y)</span>
-<span id="cb4-31">final_model <span class="op">=</span> search.best_estimator_</span></code></pre></div>
+<span id="cb4-28">nested_scores <span class="op">=</span> cross_val_score(</span>
+<span id="cb4-29">    search, X, y, cv<span class="op">=</span>outer_cv, scoring<span class="op">=</span><span class="st">'accuracy'</span></span>
+<span id="cb4-30">)</span>
+<span id="cb4-31">mean, std <span class="op">=</span> nested_scores.mean(), nested_scores.std()</span>
+<span id="cb4-32"><span class="bu">print</span>(<span class="ss">f'Nested CV: </span><span class="sc">{</span>mean<span class="sc">:.3f}</span><span class="ss"> ± </span><span class="sc">{</span>std<span class="sc">:.3f}</span><span class="ss">'</span>)</span>
+<span id="cb4-33"></span>
+<span id="cb4-34"><span class="co"># After nested CV establishes the honest estimate, refit</span></span>
+<span id="cb4-35"><span class="co"># on all data for the final model:</span></span>
+<span id="cb4-36">search.fit(X, y)</span>
+<span id="cb4-37">final_model <span class="op">=</span> search.best_estimator_</span></code></pre></div>
 </div>
 </figure>
 </div>
@@ -259,7 +265,7 @@ Listing&nbsp;13.6: Ten random splits, same model, same data: different reported 
 </section>
 <section id="how-this-connects" class="level2" data-number="13.7">
 <h2 data-number="13.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">13.7</span> How This Connects</h2>
-<p>This chapter builds on Chapter 11 (a model is needed before it can be cross-validated) and Chapter 16 (evaluation metrics used within CV). It enables Chapter 17’s hyperparameter optimisation, which is always done via CV. It’s needed for essentially every model-comparison decision in the rest of this book. It’s often confused with test-set evaluation. CV is for model development and selection. The test set is for one final evaluation, after all decisions have already been made. Touch the test set once.</p>
+<p>This chapter builds on Chapter 11 (a model is needed before it can be cross-validated). It looks ahead to Chapter 16 for the evaluation metrics used within CV. It enables Chapter 17’s hyperparameter optimisation, which is always done via CV. It’s needed for essentially every model-comparison decision in the rest of this book. It’s often confused with test-set evaluation. CV is for model development and selection. The test set is for one final evaluation, after all decisions have already been made. Touch the test set once.</p>
 </section>
 <section id="exercises" class="level2" data-number="13.8">
 <h2 data-number="13.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">13.8</span> Exercises</h2>

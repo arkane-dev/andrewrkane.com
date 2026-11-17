@@ -106,7 +106,7 @@
      "level": 2
     }
    ],
-   "words": 3338
+   "words": 3337
   },
   {
    "slug": "ch02-business-problem-framing",
@@ -200,7 +200,7 @@
      "level": 2
     }
    ],
-   "words": 3326
+   "words": 3328
   },
   {
    "slug": "ch03-math-stats-probability-linear-algebra",
@@ -300,7 +300,7 @@
      "level": 2
     }
    ],
-   "words": 5518
+   "words": 5544
   },
   {
    "slug": "ch04-math-calculus-optimization",
@@ -418,7 +418,7 @@
      "level": 2
     }
    ],
-   "words": 4758
+   "words": 4755
   },
   {
    "slug": "ch05-information-theory",
@@ -512,7 +512,7 @@
      "level": 2
     }
    ],
-   "words": 3960
+   "words": 3972
   },
   {
    "slug": "ch06-python-ecosystem",
@@ -624,7 +624,7 @@
      "level": 2
     }
    ],
-   "words": 3245
+   "words": 3261
   },
   {
    "slug": "ch07-data-cleaning-wrangling",
@@ -730,7 +730,7 @@
      "level": 2
     }
    ],
-   "words": 4584
+   "words": 4578
   },
   {
    "slug": "ch08-sql-for-data-science",
@@ -824,7 +824,7 @@
      "level": 2
     }
    ],
-   "words": 4180
+   "words": 4182
   },
   {
    "slug": "ch09-exploratory-data-analysis",
@@ -994,7 +994,7 @@
      "level": 2
     }
    ],
-   "words": 3784
+   "words": 3781
   },
   {
    "slug": "ch11-supervised-learning-overview",
@@ -1100,7 +1100,7 @@
      "level": 2
     }
    ],
-   "words": 3846
+   "words": 3847
   },
   {
    "slug": "ch12-ensemble-methods",
@@ -1200,7 +1200,7 @@
      "level": 2
     }
    ],
-   "words": 2883
+   "words": 2894
   },
   {
    "slug": "ch13-cross-validation-model-selection",
@@ -1300,7 +1300,7 @@
      "level": 2
     }
    ],
-   "words": 2184
+   "words": 2201
   },
   {
    "slug": "ch14-feature-engineering",
@@ -1494,7 +1494,7 @@
      "level": 2
     }
    ],
-   "words": 4468
+   "words": 4496
   },
   {
    "slug": "ch16-model-evaluation",
@@ -1676,7 +1676,7 @@
      "level": 2
     }
    ],
-   "words": 2208
+   "words": 2207
   },
   {
    "slug": "ch18-regularization",
@@ -1782,7 +1782,7 @@
      "level": 2
     }
    ],
-   "words": 2511
+   "words": 2513
   },
   {
    "slug": "ch19-unsupervised-learning",
@@ -1876,7 +1876,7 @@
      "level": 2
     }
    ],
-   "words": 2509
+   "words": 2513
   },
   {
    "slug": "ch20-time-series",
@@ -1970,7 +1970,7 @@
      "level": 2
     }
    ],
-   "words": 2400
+   "words": 2401
   },
   {
    "slug": "appendix-a-quick-reference",
@@ -2100,7 +2100,7 @@
      "level": 2
     }
    ],
-   "words": 9987
+   "words": 10020
   },
   {
    "slug": "appendix-b-answers",
@@ -2230,7 +2230,7 @@
      "level": 2
     }
    ],
-   "words": 14878
+   "words": 14882
   }
  ],
  "anchors": {

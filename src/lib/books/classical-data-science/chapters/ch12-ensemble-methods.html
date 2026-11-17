@@ -26,7 +26,7 @@ M834 80h400000v40h-400000z"></path></svg></span></span></span><span class="vlist
 </section>
 <section id="boosting-reducing-bias" class="level3" data-number="12.2.3">
 <h3 data-number="12.2.3" class="anchored" data-anchor-id="boosting-reducing-bias"><span class="header-section-number">12.2.3</span> Boosting — Reducing Bias</h3>
-<p>Boosting trains models sequentially rather than in parallel, with each new model focused on the previous ensemble’s mistakes. The original recipe, AdaBoost: train a weak learner (typically a shallow “stump”), increase the weight of misclassified examples, train the next learner on the reweighted data so it focuses on the hard cases, repeat, and combine as a weighted sum. Boosting reduces bias, systematic error, rather than variance. It’s especially effective when a model is wrong in a <em>correctable</em> way.</p>
+<p>Boosting trains models sequentially rather than in parallel, with each new model focused on the previous ensemble’s mistakes. The original recipe, AdaBoost: train a weak learner (typically a shallow “stump”), increase the weight of misclassified examples, train the next learner on the reweighted data so it focuses on the hard cases, repeat, and combine as a weighted sum. Boosting mainly reduces bias, systematic error. Gradient boosting’s shrinkage and subsampling also keep its variance in check. It’s especially effective when a model is wrong in a <em>correctable</em> way.</p>
 </section>
 <section id="gradient-boosting-boosting-as-gradient-descent" class="level3" data-number="12.2.4">
 <h3 data-number="12.2.4" class="anchored" data-anchor-id="gradient-boosting-boosting-as-gradient-descent"><span class="header-section-number">12.2.4</span> Gradient Boosting — Boosting as Gradient Descent</h3>
@@ -310,7 +310,7 @@ Listing&nbsp;12.5: Training and benchmarking four ensemble methods
 </section>
 <section id="how-this-connects" class="level2" data-number="12.7">
 <h2 data-number="12.7" class="anchored" data-anchor-id="how-this-connects"><span class="header-section-number">12.7</span> How This Connects</h2>
-<p>This chapter builds on Chapter 11’s decision trees as base learners, and on Chapter 13’s cross-validation, which is critical for stacking done correctly. It enables Chapter 14’s feature importance work and Chapter 16’s evaluation of ensemble models. It’s often confused with neural networks as competing options for tabular data. Gradient boosting usually wins on tabular data. Neural networks win on images, text, and audio, a distinction this book returns to from Chapter 27 onward.</p>
+<p>This chapter builds on Chapter 11’s decision trees as base learners. It looks ahead to Chapter 13’s cross-validation, which is critical for stacking done correctly. It enables Chapter 14’s feature importance work and Chapter 16’s evaluation of ensemble models. It’s often confused with neural networks as competing options for tabular data. Gradient boosting usually wins on tabular data. Neural networks win on images, text, and audio, a distinction Book 2 returns to from Chapter 27 onward.</p>
 </section>
 <section id="exercises" class="level2" data-number="12.8">
 <h2 data-number="12.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">12.8</span> Exercises</h2>

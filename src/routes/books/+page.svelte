@@ -28,9 +28,9 @@
 						<p>{b.summary}</p>
 						<div class="row">
 							<span class="plate"><StatusTag status={b.status} /></span>
-							{#if b.buyHref}<Button size="sm" arrow href={b.buyHref} rel="external sponsored noopener">Buy on Amazon</Button><span class="paid nd-meta">(paid link)</span>{:else}<Button size="sm" disabled>Buy on Amazon</Button>{/if}
+							{#if b.buyHref}<span class="buy"><Button size="sm" arrow href={b.buyHref} rel="external sponsored noopener">Buy on Amazon</Button><span class="paid nd-meta">(paid link)</span></span>{:else}<Button size="sm" disabled>Buy on Amazon</Button>{/if}
 							{#if b.readHref}<Button size="sm" variant="outline" href={b.readHref}>Read online</Button>{:else}<Button size="sm" variant="outline" disabled>Read online</Button>{/if}
-							{#if b.pdfHref}<Button size="sm" variant="outline" href={b.pdfHref}>PDF</Button>{:else}<Button size="sm" variant="outline" disabled>PDF</Button>{/if}
+							{#if b.pdfHref}<Button size="sm" variant="outline" href={b.pdfHref} target="_blank" rel="noopener">PDF</Button>{:else}<Button size="sm" variant="outline" disabled>PDF</Button>{/if}
 							{#if b.quizHref}<Button size="sm" variant="ghost" href={b.quizHref}>Quizzes</Button>{/if}
 						</div>
 					</div>
@@ -63,6 +63,10 @@
 	/* Neon link colours are for the dark UI. On paper, links use ink. */
 	.license a { color: var(--nd-ink); text-decoration: underline; text-underline-offset: 2px; }
 	.row { display: flex; flex-wrap: wrap; gap: var(--nd-space-2); align-items: center; }
-	.paid { margin-right: var(--nd-space-2); }
+	/* The affiliate label hangs under the Amazon button, out of the flow, so the buttons stay in line.
+	   The row gap and bottom margin leave room for it on any line the button wraps to. */
+	.row:has(.buy) { row-gap: var(--nd-space-6); margin-bottom: var(--nd-space-5); }
+	.buy { position: relative; display: inline-flex; }
+	.paid { position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; text-align: center; white-space: nowrap; }
 	@media (max-width: 900px) { .vols { grid-template-columns: 1fr; } .series { padding: var(--nd-space-5) var(--nd-space-5) var(--nd-space-8); } .seal { position: static; display: flex; justify-content: flex-end; justify-self: stretch; margin-bottom: var(--nd-space-3); /* in flow on phones: never covers the text */ } }
 </style>

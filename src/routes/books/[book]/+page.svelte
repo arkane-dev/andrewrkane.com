@@ -30,8 +30,8 @@
 			<p class="nd-meta stats">{chapters.length} chapters · {appendices.length} appendices · {Math.round(words / 1000)}k words{#if totalQuestions}{' · '}{totalQuestions} quiz questions{/if}</p>
 			<div class="actions">
 				<Button href="/books/{book.slug}/{first.slug}">Read online</Button>
-				{#if meta.pdfHref}<Button variant="outline" href={meta.pdfHref}>Download PDF</Button>{:else}<Button variant="outline" disabled>Download PDF</Button>{/if}
-				{#if meta.buyHref}<Button variant="outline" arrow href={meta.buyHref} rel="external sponsored noopener">Buy on Amazon</Button><span class="paid nd-meta">(paid link)</span>{:else}<Button variant="outline" disabled>Buy on Amazon</Button>{/if}
+				{#if meta.pdfHref}<Button variant="outline" href={meta.pdfHref} target="_blank" rel="noopener">Download PDF</Button>{:else}<Button variant="outline" disabled>Download PDF</Button>{/if}
+				{#if meta.buyHref}<span class="buy"><Button variant="outline" arrow href={meta.buyHref} rel="external sponsored noopener">Buy on Amazon</Button><span class="paid nd-meta">(paid link)</span></span>{:else}<Button variant="outline" disabled>Buy on Amazon</Button>{/if}
 				{#if meta.quizHref}<Button variant="ghost" href={meta.quizHref}>Chapter quizzes</Button>{/if}
 			</div>
 			{#if meta.payHref}
@@ -82,6 +82,11 @@
 	.lede { max-width: 60ch; font-size: var(--nd-text-lg); }
 	.stats { margin: var(--nd-space-4) 0 var(--nd-space-6); }
 	.actions { display: flex; flex-wrap: wrap; gap: var(--nd-space-3); align-items: center; }
+	/* The affiliate label hangs under the Amazon button, out of the flow, so the buttons stay in line.
+	   The row gap and bottom margin leave room for it on any line the button wraps to. */
+	.actions:has(.buy) { row-gap: var(--nd-space-6); margin-bottom: var(--nd-space-8); }
+	.buy { position: relative; display: inline-flex; }
+	.paid { position: absolute; top: 100%; left: 0; right: 0; margin-top: 2px; text-align: center; white-space: nowrap; }
 	.pay { max-width: 60ch; margin-top: var(--nd-space-6); }
 	.pay a { color: var(--nd-ink); font-weight: 600; }
 	.toc { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: var(--nd-space-10); }

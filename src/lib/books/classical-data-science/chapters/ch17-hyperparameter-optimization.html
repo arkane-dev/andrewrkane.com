@@ -12,7 +12,7 @@
 <section id="search-strategies" class="level3" data-number="17.2.2">
 <h3 data-number="17.2.2" class="anchored" data-anchor-id="search-strategies"><span class="header-section-number">17.2.2</span> Search Strategies</h3>
 <p><strong>Grid search</strong> enumerates every combination in a defined grid. Five values across four hyperparameters is <span class="katex"><span class="katex-mathml"><math xmlns="http://www.w3.org/1998/Math/MathML"><semantics><mrow><msup><mn>5</mn><mn>4</mn></msup><mo>=</mo><mn>625</mn></mrow><annotation encoding="application/x-tex">5^4 = 625</annotation></semantics></math></span><span class="katex-html" aria-hidden="true"><span class="katex-base"><span class="katex-strut" style="height:0.8141em;"></span><span class="mord"><span class="mord">5</span><span class="msupsub"><span class="vlist-t"><span class="vlist-r"><span class="vlist" style="height:0.8141em;"><span style="top:-3.063em;margin-right:0.05em;"><span class="pstrut" style="height:2.7em;"></span><span class="katex-sizing reset-size6 size3 mtight"><span class="mord mtight">4</span></span></span></span></span></span></span></span><span class="mspace" style="margin-right:0.2778em;"></span><span class="mrel">=</span><span class="mspace" style="margin-right:0.2778em;"></span></span><span class="katex-base"><span class="katex-strut" style="height:0.6444em;"></span><span class="mord">625</span></span></span></span> training runs. Adding a fifth hyperparameter with five values pushes that to 3,125. This is the curse of dimensionality applied to hyperparameter search. It’s only practical with three or fewer hyperparameters and small grids.</p>
-<p><strong>Random search</strong> <span class="citation" data-cites="bergstra2012randomsearch">(<a href="#ref-bergstra2012randomsearch" role="doc-biblioref">Bergstra and Bengio 2012</a>)</span> samples random combinations from the search space instead of iterating through a fixed grid. With the same budget as grid search, it covers more of the dimensions that matter. If most hyperparameters are unimportant, then grid search wastes most of its budget holding the few important ones fixed. Random search doesn’t have that structural weakness. That paper is one of the most influential practical ML papers of the last fifteen years. It’s about 23 pages, and dense. For a Solutions Architect, understanding the impact is much more important than reading the paper.</p>
+<p><strong>Random search</strong> <span class="citation" data-cites="bergstra2012randomsearch">(<a href="#ref-bergstra2012randomsearch" role="doc-biblioref">Bergstra and Bengio 2012</a>)</span> samples random combinations from the search space instead of iterating through a fixed grid. With the same budget as grid search, it covers more of the dimensions that matter. If most hyperparameters are unimportant, then grid search wastes most of its budget holding the few important ones fixed. Random search doesn’t have that structural weakness. That paper is one of the most influential practical ML papers of the last fifteen years. It’s about 25 pages, and dense. For a Solutions Architect, understanding the impact is much more important than reading the paper.</p>
 <p><strong>Bayesian optimisation</strong> builds a probabilistic surrogate model of the objective function. That surrogate is a cheap stand-in for “validation score as a function of hyperparameters,” fast to query, unlike the real thing: training and validating an actual model. It uses that surrogate to decide where to sample next. It trades off exploitation (sample near the best known point) against exploration (sample where uncertainty is high). Two surrogate choices are common. A Gaussian Process models the objective directly, and grows more confident near points already tried. A Tree-structured Parzen Estimator (TPE) instead models which hyperparameter values tend to produce good results versus bad ones. TPE is the default surrogate used by <strong>Optuna</strong>, the hyperparameter-search library this chapter’s procedures build on. The surrogate updates after every evaluation. This is more efficient than random search when each evaluation is expensive. Optuna also gives automatic pruning (stopping bad trials early using intermediate results). Pruning is orthogonal to the search strategy. It can be layered onto random search or Bayesian optimisation.</p>
 </section>
 <section id="the-validation-set-is-sacred" class="level3" data-number="17.2.3">
@@ -53,7 +53,7 @@
 <tr class="odd">
 <td>Bayesian (Optuna)</td>
 <td>Most sample-efficient, prunes bad trials</td>
-<td>Overhead maintaining the surrogate</td>
+<td>Trials run one after another, so less parallelism</td>
 <td>Expensive-to-evaluate models</td>
 </tr>
 </tbody>
@@ -75,10 +75,10 @@ Listing&nbsp;17.1: Grid, distribution, and Optuna search-space definitions
 <span id="cb1-5">}</span>
 <span id="cb1-6"></span>
 <span id="cb1-7"><span class="co"># Random: distributions</span></span>
-<span id="cb1-8"><span class="im">from</span> scipy.stats <span class="im">import</span> uniform, randint</span>
+<span id="cb1-8"><span class="im">from</span> scipy.stats <span class="im">import</span> loguniform, randint</span>
 <span id="cb1-9">param_distributions <span class="op">=</span> {</span>
 <span id="cb1-10">    <span class="st">'n_estimators'</span>: randint(<span class="dv">50</span>, <span class="dv">500</span>),</span>
-<span id="cb1-11">    <span class="st">'learning_rate'</span>: uniform(<span class="fl">0.01</span>, <span class="fl">0.29</span>),</span>
+<span id="cb1-11">    <span class="st">'learning_rate'</span>: loguniform(<span class="fl">0.01</span>, <span class="fl">0.3</span>),</span>
 <span id="cb1-12">}</span>
 <span id="cb1-13"></span>
 <span id="cb1-14"><span class="co"># Optuna: suggest_* calls inside the objective function</span></span>
@@ -170,16 +170,21 @@ Listing&nbsp;17.5: Grid, random, and Optuna search under a matched 64-evaluation
 <span id="cb5-5">}  <span class="co"># two values per dimension: 2**6 = 64 corner combinations</span></span>
 <span id="cb5-6">gs <span class="op">=</span> GridSearchCV(model, param_grid, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'roc_auc'</span>, n_jobs<span class="op">=-</span><span class="dv">1</span>)</span>
 <span id="cb5-7"></span>
-<span id="cb5-8">param_dist <span class="op">=</span> {</span>
-<span id="cb5-9">    <span class="st">'n_estimators'</span>: randint(<span class="dv">100</span>, <span class="dv">1001</span>), <span class="st">'max_depth'</span>: randint(<span class="dv">2</span>, <span class="dv">13</span>),</span>
-<span id="cb5-10">    <span class="st">'learning_rate'</span>: uniform(<span class="fl">0.01</span>, <span class="fl">0.29</span>), <span class="st">'subsample'</span>: uniform(<span class="fl">0.5</span>, <span class="fl">0.5</span>),</span>
-<span id="cb5-11">    <span class="st">'colsample_bytree'</span>: uniform(<span class="fl">0.5</span>, <span class="fl">0.5</span>), <span class="st">'min_child_weight'</span>: randint(<span class="dv">1</span>, <span class="dv">11</span>),</span>
-<span id="cb5-12">}</span>
-<span id="cb5-13">rs <span class="op">=</span> RandomizedSearchCV(</span>
-<span id="cb5-14">    model, param_dist, n_iter<span class="op">=</span><span class="dv">64</span>, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'roc_auc'</span>, random_state<span class="op">=</span><span class="dv">42</span></span>
-<span id="cb5-15">)</span>
-<span id="cb5-16"></span>
-<span id="cb5-17">study.optimize(objective, n_trials<span class="op">=</span><span class="dv">64</span>)  <span class="co"># objective samples the same six ranges</span></span></code></pre></div>
+<span id="cb5-8"><span class="co"># Same ranges as the grid. Unlike Optuna below, this samples</span></span>
+<span id="cb5-9"><span class="co"># learning_rate uniformly, not on a log scale.</span></span>
+<span id="cb5-10">param_dist <span class="op">=</span> {</span>
+<span id="cb5-11">    <span class="st">'n_estimators'</span>: randint(<span class="dv">100</span>, <span class="dv">1001</span>), <span class="st">'max_depth'</span>: randint(<span class="dv">2</span>, <span class="dv">13</span>),</span>
+<span id="cb5-12">    <span class="st">'learning_rate'</span>: uniform(<span class="fl">0.01</span>, <span class="fl">0.29</span>), <span class="st">'subsample'</span>: uniform(<span class="fl">0.5</span>, <span class="fl">0.5</span>),</span>
+<span id="cb5-13">    <span class="st">'colsample_bytree'</span>: uniform(<span class="fl">0.5</span>, <span class="fl">0.5</span>), <span class="st">'min_child_weight'</span>: randint(<span class="dv">1</span>, <span class="dv">11</span>),</span>
+<span id="cb5-14">}</span>
+<span id="cb5-15">rs <span class="op">=</span> RandomizedSearchCV(</span>
+<span id="cb5-16">    model, param_dist, n_iter<span class="op">=</span><span class="dv">64</span>, cv<span class="op">=</span><span class="dv">5</span>, scoring<span class="op">=</span><span class="st">'roc_auc'</span>,</span>
+<span id="cb5-17">    random_state<span class="op">=</span><span class="dv">42</span>, n_jobs<span class="op">=-</span><span class="dv">1</span>,</span>
+<span id="cb5-18">)</span>
+<span id="cb5-19"></span>
+<span id="cb5-20"><span class="co"># objective samples the same six ranges (learning_rate on a log</span></span>
+<span id="cb5-21"><span class="co"># scale), one trial at a time, with its 5 CV folds in parallel</span></span>
+<span id="cb5-22">study.optimize(objective, n_trials<span class="op">=</span><span class="dv">64</span>)</span></code></pre></div>
 </div>
 </figure>
 </div>
@@ -215,7 +220,7 @@ Listing&nbsp;17.5: Grid, random, and Optuna search under a matched 64-evaluation
 </tbody>
 </table>
 <p>This time the measurement matches the theory it’s testing. Random search beats grid search on both CV AUC (0.9198 vs.&nbsp;0.9185) and test AUC (0.8942 vs.&nbsp;0.8933). It’s a modest edge, but a consistent one. It comes from a real structural weakness in the grid. With only two values per dimension, every one of grid search’s 64 combinations sits at a corner of the search space: max or min <code>subsample</code>, max or min <code>max_depth</code>, and so on, in every combination. It can never place a trial in the interior, where the best setting for a hyperparameter often sits. Random search and Optuna sample continuously. They can reach the interior. Optuna’s TPE sampler does best of the three on both metrics: CV AUC 0.9225, test AUC 0.8949. That’s what the Trade-offs table predicts for the one strategy that uses past trials to guide the next one, instead of sampling blind.</p>
-<p>Optuna’s full 64-trial run also took the longest: 171.5 seconds, against random search’s 18.5 and grid’s 55.5. Judged on that number alone, Optuna looks like the expensive choice. But its real advantage isn’t wall time at a matched budget. It’s needing fewer evaluations to reach a given quality. Tracked trial by trial, Optuna reached random search’s final CV AUC (0.9198) after just 5 trials, in 5.7 seconds. That’s faster than random search’s full run, and more than ten times faster than grid’s. This is the sample efficiency the Trade-offs table promises for expensive-to-evaluate models. Stop Optuna once it’s caught up, and it wins on accuracy and time both. Run it to a budget sized for a cruder strategy instead, and its overhead sits there with nothing to show for it.</p>
+<p>Optuna’s full 64-trial run also took the longest: 171.5 seconds, against random search’s 18.5 and grid’s 55.5. Judged on that number alone, Optuna looks like the expensive choice. Most of that gap is parallelism, not Optuna itself. Grid and random search spread all 320 fits across every core at once. Optuna runs one trial at a time, five folds in parallel, because each trial depends on the results before it. TPE’s own overhead is well under a second. But its real advantage isn’t wall time at a matched budget. It’s needing fewer evaluations to reach a given quality. Tracked trial by trial, Optuna reached random search’s final CV AUC (0.9198) after just 5 trials, in 5.7 seconds. That’s faster than random search’s full run, and more than ten times faster than grid’s. This is the sample efficiency the Trade-offs table promises for expensive-to-evaluate models. Stop Optuna once it’s caught up, and it wins on accuracy and time both. Run it to a budget sized for a cruder strategy instead, and its sequential trials cost time with nothing to show for it.</p>
 <div class="callout-aws">
 <div class="callout-aws-title"><span class="callout-aws-icon" aria-hidden="true"></span>AWS SageMaker Equivalent</div>
 <div class="sourceCode" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><span class="im">from</span> sagemaker.tuner <span class="im">import</span> (</span>

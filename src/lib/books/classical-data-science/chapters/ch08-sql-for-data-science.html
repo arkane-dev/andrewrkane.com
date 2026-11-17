@@ -95,7 +95,7 @@ Listing&nbsp;8.4: Window function syntax: PARTITION BY, ORDER BY, and an optiona
 </div>
 </figure>
 </div>
-<p>Three families cover most analytical needs. <strong>Ranking functions</strong>: <code>ROW_NUMBER()</code> assigns 1, 2, 3… with no ties. <code>RANK()</code> assigns 1, 1, 3…, where tied rows share a rank and a gap follows. <code>DENSE_RANK()</code> assigns 1, 1, 2…, with no gap. <strong>Offset functions</strong>: <code>LAG(col, n)</code> reaches back <code>n</code> rows, <code>LEAD(col, n)</code> reaches forward, both within the current partition and ordering. <strong>Aggregate window functions</strong>: the same <code>SUM</code>, <code>AVG</code>, <code>COUNT</code> used with <code>GROUP BY</code>, but applied <code>OVER</code> a window instead. <code>SUM(amount) OVER (ORDER BY date)</code> is a running total. <code>COUNT(*) OVER ()</code>, an empty <code>OVER ()</code>, attaches the grand total row count to every row without filtering or grouping anything.</p>
+<p>Three families cover most analytical needs. <strong>Ranking functions</strong>: <code>ROW_NUMBER()</code> assigns 1, 2, 3… with no ties. <code>RANK()</code> assigns 1, 1, 3…, where tied rows share a rank and a gap follows. <code>DENSE_RANK()</code> assigns 1, 1, 2…, with no gap. <strong>Offset functions</strong>: <code>LAG(col, n)</code> reaches back <code>n</code> rows, <code>LEAD(col, n)</code> reaches forward, both within the current partition and ordering. <strong>Aggregate window functions</strong>: the same <code>SUM</code>, <code>AVG</code>, <code>COUNT</code> used with <code>GROUP BY</code>, but applied <code>OVER</code> a window instead. <code>SUM(amount) OVER (ORDER BY date)</code> is a running total. With <code>ORDER BY</code> and no frame clause, the default frame is <code>RANGE</code>: rows tied on the ordering column share one running total. Write <code>ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW</code> to step row by row. A <code>ROWS</code> frame counts rows, not days, so a 7-row moving average covers 7 days only when every day has exactly one row. <code>COUNT(*) OVER ()</code>, an empty <code>OVER ()</code>, attaches the grand total row count to every row without filtering or grouping anything.</p>
 </section>
 <section id="joins-for-analysis" class="level3" data-number="8.2.4">
 <h3 data-number="8.2.4" class="anchored" data-anchor-id="joins-for-analysis"><span class="header-section-number">8.2.4</span> Joins for Analysis</h3>
@@ -146,7 +146,7 @@ Listing&nbsp;8.5: DuckDB: registering a DataFrame as a queryable SQL table
 </div>
 </figure>
 </div>
-<p><strong>Common mistake:</strong> querying a DataFrame by name before registering it raises <code>CatalogException: Table not found</code>. Either call <code>con.register('name', df)</code> first, or use the top-level <code>duckdb.sql(...)</code> form, which resolves DataFrame variables from the calling scope automatically.</p>
+<p><strong>Common mistake:</strong> relying on DuckDB finding a DataFrame by its variable name. It does, through both <code>duckdb.sql(...)</code> and a connection’s <code>execute()</code>, but only while that variable is in scope. Query it from somewhere else and DuckDB raises <code>CatalogException</code>. <code>con.register('name', df)</code> gives the table a fixed name that works anywhere the connection is used.</p>
 <p id="proc-8-2"><strong>Procedure 8.2 (Filter Rows with <code>pandas.query</code> as a Lightweight Alternative).</strong> <em>When to use:</em> the only operation needed is row filtering and setting up a DuckDB connection would be overkill.</p>
 <div id="lst-pandas-query" class="python listing quarto-float quarto-figure quarto-figure-left anchored">
 <figure class="quarto-float quarto-float-lst figure">
@@ -188,7 +188,7 @@ Listing&nbsp;8.7: GROUP BY with a HAVING filter and a conditional aggregation
 </div>
 </figure>
 </div>
-<p><strong>Common mistake:</strong> referencing a column <em>alias</em> inside <code>HAVING</code> (e.g.&nbsp;<code>HAVING avg_salary &gt; 80000</code> when <code>avg_salary</code> was defined with <code>AS</code> in the <code>SELECT</code>). Most engines evaluate <code>HAVING</code> before aliases are resolved. Repeat the full aggregate expression instead.</p>
+<p><strong>Common mistake:</strong> referencing a column <em>alias</em> inside <code>HAVING</code> (e.g.&nbsp;<code>HAVING avg_salary &gt; 80000</code> when <code>avg_salary</code> was defined with <code>AS</code> in the <code>SELECT</code>). Standard SQL evaluates <code>HAVING</code> before aliases are resolved, and PostgreSQL, SQL Server and Oracle reject the alias. DuckDB, MySQL and SQLite accept it. Repeating the full aggregate expression works everywhere.</p>
 <p id="proc-8-4"><strong>Procedure 8.4 (Build Multi-Step Logic with CTEs).</strong> <em>When to use:</em> any query with more than two logical steps. Past that point, a single nested query becomes unreadable and hard to debug. A chain of named CTEs is not.</p>
 <div id="lst-cte-template" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
 <figure class="quarto-float quarto-float-lst figure">
@@ -216,7 +216,7 @@ Listing&nbsp;8.8: The general CTE shape: named steps, each building on the last
 </div>
 </figure>
 </div>
-<p><strong>Common mistake:</strong> treating a CTE referenced multiple times in the same query as if it were materialised once. Most engines re-evaluate it at each reference. If a CTE is expensive and reused, materialise it as a temp table instead.</p>
+<p><strong>Common mistake:</strong> treating a CTE referenced multiple times in the same query as if it were materialised once. Some engines re-evaluate it at each reference. Others, such as PostgreSQL 12 and later, materialise it. Check the query plan. If a CTE is expensive and reused, a temp table makes the choice explicit.</p>
 <p id="proc-8-5"><strong>Procedure 8.5 (Rank and Compare Rows with Window Functions).</strong> <em>When to use:</em> a per-row computed value is needed: a rank, a running total, a comparison to the previous row, without collapsing the rows the way <code>GROUP BY</code> would.</p>
 <div id="lst-window-functions" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
 <figure class="quarto-float quarto-float-lst figure">
@@ -336,20 +336,24 @@ Listing&nbsp;8.13: Cumulative revenue share via a running total over a grand tot
 <span id="cb13-4">    <span class="kw">JOIN</span> orders o <span class="kw">ON</span> c.customer_id <span class="op">=</span> o.customer_id</span>
 <span id="cb13-5">    <span class="kw">WHERE</span> o.status <span class="op">=</span> <span class="st">'completed'</span></span>
 <span id="cb13-6">    <span class="kw">GROUP</span> <span class="kw">BY</span> c.customer_id</span>
-<span id="cb13-7">    <span class="kw">ORDER</span> <span class="kw">BY</span> ltv <span class="kw">DESC</span></span>
-<span id="cb13-8">)</span>
-<span id="cb13-9"><span class="kw">SELECT</span></span>
-<span id="cb13-10">    <span class="fu">ROW_NUMBER</span>() <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> ltv <span class="kw">DESC</span>) <span class="kw">AS</span> customer_rank,</span>
-<span id="cb13-11">    <span class="fu">ROUND</span>(</span>
-<span id="cb13-12">        <span class="fu">SUM</span>(ltv) <span class="kw">OVER</span> (<span class="kw">ORDER</span> <span class="kw">BY</span> ltv <span class="kw">DESC</span>)</span>
-<span id="cb13-13">        <span class="op">/</span> <span class="fu">SUM</span>(ltv) <span class="kw">OVER</span> () <span class="op">*</span> <span class="dv">100</span>,</span>
-<span id="cb13-14">        <span class="dv">2</span></span>
-<span id="cb13-15">    ) <span class="kw">AS</span> cum_pct</span>
-<span id="cb13-16"><span class="kw">FROM</span> customer_ltv;</span></code></pre></div>
+<span id="cb13-7">)</span>
+<span id="cb13-8"><span class="kw">SELECT</span></span>
+<span id="cb13-9">    <span class="fu">ROW_NUMBER</span>() <span class="kw">OVER</span> (</span>
+<span id="cb13-10">        <span class="kw">ORDER</span> <span class="kw">BY</span> ltv <span class="kw">DESC</span>, customer_id</span>
+<span id="cb13-11">    ) <span class="kw">AS</span> customer_rank,</span>
+<span id="cb13-12">    <span class="fu">ROUND</span>(</span>
+<span id="cb13-13">        <span class="fu">SUM</span>(ltv) <span class="kw">OVER</span> (</span>
+<span id="cb13-14">            <span class="kw">ORDER</span> <span class="kw">BY</span> ltv <span class="kw">DESC</span>, customer_id</span>
+<span id="cb13-15">            <span class="kw">ROWS</span> <span class="kw">BETWEEN</span> <span class="kw">UNBOUNDED</span> <span class="kw">PRECEDING</span> <span class="kw">AND</span> <span class="kw">CURRENT</span> <span class="kw">ROW</span></span>
+<span id="cb13-16">        )</span>
+<span id="cb13-17">        <span class="op">/</span> <span class="fu">SUM</span>(ltv) <span class="kw">OVER</span> () <span class="op">*</span> <span class="dv">100</span>,</span>
+<span id="cb13-18">        <span class="dv">2</span></span>
+<span id="cb13-19">    ) <span class="kw">AS</span> cum_pct</span>
+<span id="cb13-20"><span class="kw">FROM</span> customer_ltv;</span></code></pre></div>
 </div>
 </figure>
 </div>
-<p><code>SUM(ltv) OVER (ORDER BY ltv DESC)</code> is a running total ordered by descending value. Dividing by <code>SUM(ltv) OVER ()</code>, the same aggregate with an empty window, i.e.&nbsp;the grand total attached to every row, converts that running total into a cumulative percentage without a second query. On this dataset it takes 138 of the 200 customers (69.0%) to reach 80% of total revenue, and 74 customers (37.0%) to reach 50%. That is a noticeably flatter curve than the classic 80/20 rule. That’s worth pausing on. It’s a direct consequence of how the data was generated: revenue per order is <code>quantity × price</code>, drawn from independent, roughly uniform distributions, not from the heavy-tailed distribution real purchasing behaviour usually follows. A synthetic dataset built from independent uniform draws will never produce as concentrated a Pareto curve as real transaction data does. That’s a preview of the distributional reasoning Chapter 3 develops properly.</p>
+<p>The windowed <code>SUM(ltv)</code> is a running total ordered by descending value, with <code>customer_id</code> breaking ties. Dividing by <code>SUM(ltv) OVER ()</code>, the same aggregate with an empty window, i.e.&nbsp;the grand total attached to every row, converts that running total into a cumulative percentage without a second query. On this dataset it takes 138 of the 200 customers (69.0%) to reach 80% of total revenue, and 74 customers (37.0%) to reach 50%. That is a noticeably flatter curve than the classic 80/20 rule. That’s worth pausing on. It’s a direct consequence of how the data was generated: revenue per order is <code>quantity × price</code>, drawn from independent, roughly uniform distributions, not from the heavy-tailed distribution real purchasing behaviour usually follows. A synthetic dataset built from independent uniform draws will never produce as concentrated a Pareto curve as real transaction data does. That’s the distributional reasoning from Chapter 3 at work.</p>
 <p>The third question is the capstone: of customers whose <em>first</em> order fell in Q1 2022, what fraction placed a second order within 90 days?</p>
 <div id="lst-sql-cohort-retention" class="sql listing quarto-float quarto-figure quarto-figure-left anchored">
 <figure class="quarto-float quarto-float-lst figure">
@@ -411,7 +415,7 @@ Listing&nbsp;8.14: Cohort retention: first order, cohort membership, and second 
 <span id="cb15-11"><span class="co">-- Athena reads Parquet directly from S3:</span></span>
 <span id="cb15-12"><span class="co">-- CREATE EXTERNAL TABLE orders ...</span></span>
 <span id="cb15-13"><span class="co">-- LOCATION 's3://my-bucket/orders/'</span></span></code></pre></div>
-<p><strong>When to prefer Athena over pandas + DuckDB:</strong> once the data lives in S3 and is too large to comfortably fit in memory. Athena scales horizontally and is billed per query scanned. For prototyping on a sample or working set that fits in memory, pandas + DuckDB is faster to iterate with and free.</p>
+<p><strong>When to prefer Athena over pandas + DuckDB:</strong> once the data lives in S3 and is too large to comfortably fit in memory. Athena scales horizontally and is billed per byte of data scanned. For prototyping on a sample or working set that fits in memory, pandas + DuckDB is faster to iterate with and free.</p>
 </div>
 </section>
 <section id="history-and-further-reading" class="level2" data-number="8.6">
@@ -425,7 +429,7 @@ Listing&nbsp;8.14: Cohort retention: first order, cohort membership, and second 
 <section id="exercises" class="level2" data-number="8.8">
 <h2 data-number="8.8" class="anchored" data-anchor-id="exercises"><span class="header-section-number">8.8</span> Exercises</h2>
 <ol type="1">
-<li id="ex-8-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In one or two sentences, explain why <code>HAVING SUM(revenue) &gt; 1000</code> works but <code>HAVING total_revenue &gt; 1000</code> (referencing an alias defined as <code>SUM(revenue) AS total_revenue</code> in the same query) often fails.</p></li>
+<li id="ex-8-1"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> In one or two sentences, explain why <code>HAVING SUM(revenue) &gt; 1000</code> works but <code>HAVING total_revenue &gt; 1000</code> (referencing an alias defined as <code>SUM(revenue) AS total_revenue</code> in the same query) fails in many engines.</p></li>
 <li id="ex-8-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> Explain the difference in output between <code>RANK()</code>, <code>DENSE_RANK()</code>, and <code>ROW_NUMBER()</code> when three rows are tied for first place, using <a href="#lst-window-functions" class="quarto-xref">Listing&nbsp;<span>8.9</span></a>’s <code>rank_in_region</code> column as a starting point.</p></li>
 <li id="ex-8-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Adapt <a href="#lst-sql-revenue-category" class="quarto-xref">Listing&nbsp;<span>8.12</span></a> to group by <code>region</code> instead of <code>category</code> (joining <code>orders</code> to <code>customers</code> rather than <code>products</code>). Which region has the highest total completed revenue, and how close is it to the second-place region?</p></li>
 <li id="ex-8-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-sql-cohort-retention" class="quarto-xref">Listing&nbsp;<span>8.14</span></a> as a base, change the retention window from 90 days to 60 days. Does the retention rate change substantially, and does that change your reading of how meaningful the original 90-day figure was?</p></li>

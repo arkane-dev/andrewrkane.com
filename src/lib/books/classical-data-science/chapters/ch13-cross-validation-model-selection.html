@@ -7,7 +7,7 @@
 <h2 data-number="13.2" class="anchored" data-anchor-id="exposition"><span class="header-section-number">13.2</span> Exposition</h2>
 <section id="the-problem-with-a-single-traintest-split" class="level3" data-number="13.2.1">
 <h3 data-number="13.2.1" class="anchored" data-anchor-id="the-problem-with-a-single-traintest-split"><span class="header-section-number">13.2.1</span> The Problem With a Single Train/Test Split</h3>
-<p>An 80/20 split on a 569-example dataset leaves only 113 examples to test on. That’s enough for the estimate to swing a lot, depending on which 113 happened to land in the test set. With a small-to-moderate dataset, the standard error of a single accuracy estimate is large. A model can look like the best or worst result purely by chance.</p>
+<p>An 80/20 split on a 569-example dataset leaves only 114 examples to test on. That’s enough for the estimate to swing a lot, depending on which 114 happened to land in the test set. With a small-to-moderate dataset, the standard error of a single accuracy estimate is large. A model can look like the best or worst result purely by chance.</p>
 </section>
 <section id="k-fold-cross-validation" class="level3" data-number="13.2.2">
 <h3 data-number="13.2.2" class="anchored" data-anchor-id="k-fold-cross-validation"><span class="header-section-number">13.2.2</span> k-Fold Cross-Validation</h3>
@@ -203,7 +203,7 @@ Listing&nbsp;13.5: Paired t-test on cross-validation fold scores
 </div>
 </figure>
 </div>
-<p><strong>Common mistake:</strong> comparing two models’ mean CV scores directly without a significance test. A 0.3 percentage-point difference in means can easily be noise. The paired t-test on matched fold scores is what tells you whether the difference is real.</p>
+<p><strong>Common mistake:</strong> comparing two models’ mean CV scores directly without a significance test. A 0.3 percentage-point difference in means can easily be noise. A paired t-test on matched fold scores is the quick check. Treat it as optimistic: the folds share training data, so their scores aren’t independent, and a plain t-test overstates confidence. Nadeau and Bengio’s corrected resampled t-test adjusts for that.</p>
 </section>
 <section id="worked-example" class="level2" data-number="13.5">
 <h2 data-number="13.5" class="anchored" data-anchor-id="worked-example"><span class="header-section-number">13.5</span> Worked Example</h2>
@@ -268,7 +268,7 @@ Listing&nbsp;13.6: Ten random splits, same model, same data: different reported 
 <li id="ex-13-2"><p><span class="ex-tag ex-tag-w"><strong>[W]</strong></span> State which CV strategy is correct for each: (a) a dataset of 30 rare-disease patient records; (b) daily sales figures for the past three years; (c) a roughly balanced 5,000-row classification dataset.</p></li>
 <li id="ex-13-3"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-seed-variance" class="quarto-xref">Listing&nbsp;<span>13.6</span></a>’s pattern, compute the standard deviation of the ten seed-accuracy values (0.982, 0.991, 0.982, 0.974, 0.974, 0.982, 0.991, 0.965, 0.974, 1.000) and compare it to this chapter’s 5-fold CV standard deviation (0.007). Which estimate would you trust more, and why?</p></li>
 <li id="ex-13-4"><p><span class="ex-tag ex-tag-a"><strong>[A]</strong></span> Using <a href="#lst-nested-cv" class="quarto-xref">Listing&nbsp;<span>13.4</span></a>, explain what it would mean if the non-nested and nested CV estimates came back nearly identical (as this chapter’s own 0.9543 vs.&nbsp;0.9543 result did) versus if they came back several percentage points apart.</p></li>
-<li id="ex-13-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate says “I ran 5-fold CV and got 94% ± 0.5%, so I’m confident in this number.” Using this chapter’s Trade-offs section, name one thing that CV std alone does not tell you about the estimate’s reliability.</p></li>
+<li id="ex-13-5"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A teammate says “I ran 5-fold CV and got 94% ± 0.5%, so I’m confident in this number.” Name one thing that CV std alone does not tell you about the estimate’s reliability.</p></li>
 <li id="ex-13-6"><p><span class="ex-tag ex-tag-e"><strong>[E]</strong></span> A customer has a time-ordered dataset but their data science team used regular <code>StratifiedKFold</code> and reported a strong result. Using this chapter’s Time-Series Cross-Validation section, write the two or three sentences you’d say about why that result should not be trusted as-is.</p></li>
 <li id="ex-13-7"><p><span class="ex-tag ex-tag-r"><strong>[R]</strong></span> Read the scikit-learn documentation’s page on <code>cross_validate</code> versus <code>cross_val_score</code>. Identify one piece of information <code>cross_validate</code> returns that <code>cross_val_score</code> does not, and describe a situation from this chapter where that extra information would matter.</p></li>
 </ol>

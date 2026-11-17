@@ -8,7 +8,7 @@ import type { Book } from './types';
 // A missing link shows as a grayed-out button. Add each one when it exists (BACKLOG.md #4):
 //   buyHref: a universal Amazon link that sends each reader to their local store. It is an
 //            affiliate link, so the pages show "paid link" next to it.
-//   pdfHref: the PDF in a release or on the CDN
+//   pdfHref: the PDF, in static/pdf/ (the importer clears static/books/, so not there)
 //   payHref: the pay-what-you-want page (Ko-fi, Gumroad, Stripe Payment Link, …)
 export const series = {
 	title: "A Solutions Architect's Field Guide",
@@ -29,6 +29,7 @@ export const books: Book[] = [
 		tone: 'magenta',
 		readHref: '/books/classical-data-science',
 		buyHref: 'https://link.amazon/B01fuyWWf', // affiliate link: the pages label it as a paid link
+		pdfHref: '/pdf/classical-data-science.pdf', // copied from the book's _book/ output
 		quizHref: '/books/classical-data-science/quiz'
 	},
 	{

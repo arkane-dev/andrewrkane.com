@@ -38,12 +38,14 @@
 				<p class="pay">
 					Free to read, here and as a PDF. If it helped, <a href={meta.payHref}>pay what you want</a>. The print and Kindle editions are on Amazon.
 				</p>
-			{:else}
-				{#if meta.buyHref}
+			{:else if meta.pdfHref && meta.buyHref}
+				<p class="pay">Free to read, here and as a PDF. The print and Kindle editions are on Amazon.</p>
+			{:else if meta.pdfHref}
+				<p class="pay">Free to read, here and as a PDF. The print and Kindle editions are coming soon.</p>
+			{:else if meta.buyHref}
 				<p class="pay">Free to read online. The PDF is coming soon.</p>
 			{:else}
 				<p class="pay">Free to read online. The PDF and the print and Kindle editions are coming soon.</p>
-			{/if}
 			{/if}
 		</div>
 	</header>

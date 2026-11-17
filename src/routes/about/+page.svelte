@@ -51,6 +51,7 @@
 			<div class="stack">{#each about.stack as s (s)}<Tag tone="accent-2">{s}</Tag>{/each}</div>
 			<SectionHeader index="05" zh="本站" title="This site" level={3} />
 			<p class="nd-meta">{about.colophon}</p>
+			<p class="nd-meta">{about.affiliate}</p>
 			<ul class="links nd-meta">
 				<li><a href="/now">/now</a></li>
 				{#each site.socials as s (s.href)}<li><a href={s.href}>{s.label.toLowerCase()}</a></li>{/each}

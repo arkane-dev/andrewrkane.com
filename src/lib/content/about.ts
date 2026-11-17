@@ -38,5 +38,7 @@ export const about = {
 	],
 	// Technologies in real use. Add each new one used in a project or the Lab (see cyberpunk_apps/CLAUDE.md).
 	stack: ['Python', 'TypeScript', 'Go', 'Svelte', 'Wails', 'Obsidian', 'Jupyter', 'AWS', 'PyTorch', 'CUDA', 'C/C++', 'Quarto', 'LaTeX'],
+	// Required by the Amazon Associates program. The book pages also label each Amazon link.
+	affiliate: 'As an Amazon Associate I earn from qualifying purchases.',
 	colophon: 'Built with SvelteKit and NEONDECK. Prerendered to static HTML. Hosted on Cloudflare.'
 };

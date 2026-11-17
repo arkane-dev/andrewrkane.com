@@ -6,7 +6,8 @@ import type { Book } from './types';
 // quizzes are not built (src/lib/books/index.ts).
 //
 // A missing link shows as a grayed-out button. Add each one when it exists (BACKLOG.md #4):
-//   buyHref: a universal Amazon link that sends each reader to their local store
+//   buyHref: a universal Amazon link that sends each reader to their local store. It is an
+//            affiliate link, so the pages show "paid link" next to it.
 //   pdfHref: the PDF in a release or on the CDN
 //   payHref: the pay-what-you-want page (Ko-fi, Gumroad, Stripe Payment Link, …)
 export const series = {
@@ -27,6 +28,7 @@ export const books: Book[] = [
 		status: 'live',
 		tone: 'magenta',
 		readHref: '/books/classical-data-science',
+		buyHref: 'https://link.amazon/B01fuyWWf', // affiliate link: the pages label it as a paid link
 		quizHref: '/books/classical-data-science/quiz'
 	},
 	{

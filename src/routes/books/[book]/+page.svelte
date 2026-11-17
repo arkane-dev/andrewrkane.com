@@ -31,7 +31,7 @@
 			<div class="actions">
 				<Button href="/books/{book.slug}/{first.slug}">Read online</Button>
 				{#if meta.pdfHref}<Button variant="outline" href={meta.pdfHref}>Download PDF</Button>{:else}<Button variant="outline" disabled>Download PDF</Button>{/if}
-				{#if meta.buyHref}<Button variant="outline" arrow href={meta.buyHref} rel="external noopener">Buy on Amazon</Button>{:else}<Button variant="outline" disabled>Buy on Amazon</Button>{/if}
+				{#if meta.buyHref}<Button variant="outline" arrow href={meta.buyHref} rel="external sponsored noopener">Buy on Amazon</Button><span class="paid nd-meta">(paid link)</span>{:else}<Button variant="outline" disabled>Buy on Amazon</Button>{/if}
 				{#if meta.quizHref}<Button variant="ghost" href={meta.quizHref}>Chapter quizzes</Button>{/if}
 			</div>
 			{#if meta.payHref}
@@ -39,7 +39,11 @@
 					Free to read, here and as a PDF. If it helped, <a href={meta.payHref}>pay what you want</a>. The print and Kindle editions are on Amazon.
 				</p>
 			{:else}
+				{#if meta.buyHref}
+				<p class="pay">Free to read online. The PDF is coming soon.</p>
+			{:else}
 				<p class="pay">Free to read online. The PDF and the print and Kindle editions are coming soon.</p>
+			{/if}
 			{/if}
 		</div>
 	</header>
@@ -75,7 +79,7 @@
 	.by { margin: 0 0 var(--nd-space-6); font-weight: 600; }
 	.lede { max-width: 60ch; font-size: var(--nd-text-lg); }
 	.stats { margin: var(--nd-space-4) 0 var(--nd-space-6); }
-	.actions { display: flex; flex-wrap: wrap; gap: var(--nd-space-3); }
+	.actions { display: flex; flex-wrap: wrap; gap: var(--nd-space-3); align-items: center; }
 	.pay { max-width: 60ch; margin-top: var(--nd-space-6); }
 	.pay a { color: var(--nd-ink); font-weight: 600; }
 	.toc { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: var(--nd-space-10); }

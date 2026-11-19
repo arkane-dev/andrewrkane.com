@@ -2,7 +2,7 @@
 export const pages = {
 	blog: {
 		description: 'Notes on world models, Physical AI and building in public.',
-		intro: "Notes from the lab. World models, robots, tools and whatever I'm learning. Plain words. Posted when there's something worth saying."
+		intro: "Notes from the lab. World models, robots, tools and whatever I'm learning. Plain words. Posted when there's something worth saying. Posts I write for work link out to where they were published."
 	},
 	projects: {
 		description: 'Things I build: desktop apps, web tools and libraries. Source code and downloads.',

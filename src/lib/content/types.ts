@@ -69,7 +69,9 @@ export interface Post {
 	tags: string[];
 	zh: Band; // band word on the paper page, see bands.ts
 	draft?: boolean;
-	minutes: number; // reading time, computed
+	minutes: number; // reading time, computed (or `minutes:` in frontmatter for external posts)
+	url?: string; // external post: the list links here, and there is no page on this site
+	publisher?: string; // external post: where it was published, shown in the list
 }
 
 // Lab entries live in src/content/lab/<slug>.md (see src/lib/server/lab.ts).

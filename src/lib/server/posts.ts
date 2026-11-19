@@ -1,5 +1,7 @@
 // Blog pipeline: Markdown files in src/content/blog/ → metadata + HTML, at build time.
 // Frontmatter: title, date (YYYY-MM-DD), summary, tags [..], zh (optional band word, see bands.ts), draft (optional).
+// External post (published elsewhere, e.g. for work): frontmatter only, plus url, publisher and minutes.
+// It shows in the list and RSS, links out, and gets no page, sitemap entry or newer/older link here.
 import matter from 'gray-matter';
 import { renderMarkdown } from './markdown';
 import type { Post } from '../content/types';
@@ -22,7 +24,8 @@ function parse(path: string, raw: string) {
 		tags: Array.isArray(data.tags) ? data.tags.map(String) : [],
 		zh,
 		draft: Boolean(data.draft),
-		minutes: Math.max(1, Math.round(words / 220))
+		minutes: Number(data.minutes) || Math.max(1, Math.round(words / 220)),
+		...(data.url ? { url: String(data.url), publisher: String(data.publisher ?? '') } : {})
 	};
 	return { meta, content };
 }
@@ -37,8 +40,11 @@ export function listPosts(): Post[] {
 		.sort((a, b) => b.date.localeCompare(a.date));
 }
 
+/** Published posts that have a page on this site (no external links), newest first. */
+export const listLocalPosts = (): Post[] => listPosts().filter((p) => !p.url);
+
 export async function getPost(slug: string): Promise<{ meta: Post; html: string } | undefined> {
 	const found = all.find((p) => p.meta.slug === slug);
-	if (!found || (found.meta.draft && !import.meta.env.DEV)) return undefined;
+	if (!found || found.meta.url || (found.meta.draft && !import.meta.env.DEV)) return undefined;
 	return { meta: found.meta, html: await renderMarkdown(found.content) };
 }

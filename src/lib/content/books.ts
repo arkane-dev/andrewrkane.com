@@ -28,7 +28,7 @@ export const books: Book[] = [
 		status: 'live',
 		tone: 'magenta',
 		readHref: '/books/classical-data-science',
-		buyHref: 'https://link.amazon/B0aFAptKV', // affiliate link: the pages label it as a paid link
+		buyHref: 'https://link.amazon/B05SJEgHH', // affiliate link: the pages label it as a paid link
 		pdfHref: '/pdf/classical-data-science.pdf', // copied from the book's _book/ output
 		quizHref: '/books/classical-data-science/quiz'
 	},
